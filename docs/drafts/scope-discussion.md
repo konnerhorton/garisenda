@@ -36,6 +36,8 @@ Mistakes that are easy to make in this kind of calculation, and the SPEC rule th
 
 ## Decisions reached (now in SPEC)
 
+> **Revised 2026-11-01:** Phase 1 has one analysis, always in 3D. Spreadsheet-style input (station and offset against an idealized or real tunnel) builds perpendicular 3D assets and replaces the spreadsheet; real polylines and alignments come after. Phase 1 is greenfield only: a single soil–pipe factor was dropped as worse than none, and a beam on springs is the intended later approach (the four levels below are superseded). See SPEC §1.3 and §3. The items below are as decided on 2026-10-31.
+
 - **Greenfield utility assessment first, 3D interface from the start.** Starting with the 3D surface was considered: it would get the geometry right first, but gives nothing usable until utilities are assessed. The greenfield assessment gives quick feedback on real work, and designing the movement-field interface for 3D means nothing is thrown away. (SPEC §1.3, §3)
 - **Pipe types.** Some utilities are jointed, some continuous (PVC or HDPE, often installed by HDD). Both discrete and analytical strain are computed and compared; every check runs by default. (SPEC §7)
 - **Steady-state transverse trough first.** (SPEC §12.4)

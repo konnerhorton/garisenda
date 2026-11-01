@@ -1,6 +1,6 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; nothing is built. Next: M0 (scaffolding), then M1 (framework, the movement-field interface, the transverse trough).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; nothing is built. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M0 (scaffolding), then M1 (framework, the profile along an asset, the idealized straight tunnel and station-and-offset builder, the transverse trough).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
@@ -13,7 +13,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 
 ## Conventions
 - **Judgments have no defaults.** A judgment is a required keyword-only argument. Standard values come only as named, cited presets the user passes explicitly (SPEC §4).
-- **Sources produce a movement field; assessments consume it** through one 3D interface (SPEC §3).
+- **Sources produce a movement field; assessments consume it** as a profile along the asset, keyed by distance along it (SPEC §3).
 - **Every result has the same shape** and a validity verdict; outside a method's range it is flagged, not raised (SPEC §2.5, §5).
 - **Every assessment has a figure** (SPEC §9).
 - **Never fill missing data**, never drop it silently (SPEC §10).
