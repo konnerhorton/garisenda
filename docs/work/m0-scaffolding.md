@@ -68,3 +68,23 @@ No topic doc holds this, so the spec is here. Nothing in M0 is numerical, so the
 9. **CI green on GitHub** on all nine matrix jobs and `lowest`. If the repo (TODO #9) isn't ready at close-out, the workflow is reviewed and every job's commands pass locally on Linux, and this criterion is carried to TODO #9 as unmet.
 10. **Commands documented:** every command in CLAUDE.md's Commands section runs as written.
 11. **License and metadata:** `LICENSE` is the MIT text with "Konner Horton"; the built wheel's metadata shows `License-Expression: MIT`, the author and the project URLs.
+
+## Plan
+
+Three build commits, each with ruff check, ruff format check, mypy and pytest green.
+
+### 1. `M0: add the package, its checks and tests`
+- `pyproject.toml`: hangtu's layout and metadata (version `0.0.0`, no dependencies, `dev` group with pytest, ruff and mypy, `uv_build>=0.9.9,<0.10`), ruff, pytest and mypy configured as in spec decisions 1–5.
+- `uv.lock`, `.python-version` (3.12).
+- `src/garisenda/__init__.py` (`__version__`, `__all__`), `src/garisenda/py.typed`.
+- `LICENSE`, `README.md`, `.gitignore`.
+- Tests: `tests/test_package.py`: the version matches `importlib.metadata` and `pyproject.toml` (AC 2); no runtime dependencies (AC 3); `py.typed` is in the installed package (AC 4).
+
+### 2. `M0: add CI`
+- `.github/workflows/ci.yml`: hangtu's minus the docs job; the matrix runs `uv sync --locked`, ruff check, ruff format check, mypy and pytest; `lowest` sets `UV_RESOLUTION: lowest-direct` and runs pytest.
+- Tests: each job's commands run locally on Python 3.12, 3.13 and 3.14 (AC 9).
+
+### 3. `M0: close out`
+- `CLAUDE.md`: Commands section (AC 10) and the "Next" sentence.
+- `docs/work/m0-scaffolding.md`: `## Result`, each acceptance criterion met or not, with evidence.
+- `docs/TODO.md` #9: the GitHub CI run waiting on the repo, if it is.
