@@ -251,9 +251,6 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 - 🟡 **Docs are written as we go:** each milestone's close-out writes the user docs for what it built. The docs site (Zensical, with the API reference from docstrings) is set up in M1.
 
 ### 12.4 Milestones (Phase 1)
-| ID | Scope | Done when |
-|---|---|---|
-| M0 | Scaffolding: package, lint, tests, CI | CI green |
 Revised 2026-11-01: spreadsheet-style input first (M1–M4), which replaces the spreadsheet, then real geometry (M5–M6). The analysis is the same throughout (§3).
 
 | ID | Scope | Done when |

@@ -126,3 +126,10 @@ Release `garisenda` 0.0.1 on PyPI, claiming the name (TODO #8), with hangtu's re
 1. `M0: add the release workflow`: `release.yml`; version `0.0.1` in `pyproject.toml` and `uv.lock`; SPEC §12.1; CLAUDE.md release commands; README install line; TODO #8 and #9 deleted; criterion 9 in Result marked met.
 2. Merge to `main`, push, run the TestPyPI rehearsal from `main`, then tag `v0.0.1` and push the tag.
 3. `M0: record the release`: criteria 12–14 with evidence in Result.
+
+### Result (2026-11-02)
+12. **Release workflow:** met. `release.yml` as in decision 1. The tag check ran and passed on `v0.0.1`; its failure path wasn't exercised.
+13. **TestPyPI rehearsal:** met. Manual run 41428634918: build, six wheel tests and the TestPyPI upload passed; 0.0.1 installed from TestPyPI prints `0.0.1`.
+14. **On PyPI:** met. Tag run 41428872221 passed after the `pypi` environment's required review was approved; 0.0.1 installed from PyPI prints `0.0.1`.
+
+**For later releases:** the `pypi` environment requires a reviewer, so a tag's run waits at "publish to PyPI" until it's approved on GitHub.

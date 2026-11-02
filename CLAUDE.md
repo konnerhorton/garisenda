@@ -15,7 +15,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - `uv run mypy`: type check `src/` in strict mode; a `# type: ignore` names its error code and says why
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`: what CI runs (`.github/workflows/ci.yml`)
 - Oldest allowed dependency versions: `UV_RESOLUTION=lowest-direct UV_PROJECT_ENVIRONMENT=<scratch dir> uv run pytest`, then `git checkout uv.lock`, because it rewrites the lock (commit an intended lock change first, or the checkout discards it)
-- Release (needs approval): set `version` in `pyproject.toml`, `uv lock`, commit and push to `main`; rehearse with `gh workflow run release.yml --ref main` (TestPyPI); then `git tag vX.Y.Z && git push origin vX.Y.Z` (PyPI)
+- Release (needs approval): set `version` in `pyproject.toml`, `uv lock`, commit and push to `main`; rehearse with `gh workflow run release.yml --ref main` (TestPyPI); then `git tag vX.Y.Z && git push origin vX.Y.Z` (PyPI; the `pypi` environment waits for your approval on GitHub)
 
 ## Conventions
 - **Judgments have no defaults.** A judgment is a required keyword-only argument. Standard values come only as named, cited presets the user passes explicitly (SPEC §4).
