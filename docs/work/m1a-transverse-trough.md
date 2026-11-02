@@ -162,3 +162,36 @@ Tolerance 1e-6 relative for the hand-calculated values, tighter than SPEC §2.4'
 12. **Inputs and assumptions:** the source's records hold every input with its kind, SI value, `given_as`, and the source text when `Sourced` was used, None otherwise; the assumptions of decision 9 are all present.
 13. **Docstrings:** `IdealizedTunnel`, `transverse_surface_trough` and `evaluate` state the equations, inputs and outputs with units, the validity behavior, the assumptions and the 🔬 sources (SPEC §8.5); ruff's numpy docstring rules pass.
 14. **Dependencies:** `pint` and `numpy` are added with floors that the `lowest` job passes on; `hypothesis` is in the dev group; mypy strict passes, and each `# type: ignore` names its code and says why.
+
+## Plan
+
+Five build commits, each with ruff check, ruff format check, mypy and pytest green. Dependency floors follow hangtu's (`numpy>=1.26`, `pint>=0.24.4`, `hypothesis>=6.100`), proven by the `lowest` job run locally in commit 5.
+
+### 1. `M1 (a): add units and the input rules`
+- `pyproject.toml`: `numpy>=1.26` and `pint>=0.24.4` in `dependencies`; `hypothesis>=6.100` in the dev group; ruff `NPY` rules added now that numpy is a dependency (M0 intent decision 3). `uv.lock`.
+- `src/garisenda/units.py`: the registry `units`; `to_si(name, value, *, dimension, unit, plain_number)`, the one conversion every calculation uses, where `plain_number` is `"read as SI"` or `"refuse"` (spec decision 1); returns the SI magnitude and how it was given. Errors name the argument, the expected dimension and how to write it.
+- `src/garisenda/inputs.py`: `Sourced` (frozen dataclass: `value`, `source`); `InputRecord` (`name`, `value`, `kind`, `source`, `given_as`); `Kind` literal; `record(name, value, *, kind, dimension, unit, plain_number) -> (float | ndarray, InputRecord)`, which unwraps `Sourced` and calls `to_si`; the `judgments(**explanations)` decorator typed with `ParamSpec` (spec decision 3).
+- `src/garisenda/__init__.py`: export `units`, `Sourced`.
+- Tests: `tests/test_units.py` (AC 3's generic cases: plain number read as SI and recorded, refused plain numbers for percent and angles, wrong dimension, equal results for m and cm); `tests/test_inputs.py` (AC 4 on a decorated test function, AC 12's record fields with and without `Sourced`); the decorator keeps the wrapped function's signature (`inspect.signature`). AC 14 for mypy.
+
+### 2. `M1 (a): add the idealized straight tunnel`
+- `src/garisenda/sources/__init__.py`: the package, exporting `IdealizedTunnel`.
+- `src/garisenda/sources/_tunnel.py`: `IdealizedTunnel` (frozen dataclass; keyword-only constructor per spec decision 7; stores the axis depth in m, t and n, the input records and the "idealized" assumption); `station_offset(x=, y=)`.
+- Tests: `tests/sources/test_tunnel.py`: AC 1 (the rotated tunnel's point, left is negative, azimuth 0° has its right toward +x), AC 2 (elevation and ground give the same depth; each invalid combination; diameter ≤ 0; axis depth ≤ D/2), AC 3 for `azimuth=30` and `axis_depth=20`.
+
+### 3. `M1 (a): add the source interface and the transverse surface trough`
+- `src/garisenda/sources/_movement.py`: `Verdict` literal, `Flag`, `Movement` (frozen dataclass of arrays, spec decision 5, with shape checks), `MethodRecord`, and the `Source` protocol (`evaluate`, `inputs`, `method`, `assumptions`).
+- `src/garisenda/sources/_transverse.py`: `transverse_surface_trough()` with `@judgments`, and `TransverseSurfaceTrough.evaluate()`: points converted with `to_si`, the checks of spec decisions 10–11, the equations and derivatives of decision 8 mapped to the gradient and Hessian, the assumptions of decision 9. Docstrings as reference entries (AC 13).
+- `src/garisenda/sources/__init__.py`: export `transverse_surface_trough`, `TransverseSurfaceTrough`, `Movement`, `Flag`, `Source`.
+- Tests: `tests/sources/test_transverse.py`: AC 5 (the surface table), AC 6 (the rotated tunnel), AC 3 for `volume_loss`, AC 4, AC 10, AC 11, AC 12.
+
+### 4. `M1 (a): add property tests for the trough`
+- `tests/sources/test_transverse_properties.py` (hypothesis): AC 7 (finite differences of the gradient and Hessian, Hessian symmetry, exact zeros with respect to station and depth), AC 8 (volume over ±10 i), AC 9 (symmetry).
+- `tests/sources/strategies.py`: shared strategies for tunnels, troughs and points, which (b) reuses.
+
+### 5. `M1 (a): close out`
+- Run the `lowest` job locally (`UV_RESOLUTION=lowest-direct`, CLAUDE.md), then `git checkout uv.lock`; adjust a floor only if it fails, and say why in the Result.
+- `docs/work/m1a-transverse-trough.md`: `## Result`, each acceptance criterion met or not, with evidence.
+- `SPEC.md`: 🟡 items this unit settled (§3 source interface, §4 provenance and the decorator, §8.1 plan direction) marked decided.
+- `CLAUDE.md`: the "Next" sentence points to M1 (b); a convention line if one emerged (for example, the conversion function every input goes through).
+- `docs/TODO.md`: nothing resolved (#2 stays open).
