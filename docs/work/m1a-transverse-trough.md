@@ -111,7 +111,7 @@ No topic doc holds this, so the spec is here. Everything marked 🟡 is a propos
      - d²u_n/do² = −(S/z₀)(o/i²)(o²/i² − 3)
    - Everything with respect to station or depth is exactly zero.
 9. **Assumptions recorded:** steady state, the face long passed; transverse trough only; Gaussian form; ground moves toward the tunnel axis; the surface trough applied at the point's plan position whatever its depth; idealized straight tunnel; and 🟡 "no validity range is checked for k, volume loss or cover yet: the sources are unverified (TODO #2)", so a `within` verdict is never read as more than it is.
-10. **Physically impossible inputs raise** (SPEC §2.5): volume loss ≤ 0 or ≥ 100 %; k ≤ 0; a point above the surface (depth < 0); a point inside the bore (distance to the axis in the section < D/2); NaN or infinite coordinates, naming the point indices (🟡 raise rather than flag: a coordinate that isn't there is a data error, SPEC §10, and the caller fixes it before the analysis).
+10. **Physically impossible inputs raise** (SPEC §2.5): volume loss ≤ 0 or ≥ 100 %; k ≤ 0; a point above the surface (more than the surface tolerance of decision 11 above it, so a depth of −1e-12 from converting an elevation doesn't raise; changed during the build); a point inside the bore (distance to the axis in the section < D/2); NaN or infinite coordinates, naming the point indices (🟡 raise rather than flag: a coordinate that isn't there is a data error, SPEC §10, and the caller fixes it before the analysis).
 11. **Per-point validity:** a point at the surface is `within`. 🟡 "At the surface" means depth ≤ 1 mm, a documented setting (`surface_tolerance`, recorded on the source), so a depth that comes out as 1e-12 after converting from an elevation isn't flagged. A point deeper is `outside`, with one flag listing every such point: "surface trough applied below the ground surface; the trough at depth is narrower, so settlement and curvature there are underestimated; the subsurface method is M2". No `marginal` verdict exists yet; the verdict values are defined so that (b) and M2 use them.
 
 ### Sources
@@ -154,7 +154,7 @@ Tolerance 1e-6 relative for the hand-calculated values, tighter than SPEC §2.4'
 4. **Missing judgment:** omitting `volume_loss` or `trough_width_parameter` raises the error of decision 3, which names the argument and says what it depends on and how to set it.
 5. **Golden values:** every value in the surface table, through the public interface (`evaluate()` at the right offsets, with the tunnel along +y), as the displacement, gradient and Hessian entries they map to.
 6. **Global components:** the rotated tunnel's point gives the displacements and first derivatives above.
-7. **Exact derivatives** (hypothesis, over D, z₀, k, V_L, azimuth and the point): the gradient and Hessian match central finite differences of `evaluate()`'s own displacement and gradient to a tolerance set by the step; the Hessian is symmetric in its last two indices; every derivative with respect to station or depth is exactly zero.
+7. **Exact derivatives** (hypothesis, over D, z₀, k, V_L, azimuth and the point): the gradient and Hessian match central finite differences of `evaluate()`'s own displacement and gradient to a tolerance set by the step; the Hessian is symmetric in its last two indices; every derivative with respect to depth is exactly zero, and with respect to station zero to rounding (the directional derivative t·∇ sums two products that cancel only to rounding; changed during the build).
 8. **Volume** (hypothesis): the settlement integrated across the trough (over ±10 i) equals V_L A to 1e-6 relative.
 9. **Symmetry** (hypothesis): S(o) = S(−o) and u_n(o) = −u_n(−o).
 10. **Validity:** a point at depth 0, and one at depth 0.5 mm, is `within`; one at depth 2 m is `outside`, and one flag lists all the deep points' indices with the reason of decision 11; the values below the surface equal the surface values at the same plan position.
@@ -184,6 +184,7 @@ Five build commits, each with ruff check, ruff format check, mypy and pytest gre
 - `src/garisenda/sources/_movement.py`: `Verdict` literal, `Flag`, `Movement` (frozen dataclass of arrays, spec decision 5, with shape checks), `MethodRecord`, and the `Source` protocol (`evaluate`, `inputs`, `method`, `assumptions`).
 - `src/garisenda/sources/_transverse.py`: `transverse_surface_trough()` with `@judgments`, and `TransverseSurfaceTrough.evaluate()`: points converted with `to_si`, the checks of spec decisions 10–11, the equations and derivatives of decision 8 mapped to the gradient and Hessian, the assumptions of decision 9. Docstrings as reference entries (AC 13).
 - `src/garisenda/sources/__init__.py`: export `transverse_surface_trough`, `TransverseSurfaceTrough`, `Movement`, `Flag`, `Source`.
+- Spec decisions 10 and AC 7 adjusted: the above-surface check uses the surface tolerance, and derivatives along the station are zero to rounding.
 - Tests: `tests/sources/test_transverse.py`: AC 5 (the surface table), AC 6 (the rotated tunnel), AC 3 for `volume_loss`, AC 4, AC 10, AC 11, AC 12.
 
 ### 4. `M1 (a): add property tests for the trough`
