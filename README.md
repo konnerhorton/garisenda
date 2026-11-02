@@ -6,6 +6,14 @@ The name is the Garisenda, the leaning tower in Bologna whose lean comes from se
 
 > **Status:** in design; nothing is built yet. The plan is in [SPEC.md](SPEC.md).
 
+## Install
+
+```bash
+pip install garisenda      # or: uv add garisenda
+```
+
+The release on PyPI is a placeholder for the name; there is nothing to use yet.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

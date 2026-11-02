@@ -101,8 +101,28 @@ Checked on Linux with Python 3.12.3, 3.13.0 and 3.14.0.
 6. **Types clean:** met. mypy strict, no `# type: ignore` in `src/`.
 7. **Strict pytest:** met, by hand. A test emitting an unasserted `UserWarning` fails; an unknown marker stops collection with an error.
 8. **Oldest dependencies:** met. Passes with `UV_RESOLUTION=lowest-direct`; it rewrites `uv.lock` as expected, and `git checkout uv.lock` restores it.
-9. **CI green on GitHub:** **not met.** The repo doesn't exist yet. Every job's commands pass locally on 3.12, 3.13 and 3.14 and on the lowest versions; Windows and macOS have never run. Carried to TODO #9.
+9. **CI green on GitHub:** met. Not met at close-out because the repo didn't exist; after the first push, all nine matrix jobs and `lowest` passed (run 41426957716, 2026-11-02).
 10. **Commands documented:** met. Each command in CLAUDE.md run as written.
 11. **License and metadata:** met. Wheel metadata: `License-Expression: MIT`, author Konner Horton, four project URLs; `LICENSE` is in the wheel.
 
 **For later milestones:** `mypy` was locked at 2.4.1, so its floor is `>=2.4`, the version the configuration was checked on. Dev-tool floors aren't exercised by the `lowest` job, which runs pytest only.
+
+## Release (added 2026-11-02)
+
+### Intent
+Release `garisenda` 0.0.1 on PyPI, claiming the name (TODO #8), with hangtu's release workflow, so every later release is a tag. The PyPI and TestPyPI trusted publishers and the GitHub environments `pypi` and `testpypi` are set up. This closes TODO #8, and TODO #9 now that CI ran green on GitHub (run 41426957716). Out of scope: hangtu's `examples` job, because garisenda has no examples yet; it's added with the first example script.
+
+### Decisions
+1. **hangtu's `release.yml` without the `examples` job and `MPLBACKEND`.** A `v*` tag publishes to PyPI; a manual run publishes to TestPyPI as a rehearsal. Both use trusted publishing, so no token is stored. The tag must match the version in `pyproject.toml`. The tests run against the built wheel with `src/` removed, on three operating systems × Python 3.12 and 3.14, before either upload.
+2. **Rehearse on TestPyPI before tagging**, because a version uploaded to PyPI can never be uploaded again.
+3. **SPEC §12.1** records the release rule, as hangtu's SPEC does; CLAUDE.md gets the release commands.
+
+### Acceptance criteria
+12. **Release workflow:** `.github/workflows/release.yml` as in decision 1; a tag that doesn't match the version stops the run before anything is built.
+13. **TestPyPI rehearsal:** a manual run succeeds, and `garisenda` 0.0.1 installed from TestPyPI imports and prints `0.0.1`.
+14. **On PyPI:** the `v0.0.1` tag's run succeeds, and `garisenda` 0.0.1 installed from PyPI imports and prints `0.0.1`.
+
+### Plan
+1. `M0: add the release workflow`: `release.yml`; version `0.0.1` in `pyproject.toml` and `uv.lock`; SPEC §12.1; CLAUDE.md release commands; README install line; TODO #8 and #9 deleted; criterion 9 in Result marked met.
+2. Merge to `main`, push, run the TestPyPI rehearsal from `main`, then tag `v0.0.1` and push the tag.
+3. `M0: record the release`: criteria 12–14 with evidence in Result.

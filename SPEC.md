@@ -242,6 +242,7 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 - **Tooling follows hangtu**, the author's other library, so the two work the same way (decided 2026-11-02, M0): `uv_build`; the version only in `pyproject.toml`; ruff for lint and format, with numpy-convention docstring checks on `src/`; strict pytest with **warnings as errors**, so a stray warning fails the run and an expected one is asserted. **One deliberate difference: mypy in strict mode on `src/`**, because the judgment arguments (§4) and the result shape (§5.1) are contracts across modules. A `# type: ignore` names the error code and says why.
 - 🟡 **Dependencies:** `pint`, `numpy`, `pandas`, `matplotlib`, each with a floor proven in CI, added when code first uses them. Adding another needs a decision here.
 - MIT license.
+- **Release to PyPI on a `v*` tag** (decided 2026-11-02, M0), with trusted publishing (`release.yml`): the tag must match the version in `pyproject.toml`, and the tests run against the built wheel on all three operating systems before upload. A manual run publishes to TestPyPI instead, as a rehearsal.
 
 ### 12.2 Package layout
 - 🟡 `src/` layout, package `garisenda`, tests mirroring the package. Modules by role: `garisenda.sources` (movement fields), `garisenda.profile` (the profile along an asset, §3), `garisenda.utilities`, `garisenda.buildings`, `garisenda.site`, `garisenda.plot`, `garisenda.presets`.
