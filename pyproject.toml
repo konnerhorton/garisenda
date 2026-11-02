@@ -29,7 +29,10 @@ classifiers = [
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "numpy>=1.26",
+    "pint>=0.24.4",
+]
 
 [project.urls]
 Homepage = "https://github.com/konnerhorton/garisenda"
@@ -42,6 +45,7 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.17",
     "mypy>=2.4",
+    "hypothesis>=6.100",
 ]
 
 [build-system]
@@ -56,7 +60,7 @@ target-version = "py312"
 exclude = ["*.md"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "D"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "D", "NPY"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
