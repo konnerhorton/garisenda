@@ -88,3 +88,21 @@ Three build commits, each with ruff check, ruff format check, mypy and pytest gr
 - `CLAUDE.md`: Commands section (AC 10) and the "Next" sentence.
 - `docs/work/m0-scaffolding.md`: `## Result`, each acceptance criterion met or not, with evidence.
 - `docs/TODO.md` #9: the GitHub CI run waiting on the repo, if it is.
+
+## Result (2026-11-02)
+
+Checked on Linux with Python 3.12.3, 3.13.0 and 3.14.0.
+
+1. **Installs from a clean clone:** met. A fresh clone, `uv sync --locked`, prints `0.0.0`.
+2. **One source for the version:** met. `test_version_has_one_source`.
+3. **No runtime dependencies:** met. `test_no_runtime_dependencies`.
+4. **Typed package:** met. `test_package_is_typed`; the wheel from `uv build` contains `garisenda/py.typed`.
+5. **Lint and format clean:** met.
+6. **Types clean:** met. mypy strict, no `# type: ignore` in `src/`.
+7. **Strict pytest:** met, by hand. A test emitting an unasserted `UserWarning` fails; an unknown marker stops collection with an error.
+8. **Oldest dependencies:** met. Passes with `UV_RESOLUTION=lowest-direct`; it rewrites `uv.lock` as expected, and `git checkout uv.lock` restores it.
+9. **CI green on GitHub:** **not met.** The repo doesn't exist yet. Every job's commands pass locally on 3.12, 3.13 and 3.14 and on the lowest versions; Windows and macOS have never run. Carried to TODO #9.
+10. **Commands documented:** met. Each command in CLAUDE.md run as written.
+11. **License and metadata:** met. Wheel metadata: `License-Expression: MIT`, author Konner Horton, four project URLs; `LICENSE` is in the wheel.
+
+**For later milestones:** `mypy` was locked at 2.4.1, so its floor is `>=2.4`, the version the configuration was checked on. Dev-tool floors aren't exercised by the `lowest` job, which runs pytest only.

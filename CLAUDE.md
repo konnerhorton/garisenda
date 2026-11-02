@@ -1,6 +1,6 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; nothing is built. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M0 (scaffolding), then M1 (framework, the profile along an asset, the idealized straight tunnel and station-and-offset builder, the transverse trough).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0 (scaffolding) is done, no analysis code yet. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M1 (framework, the profile along an asset, the idealized straight tunnel and station-and-offset builder, the transverse trough).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
@@ -9,7 +9,12 @@ Open-source Python library for ground movements from tunneling and their effect 
 - `docs/TODO.md`: research items and pending decisions, referenced as "TODO #n".
 
 ## Commands
-- Set by M0.
+- `uv sync`: install
+- `uv run pytest`: the tests (warnings are errors; assert expected ones with `pytest.warns`)
+- `uv run ruff check . && uv run ruff format .`: lint and format
+- `uv run mypy`: type check `src/` in strict mode; a `# type: ignore` names its error code and says why
+- `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`: what CI runs (`.github/workflows/ci.yml`)
+- Oldest allowed dependency versions: `UV_RESOLUTION=lowest-direct UV_PROJECT_ENVIRONMENT=<scratch dir> uv run pytest`, then `git checkout uv.lock`, because it rewrites the lock (commit an intended lock change first, or the checkout discards it)
 
 ## Conventions
 - **Judgments have no defaults.** A judgment is a required keyword-only argument. Standard values come only as named, cited presets the user passes explicitly (SPEC §4).
