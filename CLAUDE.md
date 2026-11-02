@@ -1,6 +1,6 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0 (scaffolding) is done, no analysis code yet. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M1 (framework, the profile along an asset, the idealized straight tunnel and station-and-offset builder, the transverse trough).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0 and M1 (a) (units, input rules, the idealized tunnel, the source interface and the transverse surface trough) are done. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M1 (b) (the station-and-offset builder, the profile along an asset, the result shape and verdict, the cross-section and profile figures), then M1 (c) (`gs.sweep`, the docs site).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
@@ -24,6 +24,9 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Every assessment has a figure** (SPEC §9).
 - **Never fill missing data**, never drop it silently (SPEC §10).
 - **Names are written out in full**, no units in names, American spelling (SPEC §8.5).
+- **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).
+- **Code and tests run on the dependency floors** (numpy 1.26): no numpy 2-only functions such as `numpy.trapezoid`. The `lowest` job catches it, the default run doesn't.
+- **Docstrings use ASCII `-` for minus** (ruff RUF002); the specs keep `−`.
 
 ## Git and commits
 - Defaults from the spec-driven-development skill: a branch per unit off `main`, merged with `--no-ff`; a commit per loop step; stage files by name; `<scope>: <imperative summary>`.

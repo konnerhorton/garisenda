@@ -15,9 +15,14 @@ def test_version_has_one_source():
     assert gs.__version__ == PYPROJECT["project"]["version"]
 
 
-def test_no_runtime_dependencies():
-    # Each dependency arrives with the code that first uses it (SPEC §12.1).
-    assert PYPROJECT["project"]["dependencies"] == []
+def test_only_allowed_runtime_dependencies():
+    # SPEC §12.1 lists the dependencies; adding another needs a decision there.
+    allowed = {"pint", "numpy", "pandas", "matplotlib"}
+    names = {
+        requirement.split(">")[0].split("=")[0].split("<")[0].strip()
+        for requirement in PYPROJECT["project"]["dependencies"]
+    }
+    assert names <= allowed
 
 
 def test_package_is_typed():

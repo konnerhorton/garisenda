@@ -2,6 +2,10 @@
 
 from importlib.metadata import version
 
+from garisenda import sources
+from garisenda._inputs import Sourced
+from garisenda._units import units
+
 __version__ = version("garisenda")
 
-__all__ = ["__version__"]
+__all__ = ["Sourced", "__version__", "sources", "units"]
