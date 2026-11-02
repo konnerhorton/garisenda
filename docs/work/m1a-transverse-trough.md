@@ -217,4 +217,4 @@ Checked on Linux with Python 3.12; 72 tests. The oldest allowed versions (numpy 
 13. **Docstrings:** met. Equations, units, validity, assumptions and 🔬 sources on `IdealizedTunnel`, `transverse_surface_trough` and `evaluate`; ruff's numpy docstring rules pass.
 14. **Dependencies:** met. Floors pass on the oldest versions; mypy strict passes with no `# type: ignore` in `src/`.
 
-**For later units:** the source build commit came to 700 lines, over the 300-line guideline, because the source, its docstrings and its tests landed together; splitting the interface from the trough would have kept it in bounds. The fourth input kind, geometry (SPEC §4), was added during the build and is still 🟡.
+**For later units:** the source build commit came to 700 lines, over the 300-line guideline, because the source, its docstrings and its tests landed together; splitting the interface from the trough would have kept it in bounds. The fourth input kind, geometry (SPEC §4), was added during the build and decided in review.
