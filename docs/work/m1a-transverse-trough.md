@@ -177,6 +177,7 @@ Five build commits, each with ruff check, ruff format check, mypy and pytest gre
 ### 2. `M1 (a): add the idealized straight tunnel`
 - `src/garisenda/sources/__init__.py`: the package, exporting `IdealizedTunnel`.
 - `src/garisenda/sources/_tunnel.py`: `IdealizedTunnel` (frozen dataclass; keyword-only constructor per spec decision 7; stores the axis depth in m, t and n, the input records and the "idealized" assumption); `station_offset(x=, y=)`.
+- `src/garisenda/_inputs.py`, `SPEC.md` §4: a 🟡 fourth input kind, `"geometry"`, because the tunnel's inputs are none of the three SPEC §4 had (added during the build). `src/garisenda/_units.py`: `to_si` converts a list or tuple of quantities element by element, for `reference_point=(x, y)`.
 - Tests: `tests/sources/test_tunnel.py`: AC 1 (the rotated tunnel's point, left is negative, azimuth 0° has its right toward +x), AC 2 (elevation and ground give the same depth; each invalid combination; diameter ≤ 0; axis depth ≤ D/2), AC 3 for `azimuth=30` and `axis_depth=20`.
 
 ### 3. `M1 (a): add the source interface and the transverse surface trough`

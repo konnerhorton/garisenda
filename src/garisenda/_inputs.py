@@ -10,8 +10,8 @@ import pint
 
 from garisenda._units import Magnitude, PlainNumber, to_si, units
 
-Kind = Literal["ground parameter", "design judgment", "constant or setting"]
-"""The three kinds of input, each treated differently (SPEC §4)."""
+Kind = Literal["ground parameter", "design judgment", "constant or setting", "geometry"]
+"""The kinds of input, each treated differently (SPEC §4)."""
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class InputRecord:
         The argument's name.
     value : pint.Quantity
         The value used, in its SI unit.
-    kind : {"ground parameter", "design judgment", "constant or setting"}
+    kind : {"ground parameter", "design judgment", "constant or setting", "geometry"}
         Its kind (SPEC §4).
     given_as : str
         How it was given, for example ``"quantity in %"`` or
@@ -80,7 +80,7 @@ def record(
     ----------
     name, value, unit, plain_number
         As for `to_si`.
-    kind : {"ground parameter", "design judgment", "constant or setting"}
+    kind : {"ground parameter", "design judgment", "constant or setting", "geometry"}
         The input's kind.
 
     Returns

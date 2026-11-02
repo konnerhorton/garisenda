@@ -40,7 +40,8 @@ def to_si(
     name : str
         The argument's name, used in error messages.
     value : object
-        A pint quantity, or a plain number or array of numbers.
+        A pint quantity, a plain number or array of numbers, or a list or tuple
+        of them (each element converted on its own).
     unit : str
         The SI unit the calculation works in, such as ``"m"``, ``"radian"`` or
         ``"dimensionless"``. A quantity must have the same root units: pint
@@ -64,6 +65,16 @@ def to_si(
     pint.DimensionalityError
         A quantity whose units don't convert to `unit`.
     """
+    if isinstance(value, list | tuple) and any(
+        isinstance(item, pint.Quantity) for item in value
+    ):
+        converted = [
+            to_si(f"{name}[{index}]", item, unit=unit, plain_number=plain_number)
+            for index, item in enumerate(value)
+        ]
+        magnitudes = np.array([magnitude for magnitude, _ in converted])
+        given = sorted({given_as for _, given_as in converted})
+        return magnitudes, "; ".join(given)
     if isinstance(value, pint.Quantity):
         if _root(value.units) != _root(unit):
             raise pint.DimensionalityError(

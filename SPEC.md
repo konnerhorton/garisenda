@@ -118,13 +118,14 @@ Conditions that the geometry shows (an asset near a real alignment's end, on a c
 
 ## 4. Inputs
 
-Every input to a calculation is one of three kinds, treated differently because each goes wrong in a different way.
+Every input to a calculation is one of these kinds, treated differently because each goes wrong in a different way.
 
 | Kind | Examples | Rule |
 |---|---|---|
 | **Ground parameter** | Soil modulus, trough width parameter where it is measured | Required argument. No default. |
 | **Design judgment** | Volume loss, trough width method, soil–structure interaction (greenfield in Phase 1), allowable strain, pullout and rotation limits, pipe lengths, building properties for the damage method, discrete strain interval | Required, keyword-only argument. **No default** (decided). |
 | **Constant or setting** | Gaussian volume factor, unit conversions | Defaulted, documented, overridable. Recorded on the result. |
+| 🟡 **Geometry** (M1 (a)) | Tunnel reference point, direction, depth and diameter; asset coordinates | Data, not a judgment: required where the calculation can't do without it, recorded on the result. A default only where it's a convention, not a guess (the station at an idealized tunnel's reference point is 0 unless given). |
 
 - **No judgment has a default.** A missing judgment is an error that names it, says what it depends on, and how to set it.
 - **Presets are opt-in** (decided 2026-10-31). Where practice has standard values (nominal pipe lengths, published limits), garisenda can ship them as **named, cited presets** the user passes explicitly, for example `pipe_lengths=gs.presets.<name>`. A preset is a choice someone made, recorded on the result by name and source. It is never applied without being asked for.
