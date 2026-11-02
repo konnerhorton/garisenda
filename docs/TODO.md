@@ -22,6 +22,7 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 ### 2. Transverse trough sources · Claude (You to supply the papers) · SPEC §2.1, M1
 - **To verify:** O'Reilly & New (1982) for trough width (the cohesive and granular linear fits); Peck (1969) for the Gaussian form; the relation between maximum settlement, volume loss and trough width; horizontal movement at the surface.
 - **Golden values:** a worked example from one of these, or a hand calculation written out in M1's spec.
+- **Used unverified in M1 (a)** (decided 2026-11-02): the Gaussian form, the volume relation and horizontal movement toward the axis, cited with 🔬 and no equation numbers; golden values are hand calculations. Verifying them adds the equation numbers, the validity ranges for k, volume loss and cover, and replaces M1 (a)'s "no range checked" assumption.
 
 ### 3. Subsurface movements · You and Claude · SPEC §13 Q2, M2
 - **To verify:** Mair et al. (1993) for trough width below the surface in clay, with its stated validity limit; Taylor (1995) for horizontal movements below the surface; New & Bowers (1994).

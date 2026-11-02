@@ -46,3 +46,119 @@ A caller can describe an idealized straight tunnel and evaluate the steady-state
 4. **k is given directly** (`trough_width_parameter=`), a required judgment. Named methods and presets come later, once you've decided how recommendations are offered.
 5. **Citations stay 🔬 unverified for now.** The spec names the candidate sources (Peck 1969 for the Gaussian form, O'Reilly & New 1982 for the volume relation and horizontal movement) as unverified, and golden values come from hand calculations. Docstrings mark the citation 🔬 until TODO #2 is done.
 6. **Horizontal movement assumes ground moves toward the tunnel axis**, recorded on the result as an assumption, with no alternative method in this unit.
+
+## Spec
+
+No topic doc holds this, so the spec is here. Everything marked 🟡 is a proposal for this review.
+
+### Changes
+- **SPEC §12.4:** M1's row splits into (a), (b) and (c) (intent decision 1).
+- **SPEC §1.3:** the tunnel movements row says the trough width comes from a given k for now, named methods later (intent decision 4).
+- **SPEC §3:** the source interface is decided as in decisions 4–6 below.
+- **SPEC §4:** the provenance wrapper and the missing-judgment error (decisions 2, 3).
+- **SPEC §6:** inputs that practice writes as a percentage, and angles, must be pint quantities (intent decision 2; decision 1 below).
+- **SPEC §8.1:** the plan direction convention (decision 7).
+- **`docs/TODO.md` #2:** notes that M1 (a) uses the candidate equations unverified.
+- **New modules:** `garisenda.units` (the registry and input conversion), `garisenda.inputs` (`Sourced`, input records, the judgment decorator), `garisenda.sources` (`IdealizedTunnel`, `transverse_surface_trough`, `Movement`, `Flag`). Public names in `gs`: `units`, `Sourced`, and the `sources` module.
+
+### Decisions
+
+**Units and inputs**
+
+1. **One pint registry, `gs.units`**, as in hangtu, so quantities from the user and from garisenda always mix. Input conversion, in one function every calculation uses:
+   - a quantity of the right dimension is converted to SI;
+   - a plain number is read as the documented SI unit (m for lengths), and the input record says so (`given_as="plain number, read as m"`);
+   - **ratios written as percentages** (volume loss now) and **angles** (the tunnel's direction) refuse a plain number, with an error that names the argument and shows how to write it. 🟡 Angles are added to intent decision 2 for the same reason: `30` could be degrees or radians, and SPEC §6 says never guess;
+   - a wrong dimension raises, naming the argument, the expected dimension and what was given.
+2. 🟡 **Provenance:** `gs.Sourced(value, source="...")` wraps any input; `source` is free text (a document and section, a project basis of design). Any argument accepts either a bare value or a `Sourced`. The input record keeps `name`, `value` (a pint quantity in SI), `kind` (`"ground parameter"`, `"design judgment"` or `"constant or setting"`, SPEC §4), `source` (or None) and `given_as`.
+3. 🟡 **A missing judgment is an error that says what it depends on and how to set it** (SPEC §4). Judgments are required keyword-only arguments in the signature, so editors and mypy see them as required. A decorator, `@judgments(volume_loss="...", trough_width_parameter="...")`, holds the explanation for each and turns Python's bare `missing 1 required keyword-only argument` into `TypeError: volume_loss is required: it depends on the tunneling method, the ground and the workmanship, and is a design judgment with no default. Pass it as a pint quantity, e.g. volume_loss=0.5 * gs.units.percent.` Typed with `ParamSpec`, so the signature survives. Alternative rejected: a sentinel default, which makes the signature look optional.
+
+**The source interface (SPEC §3)**
+
+4. 🟡 **Points are (x, y, depth)**, with depth positive downward from the ground surface (SPEC §8.1), so the vertical displacement and the vertical coordinate have the same sign: settlement is a displacement in the +depth direction. Elevations are converted to depths before the source sees them (by the tunnel here, by the builder in (b)). Arrays of floats in m, or pint arrays, of any equal length.
+5. 🟡 **`source.evaluate(x=, y=, depth=) -> Movement`**, a frozen dataclass of numpy arrays in SI, components in the order (x, y, depth):
+   - `displacement`, shape (N, 3): u_x, u_y and settlement (m);
+   - `gradient`, shape (N, 3, 3): ∂u_i/∂x_j (dimensionless);
+   - `hessian`, shape (N, 3, 3, 3): ∂²u_i/∂x_j∂x_k (1/m), symmetric in j, k;
+   - `verdict`, shape (N,): `"within"`, `"marginal"` or `"outside"` per point;
+   - `flags`: a tuple of `Flag(verdict, reason, limit, points)`, where `points` are the indices it applies to.
+   Plain arrays, not pint, because this is the contract between sources and the profile, which is used in bulk; units are fixed by the docstring, and (b) puts them on the profile table (SPEC §6). The profile (b) resolves these onto the asset's direction: the along-asset strain is a·∇u·a, and curvature comes from the Hessian contracted with a twice.
+6. 🟡 **A source also carries what the result will need:** `inputs` (the records of decision 2), `method` (name, equations and source of each), and `assumptions` (text). (b) gathers them into the result shape.
+
+**The tunnel**
+
+7. 🟡 **`gs.sources.IdealizedTunnel(*, reference_point, azimuth, diameter, axis_depth=None, axis_elevation=None, ground_elevation=None, reference_station=0)`.**
+   - `azimuth` is the plan direction of increasing station, **clockwise from the +y axis**, a pint angle (decision 1). So the unit tangent is t = (sin θ, cos θ) and the unit normal to the right is n = (cos θ, −sin θ). Clockwise from +y is a bearing when +y is north, which is how engineers state directions; it is recorded in SPEC §8.1 because alignments (M5) follow it.
+   - The axis is given by `axis_depth`, or by `axis_elevation` with `ground_elevation`; anything else (both, neither, an elevation without the ground) raises, naming the arguments (SPEC §8.2).
+   - `reference_station` is the station at `reference_point` (a length, default 0), so spreadsheet stations like 1250 m can be used as they are. It is geometry, not a judgment.
+   - `tunnel.station_offset(x=, y=)` returns station s = s₀ + (p − p₀)·t and offset o = (p − p₀)·n.
+   - Raises: diameter ≤ 0; axis depth ≤ D/2 (the bore would break the surface).
+   - The tunnel records that it was idealized, as an assumption (SPEC §1.3).
+
+**The trough**
+
+8. **`gs.sources.transverse_surface_trough(tunnel, *, volume_loss, trough_width_parameter) -> TransverseSurfaceTrough`**, a frozen source object with `evaluate()`. The name says surface, so the subsurface trough (M2) comes as its own source and existing calls don't change. Equations (🔬 citations unverified, intent decision 5), with o the offset from the axis and z₀ the axis depth:
+   - trough width: i = k z₀
+   - tunnel area: A = π D²/4
+   - maximum settlement: S_max = V_L A / (√(2π) i), from the trough volume √(2π) i S_max = V_L A (🔬 O'Reilly & New 1982)
+   - settlement: S(o) = S_max exp(−o²/(2i²)) (🔬 Peck 1969)
+   - horizontal movement toward the axis: h(o) = (o / z₀) S(o), so the displacement along n is u_n = −(o/z₀) S (🔬 O'Reilly & New 1982; intent decision 6)
+   - global components: u_x = u_n n_x, u_y = u_n n_y, settlement = S.
+   - exact derivatives with respect to o, which become the gradient and Hessian through ∂o/∂x = n_x, ∂o/∂y = n_y and ∂o/∂depth = 0:
+     - dS/do = −(o/i²) S
+     - d²S/do² = (o²/i² − 1) S / i²
+     - du_n/do = −(S/z₀)(1 − o²/i²)
+     - d²u_n/do² = −(S/z₀)(o/i²)(o²/i² − 3)
+   - Everything with respect to station or depth is exactly zero.
+9. **Assumptions recorded:** steady state, the face long passed; transverse trough only; Gaussian form; ground moves toward the tunnel axis; the surface trough applied at the point's plan position whatever its depth; idealized straight tunnel; and 🟡 "no validity range is checked for k, volume loss or cover yet: the sources are unverified (TODO #2)", so a `within` verdict is never read as more than it is.
+10. **Physically impossible inputs raise** (SPEC §2.5): volume loss ≤ 0 or ≥ 100 %; k ≤ 0; a point above the surface (depth < 0); a point inside the bore (distance to the axis in the section < D/2); NaN or infinite coordinates, naming the point indices (🟡 raise rather than flag: a coordinate that isn't there is a data error, SPEC §10, and the caller fixes it before the analysis).
+11. **Per-point validity:** a point at the surface is `within`. 🟡 "At the surface" means depth ≤ 1 mm, a documented setting (`surface_tolerance`, recorded on the source), so a depth that comes out as 1e-12 after converting from an elevation isn't flagged. A point deeper is `outside`, with one flag listing every such point: "surface trough applied below the ground surface; the trough at depth is narrower, so settlement and curvature there are underestimated; the subsurface method is M2". No `marginal` verdict exists yet; the verdict values are defined so that (b) and M2 use them.
+
+### Sources
+- **Peck 1969:** Peck, R. B. (1969), "Deep excavations and tunneling in soft ground", 7th ICSMFE, state-of-the-art volume: the Gaussian form. 🔬 Not verified (TODO #2).
+- **O'Reilly & New 1982:** O'Reilly, M. P. and New, B. M. (1982), "Settlements above tunnels in the United Kingdom: their magnitude and prediction", Tunnelling '82: i = k z₀, the trough volume relation, and horizontal movement toward the axis. 🔬 Not verified (TODO #2).
+
+Docstrings cite these with the 🔬 mark and no equation number until they are verified.
+
+### Hand calculation (golden values)
+Derived from the equations in decision 8, carried to 8 significant figures. Inputs: D = 6.0 m, z₀ = 20.0 m, k = 0.5, V_L = 1.0 %.
+- i = 0.5 × 20.0 = 10.0 m
+- A = π × 6.0² / 4 = 28.274334 m²
+- trough volume V_L A = 0.28274334 m³/m
+- S_max = 0.28274334 / (√(2π) × 10.0) = 0.28274334 / 25.066283 = 0.011279827 m
+
+At the surface, by offset o (m):
+
+| o | S (m) | u_n (m) | dS/do | d²S/do² (1/m) | du_n/do | d²u_n/do² (1/m) |
+|---|---|---|---|---|---|---|
+| 0 | 1.1279827e-2 | 0 | 0 | −1.1279827e-4 | −5.6399136e-4 | 0 |
+| 5 | 9.9544126e-3 | −2.4886031e-3 | −4.9772063e-4 | −7.4658094e-5 | −3.7329047e-4 | 6.8436587e-5 |
+| 10 (= i) | 6.8415611e-3 | −3.4207805e-3 | −6.8415611e-4 | 0 | 0 | 6.8415611e-5 |
+| 17.320508 (= √3 i) | 2.5168697e-3 | −2.1796731e-3 | −4.3593461e-4 | 5.0337393e-5 | 2.5168697e-4 | 0 |
+| 20 | 1.5265586e-3 | −1.5265586e-3 | −3.0531172e-4 | 4.5796758e-5 | 2.2898379e-4 | −1.5265586e-5 |
+| −10 | 6.8415611e-3 | 3.4207805e-3 | 6.8415611e-4 | 0 | 0 | −6.8415611e-5 |
+
+Checks on the table: S(i) = S_max e^(−1/2); the curvature is zero at o = i; h(i) = (i/z₀) S(i) = 0.5 S(i); the horizontal strain du_n/do is zero at o = i and changes sign there.
+
+**Rotated tunnel, global components.** Same trough; reference point (100, 200) m, azimuth 30°, reference station 1000 m. So t = (0.5, 0.86602540) and n = (0.86602540, −0.5). The point at station 1025 m, offset +10 m:
+- x = 100 + 25 × 0.5 + 10 × 0.86602540 = 121.16025 m; y = 200 + 25 × 0.86602540 − 10 × 0.5 = 216.65064 m
+- settlement = 6.8415611e-3 m; u_n = −3.4207805e-3 m, so u_x = −2.9624828e-3 m and u_y = 1.7103903e-3 m (toward the axis, which lies to the left)
+- ∂S/∂x = dS/do × n_x = −5.9249657e-4; ∂S/∂y = dS/do × n_y = 3.4207805e-4; ∂S/∂depth = 0.
+
+### Acceptance criteria
+Tolerance 1e-6 relative for the hand-calculated values, tighter than SPEC §2.4's 0.5 % because the calculation is exact and carried to 8 figures; exact zeros are checked as exactly zero.
+
+1. **Station and offset:** for the rotated tunnel above, `station_offset(x=121.16025, y=216.65064)` gives (1025, 10); a point to the left of the tunnel has a negative offset; azimuth 0° has its right toward +x.
+2. **Tunnel inputs:** `axis_elevation=` with `ground_elevation=` gives the same axis depth as `axis_depth=`; each invalid combination raises, naming the arguments; diameter ≤ 0 and axis depth ≤ D/2 raise.
+3. **Units:** `volume_loss=1 * u.percent` and `0.01 * u.dimensionless` give identical results; `volume_loss=0.01` and `azimuth=30` raise the errors of decision 1, naming the argument and showing how to write it; `axis_depth=20` and `20 * u.m` and `2000 * u.cm` give identical results, and the first is recorded as a plain number read as m; a length given in seconds raises, naming the argument.
+4. **Missing judgment:** omitting `volume_loss` or `trough_width_parameter` raises the error of decision 3, which names the argument and says what it depends on and how to set it.
+5. **Golden values:** every value in the surface table, through the public interface (`evaluate()` at the right offsets, with the tunnel along +y), as the displacement, gradient and Hessian entries they map to.
+6. **Global components:** the rotated tunnel's point gives the displacements and first derivatives above.
+7. **Exact derivatives** (hypothesis, over D, z₀, k, V_L, azimuth and the point): the gradient and Hessian match central finite differences of `evaluate()`'s own displacement and gradient to a tolerance set by the step; the Hessian is symmetric in its last two indices; every derivative with respect to station or depth is exactly zero.
+8. **Volume** (hypothesis): the settlement integrated across the trough (over ±10 i) equals V_L A to 1e-6 relative.
+9. **Symmetry** (hypothesis): S(o) = S(−o) and u_n(o) = −u_n(−o).
+10. **Validity:** a point at depth 0, and one at depth 0.5 mm, is `within`; one at depth 2 m is `outside`, and one flag lists all the deep points' indices with the reason of decision 11; the values below the surface equal the surface values at the same plan position.
+11. **Impossible inputs raise:** volume loss 0, −1 % and 100 %; k 0; a point at depth −1 m; a point inside the bore; a NaN coordinate, with the error naming its index.
+12. **Inputs and assumptions:** the source's records hold every input with its kind, SI value, `given_as`, and the source text when `Sourced` was used, None otherwise; the assumptions of decision 9 are all present.
+13. **Docstrings:** `IdealizedTunnel`, `transverse_surface_trough` and `evaluate` state the equations, inputs and outputs with units, the validity behavior, the assumptions and the 🔬 sources (SPEC §8.5); ruff's numpy docstring rules pass.
+14. **Dependencies:** `pint` and `numpy` are added with floors that the `lowest` job passes on; `hypothesis` is in the dev group; mypy strict passes, and each `# type: ignore` names its code and says why.

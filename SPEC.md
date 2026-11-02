@@ -51,7 +51,7 @@ Either way the analysis returns the expected greenfield movements and strains al
 
 | Area | Phase 1 content |
 |---|---|
-| **Tunnel movements** | Steady-state transverse Gaussian trough at the surface and below it; trough width from a given k or a named method; horizontal movements; several tunnels by superposition. The trough is applied perpendicular to each tunnel segment, then the 3D field with the longitudinal trough (M6) |
+| **Tunnel movements** | Steady-state transverse Gaussian trough at the surface and below it; trough width from a given k (named methods later); horizontal movements; several tunnels by superposition. The trough is applied perpendicular to each tunnel segment, then the 3D field with the longitudinal trough (M6) |
 | **Geometry** | Idealized straight tunnels and real alignments; assets built from station and offset, or loaded as polylines; flags for tunnel ends, curves, runs parallel to a tunnel and sharp vertices (M5) |
 | **Utilities** | Continuous pipes (welded steel, HDPE, PVC, HDD-installed) and jointed pipes (cast iron, ductile iron, clay, concrete); axial and bending strain, joint pullout and rotation; discrete and analytical strain, both computed and compared (§7) |
 | **Buildings** | A facade line built from station and offsets (it may straddle a tunnel), or a facade line or footprint polyline, each edge a facade. Deflection ratio and horizontal strain per facade; damage category |
@@ -110,7 +110,7 @@ Conditions that the geometry shows (an asset near a real alignment's end, on a c
 - **Assessments consume a profile along the asset** (decided 2026-11-01): stations at distances along the asset, and at each station the displacement along the asset, across it (vertical and lateral), and their exact derivatives with respect to distance along the asset. This is the boundary every source produces and every assessment consumes, so the transverse trough and the 3D field are interchangeable to the assessments, their results and their figures.
 - **A closed-form source is a function, not a grid** (decided 2026-11-01). The profile is built by evaluating the source at the asset's stations. A grid is evaluated only to draw a figure, never for a calculation.
 - **One analysis, always in 3D** (decided 2026-11-01). However the geometry was entered (§8.3), every asset is a 3D polyline and every tunnel a 3D alignment by the time the analysis sees them. There is no separate section analysis.
-- 🟡 **The source interface:** given points (x, y, z), a source returns the displacement components and their spatial derivatives, which are resolved onto the asset's direction at each station to build the profile.
+- 🟡 **The source interface** (M1 (a), [`docs/work/m1a-transverse-trough.md`](docs/work/m1a-transverse-trough.md)): given points (x, y, depth), with depth positive downward so settlement has the sign of the vertical coordinate, `source.evaluate()` returns plain SI arrays: the displacement (x, y, settlement), its gradient and its Hessian, a verdict per point and the flags. Derivatives that are zero for a source (with respect to depth for the surface trough) are returned as exact zeros, not left out, so a source that adds them (M2) changes nothing downstream. A source also carries its input records, methods and assumptions for the result. The profile resolves these onto the asset's direction at each station.
 - 🟡 **The transverse trough is a 2D source placed in 3D:** it is applied perpendicular to each tunnel segment and assumes the segment is long and straight. Stations near a real alignment's end, a curve, or a run parallel to the tunnel are flagged (M5). An idealized straight tunnel has none of these, and the result records that it was idealized (§1.3). The 3D field (M6) adds the longitudinal trough.
 - 🟡 **Several sources combine by superposition**, recorded on the result as an assumption. Any number of tunnels, idealized or real.
 - 🟡 **Closed-form sources return exact derivatives.** Assessments use them for analytical strain and sample the source at the discrete interval for discrete strain (§7). No spline is fitted to an analytical field. A spline is needed only for movements given as data (a numerical model's output, survey data), which comes later.
@@ -130,7 +130,8 @@ Every input to a calculation is one of three kinds, treated differently because 
 - **Presets are opt-in** (decided 2026-10-31). Where practice has standard values (nominal pipe lengths, published limits), garisenda can ship them as **named, cited presets** the user passes explicitly, for example `pipe_lengths=gs.presets.<name>`. A preset is a choice someone made, recorded on the result by name and source. It is never applied without being asked for.
 - **Limits are project-specific judgments with literature provenance** (decided 2026-10-31). Each limit is given with its value and where it came from; a preset of limits from a published source is allowed under the rule above.
 - **Soil–structure interaction is a judgment** (decided 2026-10-31; revised 2026-11-01). Greenfield (no reduction) has to be chosen explicitly, like any other value, so adding methods later doesn't change existing calls. 🟡 Named `interaction`, keyword-only; Phase 1 accepts only `"greenfield"`. A single reduction factor is not accepted (§1.3).
-- 🟡 **Provenance is optional on input and always kept on output.** An argument can be a plain value or a value with a source. Either way the result records the value used, its kind, and its source when one was given.
+- 🟡 **Provenance is optional on input and always kept on output.** An argument can be a plain value or `gs.Sourced(value, source=...)`. Either way the result records the value used, its kind, how it was given, and its source when one was given.
+- 🟡 **The missing-judgment error** comes from a decorator that holds, for each judgment, what it depends on and how to set it; the judgments stay required keyword-only arguments in the signature, never a sentinel default (M1 (a)).
 
 ## 5. Results
 
@@ -161,6 +162,7 @@ Pass/fail on a check is separate from validity.
 - 🟡 **SI is the preferred system:** m, mm, kPa, MPa. Strain is dimensionless and reported in microstrain or percent only in views.
 - **Never guess a unit.**
 - 🟡 **Pint first:** a scalar input is a pint quantity, and docs and examples write inputs that way. **A plain float is accepted and read as the documented SI unit**, and the result's input echo records which it was.
+- **Except where a plain number is ambiguous** (decided 2026-11-02, M1 (a)): an input that practice writes as a percentage (volume loss, strain limits) and an angle must be pint quantities, because `0.5` could be 0.5 % or 50 % and `30` could be degrees or radians. A plain number is an error that names the argument and shows how to write it. One registry, `gs.units`, serves the process.
 - DataFrames carry units in `df.attrs["units"]`. **Units never appear in names** (`depth`, not `depth_m`).
 - 🟡 Pipe diameters given in nominal inches are accepted as pint quantities; a preset keyed by nominal size says so in its name and docs.
 
@@ -176,6 +178,7 @@ Pass/fail on a check is separate from validity.
 
 ### 8.1 Coordinates and signs
 - **One flat coordinate system and one length unit** for every table in a site (decided 2026-10-31). No datum or projection is recorded in Phase 1; if figures need a datum label, an optional label is added to the site then.
+- 🟡 **Plan direction** is an azimuth clockwise from the +y axis (a bearing when +y is north), for idealized tunnels and alignments alike.
 - 🟡 **Station and offset:** station is distance along a tunnel's alignment in plan, from its first point (or from the reference point of an idealized tunnel). Offset is horizontal and perpendicular to the alignment in plan, positive to the right looking in the direction of increasing station.
 - 🟡 **Settlement is positive downward.** Displacements returned by a source are global components (x, y and vertical), so they add across sources.
 - 🟡 **Tensile strain is positive.**
@@ -256,7 +259,7 @@ Revised 2026-11-01: spreadsheet-style input first (M1–M4), which replaces the 
 | ID | Scope | Done when |
 |---|---|---|
 | M0 | Scaffolding: package, lint, tests, CI | CI green |
-| M1 | Framework (inputs, result shape, verdict, `gs.sweep`, units), the source interface and the profile along an asset (§3), the idealized straight tunnel, the station-and-offset builder for a utility line, the transverse surface trough with horizontal movement, the first figures (cross-section and profile) | Golden values from verified sources and hand calculations; strains are exact derivatives; profile keyed by distance along the asset; builder tested; figures checked by eye |
+| M1 | In three units (decided 2026-11-02): (a) units, the input rules, the idealized straight tunnel, the source interface (§3) and the transverse surface trough with horizontal movement, from a given k; (b) the station-and-offset builder for a utility line, the profile along an asset (§3), the result shape and verdict, the first figures (cross-section and profile); (c) `gs.sweep`, the docs site and M1's user docs | Golden values from verified sources and hand calculations; strains are exact derivatives; profile keyed by distance along the asset; builder tested; figures checked by eye |
 | M2 | Movements below the surface, several tunnels | Golden values from the verified subsurface method; depth validity flags tested; superposition recorded |
 | M3 | Utility checks, greenfield: continuous and jointed pipes, discrete and analytical strain, bending in both planes, pipe length tables | Golden values from the verified definitions; each check against its limit; the profile figure shows every check; a real crossing reproduced locally. **The spreadsheet is replaced for utilities.** |
 | M4 | Buildings, greenfield: facade lines built from station and offset | Golden values from the verified damage method; hogging and sagging split tested, including a building straddling a tunnel; building figures. **The spreadsheet is replaced for buildings.** |
