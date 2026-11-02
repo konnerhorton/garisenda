@@ -197,3 +197,24 @@ Five build commits, each with ruff check, ruff format check, mypy and pytest gre
 - `SPEC.md`: 🟡 items this unit settled (§3 source interface, §4 provenance and the decorator, §8.1 plan direction) marked decided.
 - `CLAUDE.md`: the "Next" sentence points to M1 (b); a convention line if one emerged (for example, the conversion function every input goes through).
 - `docs/TODO.md`: nothing resolved (#2 stays open).
+
+## Result (2026-11-02)
+
+Checked on Linux with Python 3.12; 72 tests. The oldest allowed versions (numpy 1.26.0, pint 0.24.4, hypothesis 6.100.0) pass the full suite.
+
+1. **Station and offset:** met. `test_station_and_offset_of_the_rotated_tunnel` gives (1025, 10); left is negative; azimuth 0° has its right toward +x.
+2. **Tunnel inputs:** met. Elevation with ground gives the same depth; the five invalid axis combinations each raise, naming what was given; diameter ≤ 0 and axis depth ≤ D/2 raise.
+3. **Units:** met. Percent and dimensionless volume loss agree to 1e-12; plain `volume_loss` and `azimuth` are refused with how to write them; `20`, `20 m` and `2000 cm` agree, and the plain number is recorded as read as m; a depth in seconds raises, naming `axis_depth`.
+4. **Missing judgment:** met, for both judgments.
+5. **Golden values:** met. Every entry of the surface table at 1e-6 relative (zeros to 1e-6 of the column's scale, since they are zero only to the table's 8 figures).
+6. **Global components:** met. The rotated tunnel's displacements and first derivatives at 1e-6.
+7. **Exact derivatives:** met. Central differences agree to 1e-6 of S_max/i and S_max/i²; a deliberate 0.1 % error in d²S/do² fails the test (checked by hand, then reverted). The Hessian is symmetric; derivatives with respect to depth are exactly zero, along the station zero to 1e-12 of S_max/i (spec adjusted during the build).
+8. **Volume:** met, to 1e-6 relative over ±10 i.
+9. **Symmetry:** met, to 1e-9 relative.
+10. **Validity:** met. Depths 0 and 0.5 mm are `within`; 2 m and 8 m are `outside` with one flag listing both, and get the surface values.
+11. **Impossible inputs raise:** met. Volume loss 0, −1 % and 100 %; k 0, negative and NaN; depth −1 m; inside the bore; a NaN coordinate, naming its index.
+12. **Inputs and assumptions:** met. Kind, SI value, `given_as` and source for each input; every assumption of decision 9 and the tunnel's.
+13. **Docstrings:** met. Equations, units, validity, assumptions and 🔬 sources on `IdealizedTunnel`, `transverse_surface_trough` and `evaluate`; ruff's numpy docstring rules pass.
+14. **Dependencies:** met. Floors pass on the oldest versions; mypy strict passes with no `# type: ignore` in `src/`.
+
+**For later units:** the source build commit came to 700 lines, over the 300-line guideline, because the source, its docstrings and its tests landed together; splitting the interface from the trough would have kept it in bounds. The fourth input kind, geometry (SPEC §4), was added during the build and is still 🟡.
