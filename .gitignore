@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Build and packaging
+build/
+dist/
+*.egg-info/
+
+# Environments (.python-version and uv.lock are committed)
+.venv/
+.env
+
+# Tests, coverage, tools
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.ruff_cache/
+.mypy_cache/
+
+# Outputs from running examples locally
+examples/**/*.pdf
+examples/**/*.png
+examples/**/*.svg
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

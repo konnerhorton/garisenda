@@ -1,0 +1,79 @@
+[project]
+name = "garisenda"
+version = "0.0.0"
+description = "Ground movements from tunneling and their effect on utilities and buildings, traceable, with figures for every result"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Konner Horton", email = "konnerhorton@gmail.com" }]
+keywords = [
+    "geotechnical",
+    "geotechnical engineering",
+    "tunneling",
+    "settlement",
+    "ground movement",
+    "utilities",
+    "pipelines",
+    "building damage",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/konnerhorton/garisenda"
+Source = "https://github.com/konnerhorton/garisenda"
+Issues = "https://github.com/konnerhorton/garisenda/issues"
+Specification = "https://github.com/konnerhorton/garisenda/blob/main/SPEC.md"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.17",
+    "mypy>=2.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.9,<0.10"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+
+# Code blocks in the docs are hand-aligned sketches, not code to format.
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.mypy]
+files = ["src"]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+# Every `# type: ignore` names its error code (SPEC §12.1).
+enable_error_code = ["ignore-without-code", "redundant-expr"]

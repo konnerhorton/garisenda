@@ -53,4 +53,4 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 - A 0.0.1 placeholder upload with a release workflow using trusted publishing. Its own small unit after M0.
 
 ### 9. GitHub repo · You · SPEC §12.1
-- Create the public repo and push, then confirm M0's CI is green on GitHub.
+- Create the public repo and push, then confirm M0's CI is green on GitHub. M0 closed without it (2026-11-02): every CI job's commands pass locally on Linux with Python 3.12, 3.13 and 3.14 and on the lowest versions, but the Windows and macOS jobs have never run.

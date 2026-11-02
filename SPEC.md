@@ -238,7 +238,8 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 ## 12. Engineering
 
 ### 12.1 Environment and distribution
-- 🟡 **Python ≥ 3.12** and `uv`. CI on Windows, macOS and Linux × Python 3.12–3.14, with a job on the oldest allowed dependency versions.
+- **Python ≥ 3.12** and `uv` (decided 2026-11-02, M0). CI on Windows, macOS and Linux × Python 3.12–3.14, with a job on the oldest allowed dependency versions.
+- **Tooling follows hangtu**, the author's other library, so the two work the same way (decided 2026-11-02, M0): `uv_build`; the version only in `pyproject.toml`; ruff for lint and format, with numpy-convention docstring checks on `src/`; strict pytest with **warnings as errors**, so a stray warning fails the run and an expected one is asserted. **One deliberate difference: mypy in strict mode on `src/`**, because the judgment arguments (§4) and the result shape (§5.1) are contracts across modules. A `# type: ignore` names the error code and says why.
 - 🟡 **Dependencies:** `pint`, `numpy`, `pandas`, `matplotlib`, each with a floor proven in CI, added when code first uses them. Adding another needs a decision here.
 - MIT license.
 
