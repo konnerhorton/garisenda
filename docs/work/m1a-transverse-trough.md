@@ -189,7 +189,7 @@ Five build commits, each with ruff check, ruff format check, mypy and pytest gre
 
 ### 4. `M1 (a): add property tests for the trough`
 - `tests/sources/test_transverse_properties.py` (hypothesis): AC 7 (finite differences of the gradient and Hessian, Hessian symmetry, exact zeros with respect to station and depth), AC 8 (volume over ±10 i), AC 9 (symmetry).
-- `tests/sources/strategies.py`: shared strategies for tunnels, troughs and points, which (b) reuses.
+- The strategies stay in the property test module: tests aren't importable packages under `--import-mode=importlib`, and hangtu shares helpers only through `conftest.py`, which doesn't suit hypothesis strategies. (b) moves them when it needs them (changed during the build). The volume integral uses the trapezoid rule by hand, because `numpy.trapezoid` is newer than numpy's floor of 1.26.
 
 ### 5. `M1 (a): close out`
 - Run the `lowest` job locally (`UV_RESOLUTION=lowest-direct`, CLAUDE.md), then `git checkout uv.lock`; adjust a floor only if it fails, and say why in the Result.
