@@ -8,6 +8,7 @@ from garisenda._result import Result
 from garisenda._sweep import sweep
 from garisenda._units import units
 from garisenda.profile import movement_profile
+from garisenda.sources._superposition import superpose
 
 __version__ = version("garisenda")
 
@@ -18,6 +19,7 @@ __all__ = [
     "movement_profile",
     "plot",
     "sources",
+    "superpose",
     "sweep",
     "units",
     "utilities",

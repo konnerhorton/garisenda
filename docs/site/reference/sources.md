@@ -8,6 +8,8 @@ Sources of ground movement. A source is a function of points: it returns the mov
 
 ::: garisenda.sources.TransverseSurfaceTrough
 
+::: garisenda.sources.Superposition
+
 ::: garisenda.sources.Source
 
 ::: garisenda.sources.Movement

@@ -156,3 +156,75 @@ def test_non_finite_input_is_refused():
             diameter=6,
             axis_depth=float("nan"),
         )
+
+
+# M2 (a): the parallel-tunnel builder (spec decision 11, AC 12).
+
+
+def test_parallel_reference_point_is_offset_along_the_normal():
+    first = rotated()
+    twin = first.parallel(offset=15, diameter=7, axis_depth=30)
+    n = first.normal
+    assert twin.reference_x == pytest.approx(100 + 15 * n[0], rel=1e-12)
+    assert twin.reference_y == pytest.approx(200 + 15 * n[1], rel=1e-12)
+    assert twin.azimuth == first.azimuth
+    assert twin.reference_station == 1000
+    assert twin.diameter == 7
+    assert twin.axis_depth == 30
+
+
+def test_parallel_shares_stations_and_shifts_offsets():
+    first = rotated()
+    twin = first.parallel(offset=-12.5 * u.m, diameter=6, axis_depth=20)
+    x, y = [130.0, 87.0, 250.0], [180.0, 260.0, 300.0]
+    station, offset = first.station_offset(x=x, y=y)
+    twin_station, twin_offset = twin.station_offset(x=x, y=y)
+    assert twin_station == pytest.approx(station, abs=1e-9)
+    assert twin_offset == pytest.approx(offset + 12.5, abs=1e-9)
+
+
+def test_parallel_by_elevation():
+    twin = rotated().parallel(
+        offset=10, diameter=6, axis_elevation=75, ground_elevation=100
+    )
+    assert twin.axis_depth == pytest.approx(25, rel=1e-12)
+
+
+def test_parallel_needs_its_own_diameter_and_axis():
+    with pytest.raises(TypeError, match="diameter"):
+        rotated().parallel(offset=10, axis_depth=20)
+    with pytest.raises(TypeError, match="axis_depth"):
+        rotated().parallel(offset=10, diameter=6)
+
+
+def test_parallel_records():
+    twin = rotated().parallel(
+        offset=gs.Sourced(15 * u.m, source="Drawing T-2"), diameter=6, axis_depth=30
+    )
+    records = {entry.name: entry for entry in twin.inputs}
+    assert set(records) == {
+        "offset",
+        "reference_point",
+        "azimuth",
+        "diameter",
+        "axis_depth",
+        "reference_station",
+    }
+    assert records["offset"].source == "Drawing T-2"
+    assert records["offset"].value == 15 * u.m
+    assert records["offset"].kind == "geometry"
+    for name in ("reference_point", "azimuth", "reference_station"):
+        assert records[name].given_as == "parallel to a tunnel at offset 15 m"
+        assert records[name].source is None
+    assert records["diameter"].given_as == "plain number, read as m"
+    assert records["axis_depth"].given_as == "plain number, read as m"
+
+
+def test_parallel_at_zero_offset_is_allowed():
+    stacked = rotated().parallel(offset=0, diameter=4, axis_depth=35)
+    assert (stacked.reference_x, stacked.reference_y) == (100, 200)
+
+
+def test_parallel_offset_must_be_finite():
+    with pytest.raises(ValueError, match="offset must be finite"):
+        rotated().parallel(offset=float("inf"), diameter=6, axis_depth=20)

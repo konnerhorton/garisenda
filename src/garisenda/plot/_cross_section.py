@@ -1,9 +1,12 @@
 """The cross-section figure: tunnel, trough and utility at its station (SPEC §9)."""
 
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle, Rectangle
@@ -12,6 +15,12 @@ from garisenda._result import Result
 from garisenda.plot._display import resolve
 from garisenda.plot._profile import SHADE, flag_notes
 from garisenda.plot._style import style
+from garisenda.sources._movement import Source
+from garisenda.sources._superposition import (
+    PARALLEL_TOLERANCE,
+    Superposition,
+    tunnels,
+)
 from garisenda.sources._tunnel import IdealizedTunnel
 
 PANELS = 3
@@ -20,10 +29,29 @@ TROUGH_PANELS = (
     ("vertical", "Settlement at the surface", "down +", "C0"),
     ("horizontal", "Horizontal at the surface", "right +", "C1"),
 )
+DASHES = ("--", ":", (0, (6, 2, 1, 2)), (0, (1, 3)))
+"""Each source's own trough, in turn, so the legend tells them apart."""
 GRID_POINTS = 401
 """The points the trough is drawn with across the section."""
 WIDTHS = 3.0
 """How many trough widths i either side of the axis the trough is drawn to."""
+NOTE_BELOW = 30.0
+"""How far below the section panel the notes start, in points."""
+NOTE_LINE = 20.0
+"""How much further down a note of tunnels not drawn pushes the flag notes."""
+
+
+@dataclass(frozen=True)
+class _Bore:
+    """A tunnel drawn in the section: its name, and its offset from the reference."""
+
+    name: str
+    """Its name path in a superposition; empty for a lone source."""
+    tunnel: IdealizedTunnel
+    offset: float
+    """From the reference tunnel's axis, in m, positive to the right."""
+    width: float | None
+    """Its trough's width i, in m, if its source has one."""
 
 
 def cross_section(
@@ -35,7 +63,8 @@ def cross_section(
     """Draw the transverse section at a utility's station: three panels.
 
     The panels share the x axis, offset from the tunnel axis (positive to the
-    right looking up-station, SPEC §8.1):
+    right looking up-station, SPEC §8.1); with several tunnels, from the axis
+    of the utility's reference tunnel, the one it was built from:
 
     1. settlement at the ground surface, its axis pointing down;
     2. horizontal movement at the ground surface, perpendicular to the
@@ -58,11 +87,25 @@ def cross_section(
     verdict, and each flag's reason is printed under the figure with its
     distance range (SPEC §10).
 
+    **Several tunnels** (a source from `garisenda.superpose`, nested ones
+    included): the solid line is the combined trough, and each source's own
+    trough is drawn thin and dashed, each its own pattern, so what was added
+    shows. Each tunnel parallel to the reference tunnel is drawn in the
+    section at its offset and depth, labeled with its name and with its axis
+    depth and cover dimensioned, and its axis is a dash-dot line on every
+    panel. The troughs are drawn over the utility's offsets and each drawn
+    tunnel's offset ±3i (or ±3 z0 for a source with no trough width). The ±i
+    marks are left out. A tunnel that isn't parallel to the reference tunnel
+    isn't drawn, since its section here would mislead; a note under the
+    figure names it, its dashed trough is still drawn (it is the field along
+    the section), and the plan figure (M5) shows it.
+
     Parameters
     ----------
     result : Result
         A movement profile of a utility built from station and offset, over a
-        source with a tunnel, from `garisenda.movement_profile`.
+        source with a tunnel or a superposition of sources with tunnels, from
+        `garisenda.movement_profile`.
     axs : sequence of three matplotlib Axes, optional
         Panels to draw into, top to bottom, sharing x; no figure is created.
         Otherwise a new figure is made.
@@ -90,14 +133,23 @@ def cross_section(
     display = resolve(display_units)
     asset, source = result.asset, result.source
     built = getattr(asset, "built", None)
-    tunnel = getattr(source, "tunnel", None)
     if asset is None or source is None or built is None:
         raise ValueError(
             "The cross-section is drawn at the station of a utility built from "
             "station and offset (gs.utilities.perpendicular_utility); a utility "
             "given by its vertices is drawn in plan by the plan figure (M5)."
         )
-    if not isinstance(tunnel, IdealizedTunnel):
+    several = isinstance(source, Superposition)
+    if several:
+        assert isinstance(source, Superposition)
+        reference = built.tunnel
+        parts = dict(_parts(source.sources))
+        found = list(tunnels(source.sources))
+    else:
+        tunnel = getattr(source, "tunnel", None)
+        parts = {}
+        found = [("", tunnel)] if isinstance(tunnel, IdealizedTunnel) else []
+    if not found:
         raise ValueError(
             "The cross-section needs a source with a tunnel to draw the section "
             "through; this result's source has none. The plan figure (M5) draws "
@@ -106,31 +158,46 @@ def cross_section(
 
     length = display.factor("length")
     move = display.factor("displacement")
-    width = getattr(source, "trough_width", None)
     values = result.values
     offsets = values["offset"].to_numpy(dtype=np.float64)
-    reach = max(float(np.max(np.abs(offsets))), WIDTHS * width if width else 0.0)
-    if not width:
-        reach = max(reach, WIDTHS * tunnel.axis_depth)
-    grid = np.linspace(-reach, reach, GRID_POINTS)
+    if several:
+        bores, skipped = _bores(reference, found, parts)
+        width = None
+        reaches = [(bore.offset, _reach(bore)) for bore in bores]
+        low = min([float(np.min(offsets))] + [o - r for o, r in reaches])
+        high = max([float(np.max(offsets))] + [o + r for o, r in reaches])
+    else:
+        reference = found[0][1]
+        width = getattr(source, "trough_width", None)
+        bores = [_Bore("", reference, 0.0, width)]
+        skipped = []
+        high = max(float(np.max(np.abs(offsets))), _reach(bores[0]))
+        low = -high
+    grid = np.linspace(low, high, GRID_POINTS)
 
     # The surface along the section, for drawing only (SPEC §3).
-    station = built.station - tunnel.reference_station
-    tangent, normal = np.array(tunnel.tangent), np.array(tunnel.normal)
+    station = built.station - reference.reference_station
+    tangent, normal = np.array(reference.tangent), np.array(reference.normal)
     plan = (
-        np.array([tunnel.reference_x, tunnel.reference_y])
+        np.array([reference.reference_x, reference.reference_y])
         + station * tangent
         + grid[:, None] * normal
     )
-    movement = source.evaluate(x=plan[:, 0], y=plan[:, 1], depth=np.zeros(len(grid)))
-    settlement = movement.displacement[:, 2]
-    horizontal = movement.displacement[:, :2] @ normal
+
+    def surface_of(field: Source) -> dict[str, npt.NDArray[np.float64]]:
+        movement = field.evaluate(x=plan[:, 0], y=plan[:, 1], depth=np.zeros(len(grid)))
+        return {
+            "vertical": movement.displacement[:, 2],
+            "horizontal": movement.displacement[:, :2] @ normal,
+        }
+
+    surface = surface_of(source)
+    own = {name: surface_of(part) for name, part in parts.items()}
 
     # The utility's own values, from the result.
     direction = np.sign(built.end_offset - built.start_offset)
     station_horizontal = direction * values["along"].to_numpy(dtype=np.float64)
 
-    surface = {"vertical": settlement, "horizontal": horizontal}
     at_stations = {
         "vertical": values["vertical"].to_numpy(dtype=np.float64),
         "horizontal": station_horizontal,
@@ -143,7 +210,24 @@ def cross_section(
         for (key, label, convention, color), ax in zip(
             TROUGH_PANELS, panels, strict=False
         ):
-            ax.plot(x, surface[key] * move, color=color, label="Trough", gid=key)
+            ax.plot(
+                x,
+                surface[key] * move,
+                color=color,
+                label="Combined" if several else "Trough",
+                gid=key,
+            )
+            for index, (name, part) in enumerate(own.items()):
+                ax.plot(
+                    x,
+                    part[key] * move,
+                    color=color,
+                    linestyle=DASHES[index % len(DASHES)],
+                    linewidth=0.8,
+                    alpha=0.7,
+                    label=name,
+                    gid=f"trough:{name}:{key}",
+                )
             ax.plot(
                 offsets * length,
                 at_stations[key] * move,
@@ -170,6 +254,9 @@ def cross_section(
                         gid=name,
                     )
             ax.axhline(0.0, color="0.4", linewidth=0.6, zorder=1)
+            if several:
+                for bore in bores:
+                    _axis(ax, bore, length)
             if width:
                 for side in (-1, 1):
                     ax.axvline(
@@ -195,20 +282,106 @@ def cross_section(
         trough_panels["vertical"].invert_yaxis()
 
         section = panels[2]
-        _section(section, result, tunnel, length, display.symbol("length"), reach)
-        section.set_xlabel(display.label("Offset from tunnel axis", "length"))
+        _section(section, result, bores, length, display.symbol("length"), (low, high))
+        if several:
+            for bore in bores:
+                _axis(section, bore, length)
+        axis_label = (
+            "Offset from reference tunnel axis"
+            if several
+            else "Offset from tunnel axis"
+        )
+        section.set_xlabel(display.label(axis_label, "length"))
         section.set_ylabel(display.label("Depth", "length"))
+        below = NOTE_BELOW
+        if skipped:
+            below += _note(section, skipped)
         flag_notes(
             section,
             result,
             values["distance"].to_numpy(dtype=np.float64) * length,
             display,
+            below=below,
         )
         fig.suptitle(
             f"Cross-section at station {built.station:.6g} m: {result.subject}",
             fontsize=10,
         )
     return fig, panels
+
+
+def _parts(sources: Mapping[str, Source]) -> Iterator[tuple[str, Source]]:
+    """Yield each source that isn't a superposition, by its name path."""
+    for name, part in sources.items():
+        if isinstance(part, Superposition):
+            for inner, nested in _parts(part.sources):
+                yield f"{name}.{inner}", nested
+        else:
+            yield name, part
+
+
+def _bores(
+    reference: IdealizedTunnel,
+    found: list[tuple[str, IdealizedTunnel]],
+    parts: Mapping[str, Source],
+) -> tuple[list[_Bore], list[str]]:
+    """Split the tunnels into those parallel to the reference and the rest."""
+    bores: list[_Bore] = []
+    skipped: list[str] = []
+    for name, tunnel in found:
+        if abs(math.sin(tunnel.azimuth - reference.azimuth)) > PARALLEL_TOLERANCE:
+            skipped.append(name)
+            continue
+        _, offset = reference.station_offset(x=tunnel.reference_x, y=tunnel.reference_y)
+        width = getattr(parts.get(name), "trough_width", None)
+        bores.append(_Bore(name, tunnel, float(offset), width))
+    return bores, skipped
+
+
+def _reach(bore: _Bore) -> float:
+    """How far either side of a bore's axis the troughs are drawn."""
+    return WIDTHS * (bore.width if bore.width else bore.tunnel.axis_depth)
+
+
+def _axis(ax: Axes, bore: _Bore, length: float) -> None:
+    """Draw a bore's axis as a dash-dot line across the panel."""
+    ax.axvline(
+        bore.offset * length,
+        color="0.5",
+        linestyle="-.",
+        linewidth=0.6,
+        gid=f"axis:{bore.name}" if bore.name else None,
+    )
+
+
+def _note(ax: Axes, skipped: list[str]) -> float:
+    """Name the tunnels not drawn under the figure; return the points it takes."""
+    names = ", ".join(skipped)
+    if len(skipped) == 1:
+        text = (
+            f"{names} isn't parallel to the reference tunnel, so the section "
+            "doesn't draw it; the troughs include it, and the plan figure (M5) "
+            "shows it."
+        )
+    else:
+        text = (
+            f"{names} aren't parallel to the reference tunnel, so the section "
+            "doesn't draw them; the troughs include them, and the plan figure "
+            "(M5) shows them."
+        )
+    ax.annotate(
+        text,
+        (0.0, 0.0),
+        xycoords="axes fraction",
+        xytext=(0, -NOTE_BELOW),
+        textcoords="offset points",
+        va="top",
+        ha="left",
+        fontsize=7,
+        wrap=True,
+        gid="note",
+    )
+    return NOTE_LINE
 
 
 def _panels(axs: Sequence[Axes] | None) -> tuple[Figure, list[Axes]]:
@@ -238,30 +411,25 @@ def _panels(axs: Sequence[Axes] | None) -> tuple[Figure, list[Axes]]:
 def _section(
     ax: Axes,
     result: Result,
-    tunnel: IdealizedTunnel,
+    bores: Sequence[_Bore],
     length: float,
     unit: str,
-    reach: float,
+    reach: tuple[float, float],
 ) -> None:
-    """Draw the section to scale: ground, bore, axis, utility and dimensions."""
+    """Draw the section to scale: ground, bores, axes, utility and dimensions.
+
+    A lone source's bore keeps M1's gids (``tunnel``, ``axis``,
+    ``axis_depth``, ``cover``); a named bore's carry its name
+    (``tunnel:<name>``, ...), and its axis line is drawn by the caller on
+    every panel.
+    """
     asset = result.asset
     assert asset is not None and asset.built is not None
     built = asset.built
-    radius = tunnel.diameter / 2 * length
-    depth = tunnel.axis_depth * length
     ax.axhline(0.0, color="#7a5c3a", linewidth=1.2, gid="ground")
-    ax.add_patch(
-        Circle(
-            (0.0, depth),
-            radius,
-            facecolor="0.9",
-            edgecolor="black",
-            linewidth=1.0,
-            gid="tunnel",
-        )
-    )
-    ax.plot([0.0], [depth], marker="+", color="black", markersize=8, gid="axis")
-    ax.axvline(0.0, color="0.5", linestyle="-.", linewidth=0.6)
+    deepest = 0.0
+    for bore in bores:
+        deepest = max(deepest, _bore(ax, bore, length, unit))
 
     utility_depth = float(np.mean(asset.vertices[:, 2])) * length
     diameter = asset.diameter * length
@@ -285,34 +453,91 @@ def _section(
         va="center",
         fontsize=7,
     )
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_xlim(reach[0] * length, reach[1] * length)
+    # Depth's range is set through the data limits, not fixed: at equal
+    # aspect with x shared, matplotlib extends y to fit the panel.
+    largest = max(bore.tunnel.diameter for bore in bores) * length
+    ax.update_datalim([(0.0, -largest), (0.0, deepest + largest)])
+    ax.autoscale_view()
+    ax.invert_yaxis()
+
+
+def _bore(ax: Axes, bore: _Bore, length: float, unit: str) -> float:
+    """Draw one bore with its axis depth and cover; return its axis depth."""
+    suffix = f":{bore.name}" if bore.name else ""
+    center = bore.offset * length
+    radius = bore.tunnel.diameter / 2 * length
+    depth = bore.tunnel.axis_depth * length
+    ax.add_patch(
+        Circle(
+            (center, depth),
+            radius,
+            facecolor="0.9",
+            edgecolor="black",
+            linewidth=1.0,
+            gid=f"tunnel{suffix}",
+        )
+    )
+    ax.plot(
+        [center],
+        [depth],
+        marker="+",
+        color="black",
+        markersize=8,
+        gid=None if bore.name else "axis",
+    )
+    if bore.name:
+        ax.annotate(
+            bore.name,
+            (center, depth + radius),
+            xytext=(0, -3),
+            textcoords="offset points",
+            ha="center",
+            va="top",
+            fontsize=7,
+            gid=f"label{suffix}",
+        )
+    else:
+        ax.axvline(center, color="0.5", linestyle="-.", linewidth=0.6)
 
     # Dimensions: axis depth z0 and cover C, beside the bore.
     where = 1.6 * radius
-    for top_y, bottom_y, label, gid in (
+    for top_y, bottom_y, label, kind in (
         (0.0, depth, f"z0 = {depth:.4g} {unit}", "axis_depth"),
         (0.0, depth - radius, f"C = {depth - radius:.4g} {unit}", "cover"),
     ):
-        offset = where if gid == "axis_depth" else -where
+        right = kind == "axis_depth"
+        x = center + (where if right else -where)
         ax.annotate(
             "",
-            (offset, bottom_y),
-            xytext=(offset, top_y),
+            (x, bottom_y),
+            xytext=(x, top_y),
             arrowprops={"arrowstyle": "<->", "linewidth": 0.7, "color": "0.3"},
-            gid=gid,
+            gid=f"{kind}{suffix}",
         )
+        if bore.name:
+            # Bores side by side would put one bore's label beside the
+            # next one's arrow; written along its own arrow, it can't.
+            ax.annotate(
+                label,
+                (x, (top_y + bottom_y) / 2),
+                xytext=(-2, 0),
+                textcoords="offset points",
+                rotation=90,
+                ha="right",
+                va="center",
+                fontsize=7,
+                color="0.2",
+            )
+            continue
         ax.text(
-            offset,
+            x,
             (top_y + bottom_y) / 2,
-            f" {label}" if gid == "axis_depth" else f"{label} ",
-            ha="left" if gid == "axis_depth" else "right",
+            f" {label}" if right else f"{label} ",
+            ha="left" if right else "right",
             va="center",
             fontsize=7,
             color="0.2",
         )
-    ax.set_aspect("equal", adjustable="datalim")
-    ax.set_xlim(-reach * length, reach * length)
-    # Depth's range is set through the data limits, not fixed: at equal
-    # aspect with x shared, matplotlib extends y to fit the panel.
-    ax.update_datalim([(0.0, -2 * radius), (0.0, depth + 2 * radius)])
-    ax.autoscale_view()
-    ax.invert_yaxis()
+    return depth

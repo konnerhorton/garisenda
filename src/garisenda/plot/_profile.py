@@ -11,7 +11,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
-from garisenda._result import Result
+from garisenda._result import Result, flag_text
 from garisenda.plot._display import DisplayUnits, resolve
 from garisenda.plot._style import style
 
@@ -272,9 +272,14 @@ def _offset_axis(
 
 
 def flag_notes(
-    ax: Axes, result: Result, distance: FloatArray, display: DisplayUnits
+    ax: Axes,
+    result: Result,
+    distance: FloatArray,
+    display: DisplayUnits,
+    *,
+    below: float = 30.0,
 ) -> None:
-    """Print each flag's reason and distance range under the figure."""
+    """Print each flag's reason and distance range, `below` points under `ax`."""
     lines = []
     unit = display.symbol("length")
     for flag in result.warnings:
@@ -285,14 +290,14 @@ def flag_notes(
                 f" ({len(flag.points)} stations, {covered.min():.4g} to "
                 f"{covered.max():.4g} {unit})"
             )
-        lines.append(f"{flag.verdict.capitalize()}{where}: {flag.reason}")
+        lines.append(f"{flag.verdict.capitalize()}{where}: {flag_text(flag)}")
     if not lines:
         return
     ax.annotate(
         "\n".join(lines),
         (0.0, 0.0),
         xycoords="axes fraction",
-        xytext=(0, -30),
+        xytext=(0, -below),
         textcoords="offset points",
         va="top",
         ha="left",

@@ -8,6 +8,7 @@ import numpy.typing as npt
 
 from garisenda._inputs import InputRecord, judgments, record
 from garisenda.sources._movement import Flag, MethodRecord, Movement
+from garisenda.sources._segment import directions, read_segment
 from garisenda.sources._tunnel import IdealizedTunnel
 
 SURFACE_TOLERANCE = 1e-3
@@ -194,13 +195,15 @@ class TransverseSurfaceTrough:
         """Return the movement and its exact derivatives at points.
 
         With g = (n_x, n_y, 0) the gradient of the offset o, the derivatives
-        are exact: du/dx_j = (du/do) g_j and d2u/dx_j dx_k = (d2u/do2) g_j g_k,
-        where
+        are exact: du/dx_j = (du/do) g_j, d2u/dx_j dx_k = (d2u/do2) g_j g_k and
+        d3u/dx_j dx_k dx_l = (d3u/do3) g_j g_k g_l, where, with r = o / i,
 
         - dS/do = -(o / i^2) S
-        - d2S/do2 = (o^2 / i^2 - 1) S / i^2
-        - du_n/do = -(S / z0)(1 - o^2 / i^2)
-        - d2u_n/do2 = -(S / z0)(o / i^2)(o^2 / i^2 - 3)
+        - d2S/do2 = (r^2 - 1) S / i^2
+        - d3S/do3 = (o / i^4) S (3 - r^2)
+        - du_n/do = -(S / z0)(1 - r^2)
+        - d2u_n/do2 = -(S / z0)(o / i^2)(r^2 - 3)
+        - d3u_n/do3 = (S / (z0 i^2))(r^4 - 6 r^2 + 3)
 
         Every derivative with respect to depth is exactly zero, and with respect
         to station zero to rounding.
@@ -216,9 +219,10 @@ class TransverseSurfaceTrough:
         Returns
         -------
         Movement
-            Displacement (u_x, u_y, settlement) in m, its gradient and Hessian,
-            a verdict per point and the flags. A point deeper than 1 mm gets the
-            surface values at its plan position and is flagged ``"outside"``.
+            Displacement (u_x, u_y, settlement) in m, its gradient, Hessian and
+            third derivative, a verdict per point and the flags. A point deeper
+            than 1 mm gets the surface values at its plan position and is
+            flagged ``"outside"``.
 
         Raises
         ------
@@ -282,8 +286,13 @@ class TransverseSurfaceTrough:
         settlement, sagging curvature and compressive strain), +-i (the
         inflection points: peak slope and horizontal movement, zero curvature
         and strain) and +-sqrt(3) i (peak hogging curvature and tensile strain).
-        Offset is linear in distance along a straight segment, so each crossing
-        is exact: s = L (c - o_start) / (o_end - o_start) for each offset c.
+        On a segment that isn't perpendicular to the tunnel (|n.l| > 1e-10,
+        with l its lateral direction), the lateral displacement u_n (n.l)
+        isn't zero, and its curvature peaks where d3u_n/do3 = 0: at
+        r^4 - 6 r^2 + 3 = 0 with r = o / i, so o = +-sqrt(3 - sqrt(6)) i and
+        +-sqrt(3 + sqrt(6)) i (about 0.742 i and 2.334 i). Offset is linear in
+        distance along a straight segment, so each crossing is exact:
+        s = L (c - o_start) / (o_end - o_start) for each offset c.
 
         Parameters
         ----------
@@ -301,32 +310,33 @@ class TransverseSurfaceTrough:
         ValueError
             If an end isn't three finite values, or the segment has zero length.
         """
-        ends = []
-        for name, value in (("start", start), ("end", end)):
-            magnitude, _ = record(
-                name, value, kind="geometry", unit="m", plain_number="read as SI"
-            )
-            point = np.asarray(magnitude, dtype=np.float64)
-            if point.shape != (3,) or not np.isfinite(point).all():
-                raise ValueError(
-                    f"{name} must be three finite values (x, y, depth), not {point}."
-                )
-            ends.append(point)
-        length = float(np.linalg.norm(ends[1] - ends[0]))
-        if length == 0:
-            raise ValueError("The segment has zero length: start and end are equal.")
+        start_m, end_m, length = read_segment(start, end)
         _, offsets = self.tunnel.station_offset(
-            x=np.array([ends[0][0], ends[1][0]]), y=np.array([ends[0][1], ends[1][1]])
+            x=np.array([start_m[0], end_m[0]]), y=np.array([start_m[1], end_m[1]])
         )
         o_start, o_end = (float(value) for value in np.atleast_1d(offsets))
         change = o_end - o_start
         if abs(change) <= 1e-12 * length:
             return np.empty(0)
         i = self.trough_width
-        targets = np.array([-math.sqrt(3), -1.0, 0.0, 1.0, math.sqrt(3)]) * i
+        roots = [0.0, 1.0, math.sqrt(3)]
+        _, _, lateral = directions(start_m, end_m)
+        n_x, n_y = self.tunnel.normal
+        if abs(n_x * lateral[0] + n_y * lateral[1]) > 1e-10:
+            roots += [math.sqrt(3 - math.sqrt(6)), math.sqrt(3 + math.sqrt(6))]
+        targets = np.array(sorted({sign * root for root in roots for sign in (-1, 1)}))
+        targets *= i
         distances = length * (targets - o_start) / change
         inside = (distances >= 0) & (distances <= length)
         return np.sort(distances[inside])
+
+    def feature_length(self, *, start: object, end: object) -> float:
+        """Return the trough width i, in m, whatever the segment.
+
+        The trough changes over a length of order i everywhere: its peaks and
+        zeros are at 0, +-i and +-sqrt(3) i in offset.
+        """
+        return self.trough_width
 
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         i, z0 = self.trough_width, self.tunnel.axis_depth
@@ -337,6 +347,10 @@ class TransverseSurfaceTrough:
         second = (
             (ratio - 1) * settlement / i**2,
             -(settlement / z0) * (o / i**2) * (ratio - 3),
+        )
+        third = (
+            (o / i**4) * settlement * (3 - ratio),
+            settlement / (z0 * i**2) * (ratio**2 - 6 * ratio + 3),
         )
 
         n_x, n_y = self.tunnel.normal
@@ -355,6 +369,10 @@ class TransverseSurfaceTrough:
         displacement = components(normal, settlement)
         gradient = components(first[1], first[0])[:, :, None] * g
         hessian = components(second[1], second[0])[:, :, None, None] * np.outer(g, g)
+        # g_j g_k g_l, multiplied in sorted index order so it is exactly symmetric.
+        index = np.sort(np.indices((3, 3, 3)).reshape(3, -1), axis=0)
+        g3 = (g[index[0]] * g[index[1]] * g[index[2]]).reshape(3, 3, 3)
+        third_derivative = components(third[1], third[0])[:, :, None, None, None] * g3
 
         deep = depth > self.surface_tolerance
         verdict = np.where(deep, "outside", "within")
@@ -369,4 +387,6 @@ class TransverseSurfaceTrough:
                     tuple(np.flatnonzero(deep).tolist()),
                 ),
             )
-        return Movement(displacement, gradient, hessian, verdict, flags)
+        return Movement(
+            displacement, gradient, hessian, third_derivative, verdict, flags
+        )

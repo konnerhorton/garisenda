@@ -129,3 +129,17 @@ def test_leaves_no_global_state(case_c):
     before = dict(mpl.rcParams)
     gs.plot.profile(case_c)
     assert dict(mpl.rcParams) == before
+
+
+# M2 (a), spec decision 13, AC 9: the notes name each flag's source.
+
+
+def test_flag_notes_name_their_source(twins_below_the_surface):
+    twins = twins_below_the_surface
+    _, axs = gs.plot.profile(twins)
+    (note,) = [text for text in axs[-1].texts if text.get_gid() == "flags"]
+    lines = note.get_text().splitlines()
+    assert len(lines) == 2
+    for text, flag in zip(lines, twins.warnings, strict=True):
+        assert text.startswith("Outside (")
+        assert text.endswith(f": {flag.source}: {flag.reason}")

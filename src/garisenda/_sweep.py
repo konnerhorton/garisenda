@@ -55,15 +55,34 @@ def sweep(
             mode="grid",
         )
 
+    With several sources (`gs.superpose`), an input is named for its
+    source, and `run` takes it with the dots as underscores::
+
+        def twins(south_volume_loss):
+            south_trough = gs.sources.transverse_surface_trough(
+                south, volume_loss=south_volume_loss, trough_width_parameter=0.5
+            )
+            source = gs.superpose(north=north_trough, south=south_trough)
+            return gs.movement_profile(utility, source, spacing=1 * gs.units.m)
+
+        table = gs.sweep(
+            twins, vary={"south.volume_loss": [1.0, 1.5, 2.0] * gs.units.percent}
+        )
+
+    The table's column is ``south.volume_loss``, the record's name.
+
     Parameters
     ----------
     run : callable
         Takes the varied inputs as keyword arguments, named as the inputs
-        they set (``volume_loss``, not ``vl``), and returns a `Result`.
+        they set (``volume_loss``, not ``vl``), and returns a `Result`. An
+        input named for its source (``south.volume_loss``) is passed with
+        its dots as underscores (``south_volume_loss``).
     vary : mapping of str to sequence
-        One to three argument names, each with a one-dimensional sequence of
-        values: a list, a numpy array or a pint array. Each element is passed
-        to `run` as it is (a pint array's element is a quantity).
+        One to three input record names, each with a one-dimensional
+        sequence of values: a list, a numpy array or a pint array. Each
+        element is passed to `run` as it is (a pint array's element is a
+        quantity).
     mode : {"grid", "paired"}, optional
         Required with two or three inputs, refused with one. ``"grid"`` runs
         every combination, the first input varying slowest (as
@@ -93,7 +112,9 @@ def sweep(
     Raises
     ------
     TypeError
-        If `vary` names more than three inputs or none, a sequence isn't
+        If `vary` names more than three inputs or none, a name doesn't
+        become a Python identifier with its dots as underscores, two names
+        become the same one, a sequence isn't
         one-dimensional, `mode` is missing with two or more inputs or given
         with one, or `run` returns something other than a `Result`.
     ValueError
@@ -105,7 +126,7 @@ def sweep(
     Exception
         The first run's error, if every run raises.
     """
-    names, sequences = _check_vary(vary)
+    names, keywords, sequences = _check_vary(vary)
     combinations = _combinations(sequences, mode)
 
     runs: list[_Run] = []
@@ -113,7 +134,7 @@ def sweep(
     for index, combination in enumerate(combinations):
         given = dict(zip(names, combination, strict=True))
         try:
-            result = run(**given)
+            result = run(**{keywords[name]: value for name, value in given.items()})
         except Exception as error:  # a failed run is recorded (SPEC §5.3)
             runs.append(_Run(given, None, error))
             continue
@@ -136,8 +157,10 @@ def sweep(
     return _table(run, names, mode, runs, reference)
 
 
-def _check_vary(vary: object) -> tuple[list[str], list[list[Any]]]:
-    """Check the varied inputs and return their names and values as lists."""
+def _check_vary(
+    vary: object,
+) -> tuple[list[str], dict[str, str], list[list[Any]]]:
+    """Check the varied inputs; return their names, `run`'s keywords and values."""
     if not isinstance(vary, Mapping) or not 1 <= len(vary) <= MAXIMUM_VARIED:
         count = len(vary) if isinstance(vary, Mapping) else "no mapping"
         raise TypeError(
@@ -145,8 +168,16 @@ def _check_vary(vary: object) -> tuple[list[str], list[list[Any]]]:
             f"({count} given). For more, write a loop over sweeps."
         )
     names: list[str] = []
+    keywords: dict[str, str] = {}
     sequences: list[list[Any]] = []
     for name, values in vary.items():
+        keyword = _keyword(name)
+        clash = [other for other, used in keywords.items() if used == keyword]
+        if clash:
+            raise TypeError(
+                f"vary names {clash[0]!r} and {name!r}, which are both passed to "
+                f"run as {keyword}. Name each input once."
+            )
         if isinstance(values, str | bytes) or np.ndim(_magnitude(values)) != 1:
             raise TypeError(
                 f"vary[{name!r}] must be a one-dimensional sequence of values, "
@@ -155,9 +186,22 @@ def _check_vary(vary: object) -> tuple[list[str], list[list[Any]]]:
         items = list(values)
         if not items:
             raise ValueError(f"vary[{name!r}] is empty: there is nothing to run.")
-        names.append(str(name))
+        names.append(name)
+        keywords[name] = keyword
         sequences.append(items)
-    return names, sequences
+    return names, keywords, sequences
+
+
+def _keyword(name: object) -> str:
+    """Return the keyword `run` takes an input as: its dots as underscores."""
+    keyword = name.replace(".", "_") if isinstance(name, str) else ""
+    if not keyword.isidentifier():
+        raise TypeError(
+            f"vary's key {name!r} must be an input record's name, which with "
+            "its dots as underscores is a Python identifier (such as "
+            '"volume_loss" or "south.volume_loss").'
+        )
+    return keyword
 
 
 def _magnitude(values: Any) -> Any:

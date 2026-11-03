@@ -245,9 +245,13 @@ def case_d(spacing):
 
 def test_case_d_critical_distances():
     values = case_d(100.0).values
-    expected = [0, 3.7893738, 14.142136, 28.284271, 42.426407, 52.779169, 40 * 2**0.5]
+    # With the lateral curvature peaks at o = -+0.74196378 i (M2 (a)).
+    expected = [
+        *[0, 3.7893738, 14.142136, 17.791319, 28.284271],
+        *[38.777224, 42.426407, 52.779169, 40 * 2**0.5],
+    ]
     np.testing.assert_allclose(values["distance"], expected, rtol=REL)
-    assert values["critical"].tolist() == [False, *[True] * 5, False]
+    assert values["critical"].tolist() == [False, *[True] * 7, False]
 
 
 def test_case_d_at_45_degrees():
