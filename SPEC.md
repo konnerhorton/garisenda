@@ -110,7 +110,8 @@ Conditions that the geometry shows (an asset near a real alignment's end, on a c
 - **Assessments consume a profile along the asset** (decided 2026-11-01): stations at distances along the asset, and at each station the displacement along the asset, across it (vertical and lateral), and their exact derivatives with respect to distance along the asset. This is the boundary every source produces and every assessment consumes, so the transverse trough and the 3D field are interchangeable to the assessments, their results and their figures.
 - **A closed-form source is a function, not a grid** (decided 2026-11-01). The profile is built by evaluating the source at the asset's stations. A grid is evaluated only to draw a figure, never for a calculation.
 - **One analysis, always in 3D** (decided 2026-11-01). However the geometry was entered (§8.3), every asset is a 3D polyline and every tunnel a 3D alignment by the time the analysis sees them. There is no separate section analysis.
-- **The source interface** (decided 2026-11-02, M1 (a), [`docs/work/m1a-transverse-trough.md`](docs/work/m1a-transverse-trough.md)): given points (x, y, depth), with depth positive downward so settlement has the sign of the vertical coordinate, `source.evaluate()` returns plain SI arrays: the displacement (x, y, settlement), its gradient and its Hessian, a verdict per point and the flags. Derivatives that are zero for a source (with respect to depth for the surface trough) are returned as exact zeros, not left out, so a source that adds them (M2) changes nothing downstream. A source also carries its input records, methods and assumptions for the result. The profile resolves these onto the asset's direction at each station.
+- **The source interface** (decided 2026-11-02, M1 (a), [`docs/work/m1a-transverse-trough.md`](docs/work/m1a-transverse-trough.md)): given points (x, y, depth), with depth positive downward so settlement has the sign of the vertical coordinate, `source.evaluate()` returns plain SI arrays: the displacement (x, y, settlement), its gradient and its Hessian, a verdict per point and the flags. Derivatives that are zero for a source (with respect to depth for the surface trough) are returned as exact zeros, not left out, so a source that adds them (M2) changes nothing downstream. A source also carries its input records, methods and assumptions for the result, and 🟡 gives, for a straight segment, the distances along it where its quantities peak or change sign (`critical_distances()`, M1 (b)), so the profile never misses a peak between stations.
+- 🟡 **The profile** (M1 (b), [`docs/work/m1b-movement-profile.md`](docs/work/m1b-movement-profile.md)) resolves the source onto the asset at stations: its ends, the source's critical distances and every `spacing` between, a required judgment. Columns `along`, `vertical` and `lateral` (along positive toward increasing distance, vertical positive downward, lateral positive to the right looking along the asset, as offset is), with `along_strain`, `along_strain_gradient`, `vertical_slope`, `vertical_curvature`, `lateral_slope` and `lateral_curvature`, the exact derivatives with respect to distance.
 - 🟡 **The transverse trough is a 2D source placed in 3D:** it is applied perpendicular to each tunnel segment and assumes the segment is long and straight. Stations near a real alignment's end, a curve, or a run parallel to the tunnel are flagged (M5). An idealized straight tunnel has none of these, and the result records that it was idealized (§1.3). The 3D field (M6) adds the longitudinal trough.
 - 🟡 **Several sources combine by superposition**, recorded on the result as an assumption. Any number of tunnels, idealized or real.
 - 🟡 **Closed-form sources return exact derivatives.** Assessments use them for analytical strain and sample the source at the discrete interval for discrete strain (§7). No spline is fitted to an analytical field. A spline is needed only for movements given as data (a numerical model's output, survey data), which comes later.
@@ -137,7 +138,7 @@ Every input to a calculation is one of these kinds, treated differently because 
 ## 5. Results
 
 ### 5.1 One result shape
-🟡 Every analysis returns a result object with the same parts:
+🟡 Every analysis returns a `gs.Result` with the same parts (names as in M1 (b)'s spec):
 - **values:** the computed quantities, with units. For an asset, a table **keyed by distance along the asset** (decided 2026-11-01), with the x, y, z of each station as extra columns, and the station and offset relative to the reference tunnel for an asset built from them (§8.3);
 - **checks:** each quantity against its limit, with the utilization and the governing location;
 - **method:** the methods, their sources and the equations used;
@@ -146,7 +147,7 @@ Every input to a calculation is one of these kinds, treated differently because 
 - **validity:** the verdict (§5.2), with the limit that set it;
 - **warnings:** everything that was flagged.
 
-🟡 **One calculation, many views:** `.to_dict()` (JSON-ready), `.to_frame()`, a short text summary, and the figures (§9). Views never recalculate, so two views can't disagree.
+🟡 **One calculation, many views:** `.to_dict()` (JSON-ready), `.to_frame()`, a short text summary as its `repr()`, as in hangtu, and the figures (§9). Views never recalculate, so two views can't disagree.
 
 ### 5.2 Validity verdict
 🟡 Each result has one of three verdicts, the worst over its checks, inputs and locations:
@@ -203,13 +204,13 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 - **Buildings are polylines** (decided 2026-10-31; revised 2026-11-01): a vertex table (`building_id`, vertex order, x, y) and a building table (height, foundation level, building properties as judgments). An open polyline is a single facade line; a closed one is a footprint, and its edges are the facades.
 
 **Utilities and buildings, built from station and offset** (decided 2026-11-01):
-- 🟡 Given a reference tunnel, a station, start and end offsets, and a depth or elevation, a builder returns a straight polyline perpendicular to the tunnel at that station, in the same tables as loaded polylines. A utility also takes its pipe type, diameter and material; a building its height, foundation level and properties. A building may straddle the tunnel.
+- 🟡 Given a reference tunnel, a station, start and end offsets, and a depth or elevation, a builder returns a straight polyline perpendicular to the tunnel at that station: a `Utility` (M1 (b)), the same object M5's table loaders will return, so the table form is decided there. A utility also takes its pipe type, diameter and material; a building its height, foundation level and properties. A building may straddle the tunnel.
 - 🟡 **The builder records how the asset was built** (reference tunnel, station, "perpendicular"), and the result carries it as an assumption (§1.3). 🟡 The builder is named for what it builds (perpendicular), so skewed assets come later as their own builder and existing calls don't change; perpendicularity is never an unstated default.
 - 🟡 **At a vertex of a real alignment** the perpendicular is ambiguous, so the builder raises an error naming the vertex and the station; it never picks a side.
 - 🟡 **A built asset whose ends fall where the trough is still significant is flagged**, because strains beyond its ends aren't checked. The margin that counts as significant is set in M3's spec.
 
 **Both:**
-- 🟡 **A utility's elevation reference is a required argument** (`"invert"`, `"axis"` or `"crown"`), converted to the axis using the diameter. Survey data comes in all three, and a wrong guess shifts the pipe by its diameter.
+- 🟡 **A utility's elevation reference is a required argument** (`"invert"`, `"axis"` or `"crown"`), converted to the axis using the diameter. Survey data comes in all three, and a wrong guess shifts the pipe by its diameter. The conversion uses D/2 and ignores the wall thickness, recorded as an assumption (M1 (b)).
 
 ### 8.4 The site
 - **A thin `Site` bundle** (decided 2026-10-31) holds the tables for one assessment: the ground surface (§8.2), tunnels, utilities and buildings. It validates that they are consistent (units, one of depth or elevation) and carries them together. It does no analysis; the analyses stay plain functions that can also take the tables directly.
@@ -260,7 +261,7 @@ Revised 2026-11-01: spreadsheet-style input first (M1–M4), which replaces the 
 | ID | Scope | Done when |
 |---|---|---|
 | M0 | Scaffolding: package, lint, tests, CI | CI green |
-| M1 | In three units (decided 2026-11-02): (a) units, the input rules, the idealized straight tunnel, the source interface (§3) and the transverse surface trough with horizontal movement, from a given k; (b) the station-and-offset builder for a utility line, the profile along an asset (§3), the result shape and verdict, the first figures (cross-section and profile); (c) `gs.sweep`, the docs site and M1's user docs | Golden values from verified sources and hand calculations; strains are exact derivatives; profile keyed by distance along the asset; builder tested; figures checked by eye |
+| M1 | In three units (decided 2026-11-02): (a) units, the input rules, the idealized straight tunnel, the source interface (§3) and the transverse surface trough with horizontal movement, from a given k; (b) the station-and-offset builder for a utility line, the profile along an asset (§3), the result shape and verdict; (c) the first figures (cross-section and profile), `gs.sweep`, the docs site and M1's user docs | Golden values from verified sources and hand calculations; strains are exact derivatives; profile keyed by distance along the asset; builder tested; figures checked by eye |
 | M2 | Movements below the surface, several tunnels | Golden values from the verified subsurface method; depth validity flags tested; superposition recorded |
 | M3 | Utility checks, greenfield: continuous and jointed pipes, discrete and analytical strain, bending in both planes, pipe length tables | Golden values from the verified definitions; each check against its limit; the profile figure shows every check; a real crossing reproduced locally. **The spreadsheet is replaced for utilities.** |
 | M4 | Buildings, greenfield: facade lines built from station and offset | Golden values from the verified damage method; hogging and sagging split tested, including a building straddling a tunnel; building figures. **The spreadsheet is replaced for buildings.** |

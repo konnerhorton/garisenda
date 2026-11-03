@@ -41,3 +41,93 @@ A caller can build a utility line from station and offset against an idealized t
 3. **The builder returns a thin frozen `Utility`**: its id, vertices as (x, y, depth), diameter, how it was built (reference tunnel, station, perpendicular) and its assumptions. The table form (SPEC §8.3) comes in M5, when polylines are loaded from tables and the columns are decided. Pipe type and material come with M3, where they are first used.
 4. **`gs.movement_profile(utility, source, *, spacing)`**, the analysis of this unit. No `interaction` argument: the profile is the ground's movement, and soil–structure interaction (SPEC §4) applies to the asset's response, in M3. One source now; M2 widens it to several.
 5. **Signs in the profile:** along is positive toward increasing distance; vertical is settlement, positive downward; lateral is positive to the right looking along increasing distance, as offset is (SPEC §8.1). For a built utility, distance runs from the start offset to the end offset.
+
+## Spec
+
+No topic doc holds this, so the spec is here. Everything marked 🟡 is a proposal for this review.
+
+### Changes
+- **SPEC §3:** the source interface gains `critical_distances()` (decision 4); the profile's columns and signs (decisions 6, 7).
+- **SPEC §5.1:** the result shape is decided, with the names below (decision 9).
+- **SPEC §8.3:** the builder returns a `Utility`; tables in M5; the elevation reference converts with D/2 (decisions 1–3).
+- **SPEC §12.4:** M1's row: the figures move from (b) to (c) (intent decision 1).
+- **`pyproject.toml`:** `pandas>=2.1.1,<3`, hangtu's floor, with mypy told pandas ships no types (as hangtu does).
+- **New modules:** `garisenda.utilities` (`Utility`, `perpendicular_utility`, `BuildRecord`), `garisenda.profile` (`movement_profile`), `garisenda._result` (`Result`). Public names in `gs`: `utilities`, `movement_profile`, `Result`.
+
+### Decisions
+
+**The utility and its builder**
+
+1. 🟡 **`gs.utilities.Utility(*, utility_id, vertices, diameter)`**, frozen. `vertices` is an (N, 3) array of x, y, depth in m (or a pint array), `diameter` a length. It can be made directly (M5's loaders will), and then has `built=None`. Raises: fewer than two vertices; any vertex non-finite or above the surface (depth < 0); a zero-length segment; diameter ≤ 0. 🟡 **More than two vertices raise** in M1 (b), naming M5, because a bent polyline needs the curvature terms of SPEC §3; collinear ones too, to keep one rule.
+2. 🟡 **`gs.utilities.perpendicular_utility(tunnel, *, utility_id, station, start_offset, end_offset, diameter, elevation_reference, depth=None, elevation=None, ground_elevation=None) -> Utility`.** The two vertices are p = p₀ + (station − s₀) t + offset n at each offset, at the axis depth. The level is given as `depth`, or `elevation` with `ground_elevation`, as for the tunnel (SPEC §8.2). `elevation_reference` is required, with no default (SPEC §8.3). Raises: start and end offsets equal; an axis above the surface. The returned utility has a `BuildRecord` (the tunnel, station, start and end offsets, `"perpendicular"`), its inputs (kind `"geometry"`), and the assumption "Built perpendicular to the tunnel at station <s> m, whatever its real orientation (SPEC §1.3)".
+3. 🟡 **The elevation reference converts with D/2:** axis depth = depth − D/2 for `"invert"`, the depth itself for `"axis"`, and depth + D/2 for `"crown"` (the same in elevation, with the signs reversed). The diameter is the one given, so the wall thickness is ignored: an invert or crown measured inside the pipe puts the axis off by the wall thickness, a few mm to a few cm. Recorded as an assumption when the reference isn't `"axis"`.
+
+**Stations (intent decision 2)**
+
+4. 🟡 **`source.critical_distances(*, start, end) -> ndarray`** is added to the `Source` protocol: for a straight segment from `start` to `end` (each (x, y, depth) in m), the distances from `start` where the source's quantities peak or change sign, sorted, within [0, L]. For the surface trough these are where the segment's offset crosses 0, ±i and ±√3 i. Offset is linear in distance along a straight segment, so each crossing is solved exactly; a segment at constant offset (parallel to the tunnel) has none.
+5. **Stations** are 0, L, every multiple of `spacing` below L, and the critical distances. Two stations closer than 1 µm are merged into one, keeping the critical one, so a critical point on the spacing grid isn't listed twice. `spacing` is a required keyword-only design judgment with no default, a length > 0. 🟡 More than 1,000,000 stations raise, saying the spacing is too fine for the utility's length.
+
+**The profile (SPEC §3)**
+
+6. **Directions** on a straight segment, with components in the order (x, y, depth):
+   - along: a = (end − start) / L;
+   - lateral: l, horizontal and to the right looking along a: l = (a_y, −a_x, 0) / |(a_x, a_y)| (intent decision 5). A vertical segment has no lateral direction and raises.
+   - vertical: v = l × a, which for a level segment is (0, 0, 1), so vertical is settlement, positive downward.
+7. 🟡 **Columns of the values table**, keyed by `distance` (m) from the start. Each displacement component is u·e for e = a, v, l, and its derivatives with respect to distance are exact: d(u·e)/ds = e·∇u·a and d²(u·e)/ds² = e_i H_ijk a_j a_k.
+   - `x`, `y`, `depth` (m); `station`, `offset` (m), relative to the reference tunnel, only for a built utility;
+   - `along`, `vertical`, `lateral` (m);
+   - `along_strain` (dimensionless, d along/ds, tension positive, SPEC §8.1) and `along_strain_gradient` (1/m);
+   - `vertical_slope` (dimensionless) and `vertical_curvature` (1/m);
+   - `lateral_slope` (dimensionless) and `lateral_curvature` (1/m);
+   - `critical` (bool): the station is one of the source's critical distances;
+   - `verdict` (str): the source's verdict at the station.
+   Units in `df.attrs["units"]` (SPEC §6). `along_strain` is the ground's strain along the utility; M3 decides what part of it the pipe takes.
+8. **`gs.movement_profile(utility, source, *, spacing) -> Result`**, with `spacing` declared through `@judgments`. Anything the source raises (a station inside the bore, say) is re-raised naming the utility, so nothing is dropped (SPEC §10).
+
+**The result (SPEC §5.1)**
+
+9. 🟡 **`gs.Result`**, frozen, shared by every analysis:
+   - `analysis` (str, e.g. `"movement_profile"`) and `subject` (str, the utility id);
+   - `values`: the DataFrame of decision 7;
+   - `checks`: a DataFrame with the columns `check`, `value`, `limit`, `utilization`, `governing_distance`, `passes`, empty until M3;
+   - `method`: the source's `MethodRecord`s and one for the profile (how stations and derivatives were built);
+   - `assumptions`: the source's, the utility's, and 🟡 "Assets follow the ground: greenfield, no soil–structure interaction (SPEC §1.3)";
+   - `inputs`: every `InputRecord`: the source's, the utility's and `spacing`;
+   - `validity`: the worst verdict over the stations and flags (SPEC §5.2);
+   - `warnings`: every `Flag`, with `points` as row positions in `values`.
+10. 🟡 **Views, which never recalculate:** `to_frame()` returns a copy of `values` with its attrs; `to_dict()` returns plain JSON types (values by column, units, checks, method, assumptions, inputs as name, magnitude, unit, kind, given_as and source, validity, warnings); `repr()` is a short text summary, as hangtu's results are: the analysis and subject, the validity and each warning with the distance range it covers, the station count, the largest settlement, horizontal strain (tension and compression) and vertical curvature (sagging and hogging) with their distances, and the number of assumptions.
+
+### Hand calculation (golden values)
+The tunnel and trough of M1 (a): reference point (0, 0), azimuth 0° (along +y, so n = +x), D = 6.0 m, z₀ = 20.0 m, k = 0.5, V_L = 1.0 %, i = 10.0 m. Values at offset o come from M1 (a)'s table.
+
+**A. Perpendicular utility at the surface.** `perpendicular_utility(station=50, start_offset=-20, end_offset=20, depth=0, elevation_reference="axis", diameter=0.3)`, spacing 5 m. L = 40 m, a = n, l = (0, −1, 0), so lateral is zero; offset = distance − 20.
+- Critical distances: offsets −√3 i, −i, 0, i, √3 i give 2.6794919, 10, 20, 30, 37.320508 m.
+- Stations: 0, 2.6794919, 5, 10, 15, 20, 25, 30, 35, 37.320508, 40 (11; 10, 20, 30 merged).
+- Because a = n, along = u_n, `along_strain` = du_n/do, `along_strain_gradient` = d²u_n/do², `vertical_slope` = dS/do, `vertical_curvature` = d²S/do². At distance 30 (o = i): along = −3.4207805e-3 m, vertical = 6.8415611e-3 m, `along_strain` = 0, `vertical_slope` = −6.8415611e-4, `vertical_curvature` = 0, `along_strain_gradient` = 6.8415611e-5 1/m. At distance 25 (o = 5) and 20 (o = 0), the rows of M1 (a)'s table likewise.
+- Every station is `within`; `station` is 50 and `offset` = distance − 20 in every row.
+
+**B. The same utility reversed** (start offset 20, end −20): a = −n. Strain and curvature don't depend on the direction, so `along_strain`, `along_strain_gradient` and `vertical_curvature` are unchanged at the same offset; along and `vertical_slope` change sign. At distance 10 (o = 10): along = +3.4207805e-3 m, `vertical_slope` = +6.8415611e-4.
+
+**C. Buried, given by elevation.** As A, but `elevation=97.0` with `ground_elevation=100.0`, `elevation_reference="invert"`, `diameter=0.6`: axis depth = 3.0 − 0.3 = 2.7 m. With `"crown"` at 97.6: 2.4 + 0.3 = 2.7 m. Every station is `outside`, with M1 (a)'s below-surface flag, and the values equal A's (the surface trough ignores depth).
+
+**D. A utility at 45° to the tunnel**, made directly: `Utility(vertices=[(-20, -20, 0), (20, 20, 0)])`. a = (1, 1, 0)/√2, l = (1, −1, 0)/√2, v = (0, 0, 1). With c = 1/√2: n·a = n·l = c, and offset o = x = −20 + c·distance.
+- Critical distances: (o + 20)/c for o = −√3 i, −i, 0, i, √3 i: 3.7893738, 14.142136, 28.284271, 42.426407, 52.779169 m.
+- At o = 5 (distance 35.355339 m): along = lateral = c·u_n = −1.7597082e-3 m; vertical = 9.9544126e-3 m; `along_strain` = `lateral_slope` = c²·du_n/do = −1.8664524e-4; `vertical_slope` = c·dS/do = −3.5194163e-4; `along_strain_gradient` = `lateral_curvature` = c³·d²u_n/do² = 2.4195987e-5 1/m; `vertical_curvature` = c²·d²S/do² = −3.7329047e-5 1/m.
+- This checks the lateral direction and sign, and the sin²θ scaling of curvature and axial strain with crossing angle (TODO #10).
+
+### Acceptance criteria
+Tolerance 1e-6 relative, as in M1 (a), for values carried to 8 figures; exact zeros checked to 1e-12 of the column's scale, since they come out of rotations.
+
+1. **Builder geometry:** case A's vertices are (−20, 50, 0) and (20, 50, 0); on a rotated tunnel (M1 (a)'s, azimuth 30°, reference station 1000), a utility at station 1025 has both vertices at station 1025 and the offsets asked for, and is perpendicular (a·t = 0 to 1e-12).
+2. **Builder record:** the `BuildRecord`, the inputs with kind `"geometry"`, and the perpendicular assumption naming the station.
+3. **Elevation reference:** case C gives 2.7 m for invert and crown, and 2.7 m for `"axis"` at depth 2.7; a missing `elevation_reference` raises a `TypeError` naming it; an unknown one raises, listing the three; depth and elevation together, or elevation without ground, raise.
+4. **Utility checks:** each raise of decision 1, including three vertices naming M5.
+5. **Stations:** case A's 11 stations exactly, with `critical` true at the five critical distances; case D's critical distances; a spacing larger than L gives the ends and the critical points; a missing `spacing` raises the judgment error; spacing ≤ 0 raises; too many stations raise.
+6. **Golden values:** cases A, B and D at the stations given, through `movement_profile`.
+7. **Exact derivatives along the utility** (hypothesis, over tunnel, trough and a straight utility at any angle and level): `along_strain`, `vertical_slope` and `lateral_slope` match central finite differences of `along`, `vertical` and `lateral` along the utility, and the second derivatives those of the first, using `movement_profile` on short utilities around a point.
+8. **Below the surface:** case C is `outside` at every station; `validity` is `outside`; the warning lists every row; the values equal case A's.
+9. **Result parts:** `values` keyed by `distance` with the columns of decision 7 and their units; `checks` empty with its columns; `method`, `assumptions` (including greenfield and perpendicular) and `inputs` (including `spacing` as a design judgment) complete; `validity` the worst verdict.
+10. **Views:** `to_frame()` equals `values` and changing it leaves the result unchanged; `to_dict()` round-trips through `json.dumps`; `repr()` names the analysis, subject, validity, warnings with their distance ranges, and the extremes of case A at the right distances (settlement 1.1279827e-2 m at 20 m).
+11. **Nothing dropped:** a perpendicular utility through the bore raises, naming the utility and the stations inside the bore.
+12. **Docstrings** of every public name state inputs and outputs with units, conventions and assumptions; ruff's numpy docstring rules pass.
+13. **Dependencies:** pandas added with its floor, passing the `lowest` job; mypy strict passes.
