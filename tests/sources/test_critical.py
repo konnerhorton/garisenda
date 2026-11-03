@@ -67,7 +67,13 @@ def level_segments(draw):
     station = draw(st.floats(-1e3, 1e3))
     offset = draw(st.floats(-4.0, 4.0)) * i
     # The angle from the tunnel's normal, short of parallel to the tunnel.
-    angle = math.radians(draw(st.floats(-89.0, 89.0)))
+    # Within 0.01 degrees of perpendicular (but not at it), the lateral
+    # curvature is under 2e-4 of the along curvature, and whether its peaks
+    # count depends on where each method puts its threshold on n.l.
+    angle = math.radians(
+        draw(st.one_of(st.just(0.0), st.floats(0.01, 89.0)))
+        * draw(st.sampled_from([-1, 1]))
+    )
     length = draw(st.floats(1.0, 20.0)) * i
     t = np.array(tunnel.tangent)
     n = np.array(tunnel.normal)
