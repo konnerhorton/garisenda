@@ -10,6 +10,8 @@ import garisenda as gs
 
 ::: garisenda.movement_profile
 
+::: garisenda.superpose
+
 ::: garisenda.Result
 
 ::: garisenda.sweep

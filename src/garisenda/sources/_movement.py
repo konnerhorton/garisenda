@@ -37,12 +37,17 @@ class Flag:
         The limit that set the verdict.
     points : tuple of int
         The indices of the points it applies to.
+    source : str, default ""
+        The name of the source in a superposition it came from, nested names
+        joined by dots (``"north"``, ``"twins.north"``); empty for a lone
+        source.
     """
 
     verdict: Verdict
     reason: str
     limit: str
     points: tuple[int, ...]
+    source: str = ""
 
 
 @dataclass(frozen=True)
