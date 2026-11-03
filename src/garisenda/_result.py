@@ -108,6 +108,40 @@ class Result:
     source: "Source | None" = field(default=None, repr=False, compare=False)
     asset: "Utility | None" = field(default=None, repr=False, compare=False)
 
+    def __eq__(self, other: object) -> bool:
+        """Compare every part but `source` and `asset`, tables by content.
+
+        The generated `__eq__` compares DataFrames with ``==``, which is
+        elementwise and can't be a bool (and from Python 3.13 it no longer
+        short-cuts on identity), so the tables are compared with
+        `DataFrame.equals` and their ``attrs``.
+        """
+        if not isinstance(other, Result):
+            return NotImplemented
+        for table in ("values", "checks"):
+            mine, theirs = getattr(self, table), getattr(other, table)
+            if not (mine.equals(theirs) and mine.attrs == theirs.attrs):
+                return False
+        return (
+            self.analysis,
+            self.subject,
+            self.method,
+            self.assumptions,
+            self.inputs,
+            self.validity,
+            self.warnings,
+        ) == (
+            other.analysis,
+            other.subject,
+            other.method,
+            other.assumptions,
+            other.inputs,
+            other.validity,
+            other.warnings,
+        )
+
+    __hash__ = None  # type: ignore[assignment]  # holds DataFrames: unhashable
+
     def governing(self) -> pd.DataFrame:
         """Return the governing values: the extremes of `values`, never recalculated.
 

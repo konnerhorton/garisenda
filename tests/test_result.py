@@ -171,3 +171,14 @@ def test_governing_leaves_out_absent_columns():
     values = pd.DataFrame({"distance": [0.0, 1.0], "vertical": [0.0, 0.1]})
     governing = result(values=values).governing()
     assert governing["name"].tolist() == ["largest_settlement"]
+
+
+def test_equality_compares_tables_by_content():
+    first = result()
+    second = result(values=first.values.copy())
+    assert first == second
+    changed = first.values.copy()
+    changed.loc[0, "vertical"] = 0.002
+    assert first != result(values=changed)
+    assert first != result(subject="W-2")
+    assert first != "W-1"

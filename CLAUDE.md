@@ -15,6 +15,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - `uv run ruff check . && uv run ruff format .`: lint and format
 - `uv run mypy`: type check `src/` in strict mode; a `# type: ignore` names its error code and says why
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`: what CI runs (`.github/workflows/ci.yml`)
+- Newer Pythons, before a merge (CI tests 3.12–3.14; the local default is 3.12): `UV_PROJECT_ENVIRONMENT=<scratch dir> uv run --python 3.13 pytest`, and the same for 3.14
 - Oldest allowed dependency versions: `UV_RESOLUTION=lowest-direct UV_PROJECT_ENVIRONMENT=<scratch dir> uv run pytest`, then `git checkout uv.lock`, because it rewrites the lock (commit an intended lock change first, or the checkout discards it)
 - Docs: `uv sync --group docs`, then `uv run --group docs python docs/prepare_site.py && uv run --group docs zensical build --clean --strict` (CI fails on any `griffe:` warning too). Look at the figures in `docs/site/img/generated/` after changing a plot
 - Release (needs approval): set `version` in `pyproject.toml`, `uv lock`, commit and push to `main`; rehearse with `gh workflow run release.yml --ref main` (TestPyPI); then `git tag vX.Y.Z && git push origin vX.Y.Z` (PyPI; the `pypi` environment waits for your approval on GitHub)
