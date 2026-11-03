@@ -8,7 +8,7 @@ import numpy.typing as npt
 
 from garisenda._inputs import InputRecord, judgments, record
 from garisenda.sources._movement import Flag, MethodRecord, Movement
-from garisenda.sources._segment import read_segment
+from garisenda.sources._segment import directions, read_segment
 from garisenda.sources._tunnel import IdealizedTunnel
 
 SURFACE_TOLERANCE = 1e-3
@@ -286,8 +286,13 @@ class TransverseSurfaceTrough:
         settlement, sagging curvature and compressive strain), +-i (the
         inflection points: peak slope and horizontal movement, zero curvature
         and strain) and +-sqrt(3) i (peak hogging curvature and tensile strain).
-        Offset is linear in distance along a straight segment, so each crossing
-        is exact: s = L (c - o_start) / (o_end - o_start) for each offset c.
+        On a segment that isn't perpendicular to the tunnel (|n.l| > 1e-10,
+        with l its lateral direction), the lateral displacement u_n (n.l)
+        isn't zero, and its curvature peaks where d3u_n/do3 = 0: at
+        r^4 - 6 r^2 + 3 = 0 with r = o / i, so o = +-sqrt(3 - sqrt(6)) i and
+        +-sqrt(3 + sqrt(6)) i (about 0.742 i and 2.334 i). Offset is linear in
+        distance along a straight segment, so each crossing is exact:
+        s = L (c - o_start) / (o_end - o_start) for each offset c.
 
         Parameters
         ----------
@@ -314,7 +319,13 @@ class TransverseSurfaceTrough:
         if abs(change) <= 1e-12 * length:
             return np.empty(0)
         i = self.trough_width
-        targets = np.array([-math.sqrt(3), -1.0, 0.0, 1.0, math.sqrt(3)]) * i
+        roots = [0.0, 1.0, math.sqrt(3)]
+        _, _, lateral = directions(start_m, end_m)
+        n_x, n_y = self.tunnel.normal
+        if abs(n_x * lateral[0] + n_y * lateral[1]) > 1e-10:
+            roots += [math.sqrt(3 - math.sqrt(6)), math.sqrt(3 + math.sqrt(6))]
+        targets = np.array(sorted({sign * root for root in roots for sign in (-1, 1)}))
+        targets *= i
         distances = length * (targets - o_start) / change
         inside = (distances >= 0) & (distances <= length)
         return np.sort(distances[inside])

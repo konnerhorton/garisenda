@@ -251,9 +251,18 @@ def test_critical_distances_reversed():
 
 
 def test_critical_distances_at_45_degrees():
-    # Case D: offset = -20 + distance / sqrt(2).
+    # Case D: offset = -20 + distance / sqrt(2). Oblique, so lateral curvature
+    # also peaks at o = -+0.74196378 i (M2 (a)): s = 17.791319 and 38.777224.
     distances = trough().critical_distances(start=(-20, -20, 0), end=(20, 20, 0))
-    expected = [3.7893738, 14.142136, 28.284271, 42.426407, 52.779169]
+    expected = [
+        3.7893738,
+        14.142136,
+        17.791319,
+        28.284271,
+        38.777224,
+        42.426407,
+        52.779169,
+    ]
     np.testing.assert_allclose(distances, expected, rtol=REL)
 
 

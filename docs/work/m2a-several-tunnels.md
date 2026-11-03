@@ -89,7 +89,8 @@ No topic doc holds this, so the spec is here. Every 🟡 proposal below was acce
    - d/ds and d²/ds² of along, vertical and lateral (peaks of movement; peaks of strain and slope);
    - d³/ds³ of vertical and lateral (peaks of curvature, which M3 and M4 check).
 
-   d³/ds³ of along (peaks of `along_strain_gradient`) is left out: nothing checks it. For a lone trough on a level segment at any angle, these zeros are exactly its analytic critical distances (0, ±i, ±√3 i in offset), which acceptance criterion 6 tests. The sources' own critical distances aren't used: two overlapping troughs peak between their axes (case B).
+   d³/ds³ of along (peaks of `along_strain_gradient`) is left out: nothing checks it. For a lone trough on a level segment at any angle, these zeros are exactly its analytic critical distances, which acceptance criterion 6 tests: 0, ±i and ±√3 i in offset, and, on a segment not perpendicular to the tunnel, ±0.74196378 i and ±2.3344142 i. The sources' own critical distances aren't used: two overlapping troughs peak between their axes (case B).
+   - **Corrected in build (2026-11-03):** the review wrote only 0, ±i, ±√3 i. On an oblique segment the lateral displacement is u_n (n·l), not zero, so lateral curvature peaks where d³u_n/do³ = 0 (case D's He₄ roots). M1's trough missed these, and its `critical_distances` now includes them when |n·l| > 1e-10 (build step 3a). M1's 45° case gains s = 17.791319 and 38.777224 m (o = ∓7.4196378 m, s = √2 (o + 20)).
 9. 🟡 **How they're found, with numpy only** (SPEC §12.1):
    - **Sampling:** the segment at an interval h ≤ `feature_length` / 8 (the largest such interval that divides L evenly), with the ends.
    - **Bracketing:** a function brackets a zero between consecutive samples whose signs differ (an exact zero counts as a sign of its own), unless both values are below 1e-10 times the largest value of that order over the segment and its three components. That leaves out rounding noise (lateral on a perpendicular utility is zero to rounding) and the far tails, where the troughs have underflowed to zero.
@@ -146,7 +147,7 @@ The reference tunnel is M1's: reference point (0, 0), azimuth 0° (along +y, so 
 - d³S/do³ = d/do[(r² − 1) S/i²] = (2o/i⁴) S + (r² − 1)(−o/i⁴) S = (o/i⁴) S (3 − r²).
 - u_n = −(i S_max/z₀) r e^{−r²/2} and r e^{−r²/2} = −(d/dr) e^{−r²/2}, so with the Hermite polynomials (dⁿ/drⁿ) e^{−r²/2} = (−1)ⁿ Heₙ(r) e^{−r²/2}, d³(r e^{−r²/2})/dr³ = −He₄(r) e^{−r²/2} = −(r⁴ − 6r² + 3) e^{−r²/2}, and d³u_n/do³ = (S/(z₀ i²))(r⁴ − 6r² + 3). (The same route gives M1 (a)'s d²u_n/do², a check.)
 - Values: o = 0: 0 and 1.6919741e-5 1/m²; o = 10: 1.3683122e-5 and −6.8415611e-6; o = 20: −3.0531172e-6 and −3.8163965e-6. Fourth-order central differences of the hand formulas for S and u_n agree to 1e-6 relative.
-- The zeros of d³u_n/do³, r² = 3 ± √6, are r = 0.74196378 and 2.3344142: the peaks of `along_strain_gradient`, which decision 8 leaves out.
+- The zeros of d³u_n/do³, r² = 3 ± √6, are r = 0.74196378 and 2.3344142: the peaks of `along_strain_gradient`, which decision 8 leaves out, and, on a segment not perpendicular to the tunnel, of `lateral_curvature`, which it keeps.
 
 **E. Inconsistent inputs.**
 - North at z₀ 20 m, D 6 m; south parallel at offset 5 m, z₀ 20 m: the axes are 5 m apart, less than 6 m, so it raises. At offset 6 m they touch, and it doesn't.
@@ -161,7 +162,7 @@ Tolerance 1e-6 relative for values carried to 8 figures, as in M1; sums checked 
 3. **Third derivative:** case D's values; and (hypothesis, as M1 (a)'s gradient and Hessian tests) the third derivative matches central differences of the Hessian, and is symmetric in its last three indices. `Movement` raises on a wrongly shaped `third_derivative`.
 4. **Feature length:** a trough returns i; a superposition the least of its sources', nested ones included.
 5. **Critical distances, case B:** they include 0.36756261, 15 and 29.632437 m from the axis (vertical slope zero, to 1e-12 of its scale, at each), and the profile marks those stations critical.
-6. **Critical distances, one trough:** the root-finding helper applied to a lone trough, on level segments at any angle and position (hypothesis), returns its analytic `critical_distances` to 1e-8 m.
+6. **Critical distances, one trough:** the root-finding helper applied to a lone trough, on level segments at any angle and position (hypothesis), returns its analytic `critical_distances` to 1e-8 m, the lateral-curvature peaks of decision 8 included on oblique segments; M1's 45° case gives its two new distances.
 7. **Nothing missed:** for cases A, B, C and a crossing at 45°, sampling each of the eight functions at h/20 finds no sign change (outside the negligible band of decision 9) without a returned critical distance between the two samples; and each returned distance is a zero of one of them (below 1e-9 of its scale).
 8. **Records:** case C's inputs include `north.volume_loss` (0.01) and `south.volume_loss` (0.015), `south.offset` (15 m), `south.axis_depth` (30 m), and the two critical-distance constants; method and assumptions hold one trough record, the superposition method and the superposition assumption, each once.
 9. **Flags:** a utility below the surface over twin troughs is `outside` at every station, with two flags, `source` `"north"` and `"south"`; `to_dict()`, the summary and the figure notes show the names. A point inside south's bore raises a `ValueError` starting `"south: "`, and the profile's message names the stations' distances.
@@ -192,6 +193,11 @@ A refactor with no change in behavior.
   - `directions(start, end) -> (a, v, l)`, which raises for a vertical segment; taken from `movement_profile`.
 - `_transverse.py` and `profile/_movement_profile.py` use them. The profile keeps its utility-specific error message by catching and re-wording.
 - Tests: the existing suite passes unchanged.
+
+### 3a. `M2 (a): mark lateral curvature peaks on oblique segments` (Opus)
+Added in build: AC 6's hypothesis test found the gap (decision 8, corrected).
+- `src/garisenda/sources/_transverse.py`: `critical_distances` adds the offsets ±√(3 ∓ √6) i when |n·l| > 1e-10, and says why in its docstring.
+- Tests: M1's 45° case in `tests/sources/test_transverse.py` and `tests/profile/test_movement_profile.py` gains s = 17.791319 and 38.777224 m; the perpendicular cases are unchanged.
 
 ### 3. `M2 (a): find critical distances by root-finding` (Opus)
 - New `src/garisenda/sources/_critical.py`: `find_critical_distances(source, *, start, end, sampling, tolerance) -> ndarray`, a private helper implementing spec decisions 8–10:
