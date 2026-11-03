@@ -2,7 +2,7 @@
 
 from importlib.metadata import version
 
-from garisenda import sources, utilities
+from garisenda import plot, sources, utilities
 from garisenda._inputs import Sourced
 from garisenda._result import Result
 from garisenda._sweep import sweep
@@ -16,6 +16,7 @@ __all__ = [
     "Sourced",
     "__version__",
     "movement_profile",
+    "plot",
     "sources",
     "sweep",
     "units",

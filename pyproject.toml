@@ -30,6 +30,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "matplotlib>=3.8",
     "numpy>=1.26",
     "pandas>=2.1.1,<3",
     "pint>=0.24.4",
@@ -73,7 +74,19 @@ convention = "numpy"
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # matplotlib < 3.10.7 calls pyparsing APIs that newer pyparsing deprecates
+    # (as in hangtu). Deprecated keyword arguments are reported from matplotlib
+    # or from inside pyparsing; garisenda doesn't use pyparsing directly.
+    "ignore:.* deprecated - use :DeprecationWarning:matplotlib",
+    "ignore:.* argument is deprecated, use :DeprecationWarning:matplotlib",
+    "ignore:.* argument is deprecated, use :DeprecationWarning:pyparsing",
+    # pytest.warns re-emits the warnings it didn't match with module "warnings",
+    # so the module filters above miss them inside a pytest.warns block.
+    "ignore:.* deprecated - use :DeprecationWarning:warnings",
+    "ignore:.* argument is deprecated, use :DeprecationWarning:warnings",
+]
 
 [tool.mypy]
 files = ["src"]
