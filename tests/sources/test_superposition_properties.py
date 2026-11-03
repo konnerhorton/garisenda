@@ -35,7 +35,7 @@ def superpositions(draw):
             azimuth=(np.degrees(first.azimuth) + draw(st.floats(10.0, 170.0)))
             * u.degree,
             diameter=diameter,
-            axis_depth=deepest + diameter + draw(st.floats(0.0, 20.0)),
+            axis_depth=deepest + diameter + draw(st.floats(0.1, 20.0)),
         )
     sources = {
         name: gs.sources.transverse_surface_trough(
