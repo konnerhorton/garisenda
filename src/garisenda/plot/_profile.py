@@ -33,7 +33,7 @@ KINDS = ("displacement", "displacement", "strain", "curvature")
 TITLES = ("Settlement", "Horizontal movement", "Strain along", "Curvature")
 CONVENTIONS = (
     "down +",
-    "along: toward increasing distance +",
+    "along: right +; lateral: right looking along +",
     "tension +",
     "hogging +, sagging -",
 )

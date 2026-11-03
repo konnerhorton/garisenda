@@ -186,7 +186,7 @@ Pass/fail on a check is separate from validity.
 - 🟡 **Station and offset:** station is distance along a tunnel's alignment in plan, from its first point (or from the reference point of an idealized tunnel). Offset is horizontal and perpendicular to the alignment in plan, positive to the right looking in the direction of increasing station.
 - 🟡 **Settlement is positive downward.** Displacements returned by a source are global components (x, y and vertical), so they add across sources.
 - 🟡 **Tensile strain is positive.**
-- 🟡 In views of a transverse section only, horizontal movement is reported as positive toward the tunnel centerline, the usual convention in the literature.
+- **Horizontal movement is positive to the right in every view** (decided 2026-11-03, M1 (c)): in a transverse section, toward increasing offset. The literature's convention, positive toward the tunnel centerline, isn't used: it kinks at the axis and differs from the one the rest of garisenda uses.
 - 🟡 **Depth is positive downward** from the ground surface.
 
 ### 8.2 Ground surface

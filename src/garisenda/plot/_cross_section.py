@@ -14,7 +14,12 @@ from garisenda.plot._profile import SHADE, flag_notes
 from garisenda.plot._style import style
 from garisenda.sources._tunnel import IdealizedTunnel
 
-PANELS = 2
+PANELS = 3
+# The trough's panels: the quantity, its label, its sign convention and color.
+TROUGH_PANELS = (
+    ("vertical", "Settlement at the surface", "down +", "C0"),
+    ("horizontal", "Horizontal at the surface", "right +", "C1"),
+)
 GRID_POINTS = 401
 """The points the trough is drawn with across the section."""
 WIDTHS = 3.0
@@ -27,19 +32,23 @@ def cross_section(
     axs: Sequence[Axes] | None = None,
     display_units: Mapping[str, object] | None = None,
 ) -> tuple[Figure, list[Axes]]:
-    """Draw the transverse section at a utility's station: two panels.
+    """Draw the transverse section at a utility's station: three panels.
 
-    Both panels share the x axis, offset from the tunnel axis (positive to the
+    The panels share the x axis, offset from the tunnel axis (positive to the
     right looking up-station, SPEC §8.1):
 
-    1. the trough at the ground surface: settlement (axis pointing down) and
-       horizontal movement toward the tunnel axis (positive toward the
-       centerline), with the utility's stations marked on them from the
-       result's values and the inflection points at ±i marked;
-    2. the section to scale, depth pointing down from the ground surface at
+    1. settlement at the ground surface, its axis pointing down;
+    2. horizontal movement at the ground surface, perpendicular to the
+       tunnel, positive to the right (toward increasing offset, as in every
+       view, SPEC §8.1), on its own panel because settlement's axis points
+       down;
+    3. the section to scale, depth pointing down from the ground surface at
        0: the tunnel's bore and axis, the utility as a band of its diameter at
        its axis depth between its offsets, and the axis depth and cover
        dimensioned.
+
+    On the first two, the utility's stations are marked on the trough from the
+    result's values, and the inflection points at ±i are marked.
 
     The trough runs past the utility's ends and its curve between stations
     isn't in the result, so the figure evaluates ``result.source`` at the
@@ -54,7 +63,7 @@ def cross_section(
     result : Result
         A movement profile of a utility built from station and offset, over a
         source with a tunnel, from `garisenda.movement_profile`.
-    axs : sequence of two matplotlib Axes, optional
+    axs : sequence of three matplotlib Axes, optional
         Panels to draw into, top to bottom, sharing x; no figure is created.
         Otherwise a new figure is made.
     display_units : mapping, optional
@@ -66,7 +75,7 @@ def cross_section(
     -------
     fig : matplotlib.figure.Figure
     axs : list of matplotlib.axes.Axes
-        The trough panel and the section panel.
+        The settlement, horizontal movement and section panels.
 
     Raises
     ------
@@ -74,7 +83,7 @@ def cross_section(
         If the utility wasn't built from station and offset, or the source has
         no tunnel: the cross-section needs a section through a tunnel, and
         utilities in plan are drawn by the plan figure (M5). Also if `axs`
-        isn't two Axes or `display_units` names an unknown kind.
+        isn't three Axes or `display_units` names an unknown kind.
     pint.DimensionalityError
         If a display unit doesn't fit its kind.
     """
@@ -115,96 +124,82 @@ def cross_section(
     )
     movement = source.evaluate(x=plan[:, 0], y=plan[:, 1], depth=np.zeros(len(grid)))
     settlement = movement.displacement[:, 2]
-    toward_axis = -np.sign(grid) * (movement.displacement[:, :2] @ normal)
+    horizontal = movement.displacement[:, :2] @ normal
 
     # The utility's own values, from the result.
     direction = np.sign(built.end_offset - built.start_offset)
-    station_toward = (
-        -np.sign(offsets) * direction * values["along"].to_numpy(dtype=np.float64)
-    )
+    station_horizontal = direction * values["along"].to_numpy(dtype=np.float64)
 
+    surface = {"vertical": settlement, "horizontal": horizontal}
+    at_stations = {
+        "vertical": values["vertical"].to_numpy(dtype=np.float64),
+        "horizontal": station_horizontal,
+    }
     with style():
-        fig, (top, bottom) = _panels(axs)
+        fig, panels = _panels(axs)
+        trough_panels = dict(zip(("vertical", "horizontal"), panels, strict=False))
         x = grid * length
-        top.plot(x, settlement * move, color="C0", label="Settlement", gid="trough")
-        top.plot(
-            x,
-            toward_axis * move,
-            color="C1",
-            label="Horizontal, toward axis",
-            gid="toward_axis",
-        )
-        top.plot(
-            offsets * length,
-            values["vertical"].to_numpy(dtype=np.float64) * move,
-            linestyle="none",
-            marker="o",
-            markersize=3.5,
-            color="C0",
-            label=f"{result.subject}, settlement",
-            gid="stations",
-        )
-        top.plot(
-            offsets * length,
-            station_toward * move,
-            linestyle="none",
-            marker="o",
-            markersize=3.5,
-            color="C1",
-            label=f"{result.subject}, horizontal",
-            gid="stations_toward_axis",
-        )
-        top.axhline(0.0, color="0.4", linewidth=0.6, zorder=1)
         verdict = values["verdict"].astype(str).to_numpy()
-        for name, color in SHADE.items():
-            flagged = verdict == name
-            if flagged.any():
-                top.plot(
-                    offsets[flagged] * length,
-                    values["vertical"].to_numpy(dtype=np.float64)[flagged] * move,
-                    linestyle="none",
-                    marker="o",
-                    markersize=8,
-                    markerfacecolor="none",
-                    markeredgecolor=color,
-                    markeredgewidth=1.5,
-                    label=f"{result.subject}, {name}",
-                    gid=name,
-                )
-        if width:
-            for side in (-1, 1):
-                top.axvline(
-                    side * width * length,
-                    color="0.5",
-                    linestyle=":",
-                    linewidth=0.8,
-                    gid="inflection",
-                )
-            top.text(
-                width * length,
-                0.02,
-                " i",
-                transform=top.get_xaxis_transform(),
-                va="bottom",
-                color="0.35",
-                fontsize=8,
+        for (key, label, convention, color), ax in zip(
+            TROUGH_PANELS, panels, strict=False
+        ):
+            ax.plot(x, surface[key] * move, color=color, label="Trough", gid=key)
+            ax.plot(
+                offsets * length,
+                at_stations[key] * move,
+                linestyle="none",
+                marker="o",
+                markersize=3.5,
+                color=color,
+                label=result.subject,
+                gid=f"stations:{key}",
             )
-        top.invert_yaxis()
-        top.margins(y=0.15)
-        top.set_ylabel(display.label("Movement at the surface", "displacement"))
-        top.set_title(
-            "settlement down +; horizontal toward axis +",
-            loc="right",
-            fontsize=7,
-            color="0.35",
-        )
-        top.legend(loc="lower right", fontsize=7)
+            for name, ring in SHADE.items():
+                flagged = verdict == name
+                if flagged.any():
+                    ax.plot(
+                        offsets[flagged] * length,
+                        at_stations[key][flagged] * move,
+                        linestyle="none",
+                        marker="o",
+                        markersize=8,
+                        markerfacecolor="none",
+                        markeredgecolor=ring,
+                        markeredgewidth=1.5,
+                        label=f"{result.subject}, {name}",
+                        gid=name,
+                    )
+            ax.axhline(0.0, color="0.4", linewidth=0.6, zorder=1)
+            if width:
+                for side in (-1, 1):
+                    ax.axvline(
+                        side * width * length,
+                        color="0.5",
+                        linestyle=":",
+                        linewidth=0.8,
+                        gid="inflection",
+                    )
+                ax.text(
+                    width * length,
+                    0.02,
+                    " i",
+                    transform=ax.get_xaxis_transform(),
+                    va="bottom",
+                    color="0.35",
+                    fontsize=8,
+                )
+            ax.margins(y=0.15)
+            ax.set_ylabel(display.label(label, "displacement"))
+            ax.set_title(convention, loc="right", fontsize=7, color="0.35")
+            ax.legend(loc="best", fontsize=7)
+        trough_panels["vertical"].invert_yaxis()
 
-        _section(bottom, result, tunnel, length, display.symbol("length"), reach)
-        bottom.set_xlabel(display.label("Offset from tunnel axis", "length"))
-        bottom.set_ylabel(display.label("Depth", "length"))
+        section = panels[2]
+        _section(section, result, tunnel, length, display.symbol("length"), reach)
+        section.set_xlabel(display.label("Offset from tunnel axis", "length"))
+        section.set_ylabel(display.label("Depth", "length"))
         flag_notes(
-            bottom,
+            section,
             result,
             values["distance"].to_numpy(dtype=np.float64) * length,
             display,
@@ -213,7 +208,7 @@ def cross_section(
             f"Cross-section at station {built.station:.6g} m: {result.subject}",
             fontsize=10,
         )
-    return fig, [top, bottom]
+    return fig, panels
 
 
 def _panels(axs: Sequence[Axes] | None) -> tuple[Figure, list[Axes]]:
@@ -222,15 +217,16 @@ def _panels(axs: Sequence[Axes] | None) -> tuple[Figure, list[Axes]]:
             PANELS,
             1,
             sharex=True,
-            figsize=(7.0, 7.5),
+            figsize=(7.0, 9.0),
             layout="constrained",
-            height_ratios=(1.0, 1.2),
+            height_ratios=(1.0, 0.8, 1.3),
         )
         return fig, list(created)
     panels = list(axs)
     if len(panels) != PANELS or not all(isinstance(ax, Axes) for ax in panels):
         raise ValueError(
-            f"axs must be {PANELS} matplotlib Axes, the trough and the section, "
+            f"axs must be {PANELS} matplotlib Axes (settlement, horizontal "
+            "movement and the section), "
             f"as plt.subplots({PANELS}, 1, sharex=True) returns them."
         )
     figure = panels[0].get_figure()
