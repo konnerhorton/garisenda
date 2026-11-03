@@ -48,3 +48,126 @@ A caller can assess an asset against several tunnels at once, such as twin bores
    - **To settle in the spec:** how roots are bracketed along a segment (a sampling interval tied to the narrowest trough) and the tolerance they're found to, with numpy only (no scipy, SPEC §12.1).
 7. **Twin tunnels:** `tunnel.parallel(offset=..., ...)` returns an idealized tunnel parallel to `tunnel` at a plan offset (positive to the right, SPEC §8.1), with stationing aligned to it. The depth and diameter are required again, not copied, because stacked and unequal bores are common and copying would be a silent default.
 8. **Any idealized tunnels can be combined, parallel or not.** The cross-section draws the tunnels parallel to the asset's reference tunnel. If any aren't parallel, it says so in a note on the figure and doesn't draw them, rather than drawing a misleading section. The plan figure (M5) shows them.
+
+## Spec
+
+No topic doc holds this, so the spec is here. Every 🟡 proposal below was accepted as written in review (2026-11-03).
+
+### Changes
+- **SPEC §3:** superposition decided (decisions 1–5); the source interface gains a third derivative and `feature_length()` (decisions 6–7); how a superposition finds its critical distances (decisions 8–10).
+- **SPEC §5.1, §5.3:** input records named per source; `gs.sweep` with dotted names (decisions 3, 12).
+- **SPEC §8.3:** the parallel-tunnel builder decided (decision 11).
+- **SPEC §9:** the cross-section with several tunnels (decision 14).
+- **SPEC §12.4:** M2 split into (a) and (b), each with its done-when. **§13 Q2** and **TODO #3:** carried to M2 (b) with intent decision 3.
+- **New:** `gs.superpose`, `gs.sources.Superposition`, `IdealizedTunnel.parallel`, `Movement.third_derivative`, `Source.feature_length`, `Flag.source`. A guide page, "Several tunnels", with its example.
+
+### Decisions
+
+**The superposition (intent decisions 4 and 5)**
+
+1. 🟡 **`gs.superpose(**sources) -> gs.sources.Superposition`.** Keyword arguments only, at least two; each name a Python identifier (so no dots), each value a source (it has `evaluate`, `critical_distances`, `feature_length`, `inputs`, `method` and `assumptions`), or `TypeError` naming the argument. Order is kept as given. A superposition is a source, so superpositions nest, and their names nest with them (`twins.north.volume_loss`). With one source there is nothing to add, and recording superposition would be false, so one raises.
+2. 🟡 **`evaluate`** evaluates every source at the same points and sums the displacement, gradient, Hessian and third derivative, which are global components (SPEC §8.1), so the sum is exact. The verdict at a point is the worst over the sources. Each source's flags are kept, one for one, with `source` set to its name (decision 13); two tunnels flagging the same points give two flags. An error from a source is raised again as the same type, its message prefixed `"<name>: "`, so the profile still names the stations (it reads the last index list). A point inside any tunnel's bore raises, through that source.
+3. 🟡 **What it records.** Each source's input records are renamed `<name>.<record name>`, with value, kind, given-as and source unchanged; the superposition adds two constants of its own, unprefixed: `critical_distance_sampling` (1/8, dimensionless) and `critical_distance_tolerance` (1e-9 m), both "constant or setting" (decision 9). Methods: each source's, in order, an identical record kept once, then `Superposition` (equations `u = sum over sources of u_s`, the same for each derivative, and `verdict = worst over sources`; source: "Linear superposition of the sources' fields; no external source"). Assumptions: each source's, an identical one kept once, then: *"Superposition: each tunnel's movement is calculated as if the others weren't there, and the movements add. Interaction between tunnels (a later bore's larger volume loss, an eccentric trough over twin bores, the order of construction) isn't modeled; set each tunnel's volume loss for it (SPEC §3)."*
+4. 🟡 **Inconsistent inputs raise** `ValueError` in `superpose`, naming the sources and values (SPEC §2.5, §10):
+   - **Ground surface:** any two input records named `ground_elevation`, at any depth of nesting, that differ by more than 1 µm. A tunnel given by `axis_depth` has no such record and isn't compared: its depth is already from the one ground surface (SPEC §8.2).
+   - **Overlapping bores:** for any two tunnels (a source's `tunnel` attribute, found through nested superpositions), the shortest distance between the axes is less than (D₁ + D₂)/2. Both axes are horizontal lines, so for parallel tunnels (|sin Δθ| ≤ 1e-9) it is √(Δo² + Δz₀²) in the section, Δo the plan offset between axes; otherwise their plans cross and it is |Δz₀|. Touching bores (equal) are allowed. The same tunnel in two sources overlaps itself, which catches passing one trough twice.
+   - Sources with no `tunnel` attribute (later kinds) are skipped by the overlap check.
+5. 🟡 **`superpose` is in `gs`; `Superposition` is in `gs.sources`**, beside `TransverseSurfaceTrough`. Its attributes: `sources` (a mapping of name to source, read-only), `inputs`, `method`, `assumptions`.
+
+**The source interface (intent decision 6)**
+
+6. 🟡 **`Movement.third_derivative`**, shape (N, 3, 3, 3, 3): `third_derivative[n, i, j, k, l]` is ∂³u_i/∂x_j∂x_k∂x_l in 1/m², symmetric in j, k, l, checked in `__post_init__` like the others. For the surface trough it is (d³u/do³) g⊗g⊗g, with g = (n_x, n_y, 0) and, writing r = o/i:
+   - d³S/do³ = (o/i⁴) S (3 − r²)
+   - d³u_n/do³ = S/(z₀ i²) (r⁴ − 6r² + 3)
+
+   Derived in the hand calculation below. Every derivative with respect to depth stays exactly zero.
+7. 🟡 **`Source.feature_length(*, start, end) -> float`**, in m: the shortest length over which the source's field changes along that straight segment, so a sampling interval can be tied to it. The surface trough returns i whatever the segment; a superposition the least of its sources'. It is on the segment so M2 (b)'s narrower trough at depth can return the least i(z) along it.
+
+**Critical distances of a superposition (intent decision 6, settled here)**
+
+8. 🟡 **What is a critical distance.** Along the segment, with a, v and l the profile's along, vertical and lateral directions (SPEC §3; the profile's helper moves to `sources` so both use the same), the zeros of eight functions of distance s:
+   - d/ds and d²/ds² of along, vertical and lateral (peaks of movement; peaks of strain and slope);
+   - d³/ds³ of vertical and lateral (peaks of curvature, which M3 and M4 check).
+
+   d³/ds³ of along (peaks of `along_strain_gradient`) is left out: nothing checks it. For a lone trough on a level segment at any angle, these zeros are exactly its analytic critical distances (0, ±i, ±√3 i in offset), which acceptance criterion 6 tests. The sources' own critical distances aren't used: two overlapping troughs peak between their axes (case B).
+9. 🟡 **How they're found, with numpy only** (SPEC §12.1):
+   - **Sampling:** the segment at an interval h ≤ `feature_length` / 8 (the largest such interval that divides L evenly), with the ends.
+   - **Bracketing:** a function brackets a zero between consecutive samples whose signs differ (an exact zero counts as a sign of its own), unless both values are below 1e-10 times the largest value of that order over the segment and its three components. That leaves out rounding noise (lateral on a perpendicular utility is zero to rounding) and the far tails, where the troughs have underflowed to zero.
+   - **Refining:** bisection, all brackets at once, until each is shorter than 1e-9 m (about 30 steps from h = 1.25 m). Bisection, not Brent's method: it is a few lines of numpy, it can't leave the bracket, and the cost is a few dozen evaluations of the bracketed points.
+   - **Returned:** the midpoints, sorted, within [0, L], with any two within 1e-9 m merged.
+10. 🟡 **What this can miss, stated in the docstring:** two zeros of the same function closer together than h, which bound a peak narrower than i/8. A Gaussian's own zeros are at least (√3 − 1) i ≈ 0.73 i apart, so this needs two troughs placed to nearly cancel. The profile still has its `spacing` stations, so such a peak is under-resolved, not lost.
+
+**Twin tunnels (intent decision 7)**
+
+11. 🟡 **`IdealizedTunnel.parallel(*, offset, diameter, axis_depth=None, axis_elevation=None, ground_elevation=None) -> IdealizedTunnel`.** The new tunnel has the same azimuth and reference station, and reference point p₀ + offset·n, so its stationing lines up with the first. `offset` (a length, in m if a plain number, positive to the right, SPEC §8.1) and `diameter` are required, and the axis follows the same rule as the constructor: none is copied (intent decision 7). Offset 0 is allowed: stacked bores. Its input records: `offset`, `diameter` and the axis as given, and `reference_point`, `azimuth` and `reference_station` as derived, given-as `"parallel to a tunnel at offset <o> m"`. It doesn't check for overlap; `superpose` does, in one place.
+
+**Inputs and the sweep (intent decision 5)**
+
+12. 🟡 **`gs.sweep` takes dotted names.** A `vary` key is a record name, such as `"south.volume_loss"`; it is passed to `run` as a keyword argument with its dots replaced by underscores (`south_volume_loss`), since a keyword can't hold a dot. The table's column keeps the record name. A key that doesn't become an identifier, or two keys that become the same one, raise `TypeError`. Undotted keys behave as now. Considered and dropped: `run(**inputs)` with dotted keys (every `run` written for several tunnels would have to unpack a dict); keys as `run`'s argument names matched to records by underscore (the table would show a name no record has).
+13. 🟡 **`Flag.source: str = ""`**, the name path of the source a flag came from (`"north"`, `"twins.north"`), empty for a lone source. `to_dict()` adds it to each warning; the summary and the figures' flag notes print `"<source>: <reason>"` when it is set.
+
+**The cross-section (intent decision 8)**
+
+14. 🟡 **With a superposition**, `gs.plot.cross_section` finds its tunnels through `source.sources`, nested ones included; offsets are from the utility's reference tunnel (`built.tunnel`), which needn't be one of them.
+   - **Each tunnel parallel to the reference tunnel** is drawn in the section at its offset and depth, labeled with its name, with its axis depth and cover dimensioned and its axis as a dash-dot line on every panel (gids `tunnel:<name>`, `axis:<name>`).
+   - **The troughs:** the superposition as the solid line (gid `vertical` and `horizontal`, as now, label "Combined"), and each source's own trough thin and dashed (gid `trough:<name>:vertical`, `trough:<name>:horizontal`), so the user sees what was added. The ±i marks are drawn only with one tunnel.
+   - **Reach:** the utility's offsets and each drawn tunnel's offset ± 3i.
+   - **A tunnel not parallel** to the reference tunnel isn't drawn; a note under the figure (gid `note`) names it and says the troughs include it and the plan figure (M5) shows it. Its dashed trough is still drawn, being the field along the section.
+   - The x label becomes "Offset from reference tunnel axis" with several tunnels. One tunnel, or a lone trough, draws as now.
+   - The profile figure is unchanged: it draws the result's values.
+
+**Docs**
+
+15. 🟡 **A guide page, "Several tunnels"**, with an example script in `docs/site/examples/`: twin bores built with `parallel`, each with its own trough, superposed; the profile and the cross-section; a sweep of `south.volume_loss`; what superposition assumes and that a later bore's larger volume loss is set through its own `volume_loss`. API reference entries for the new names.
+
+### Hand calculation (golden values)
+The reference tunnel is M1's: reference point (0, 0), azimuth 0° (along +y, so n = +x), D = 6.0 m, z₀ = 20.0 m, V_L = 1.0 %, k = 0.5, so i = 10.0 m, A = π·3² = 28.274334 m², S_max = V_L A/(√(2π) i) = 1.1279827e-2 m. Offsets o are from its axis. For a trough with axis at offset c, S(o) = S_max exp(−(o − c)²/2i²) and u_n(o) = −((o − c)/z₀) S(o); the superposition adds them. Utilities are built perpendicular to the reference tunnel at station 50, at the surface, so along = u_n and vertical = S.
+
+**A. Equal twins, 15 m apart** (2a = 15 m < 2i, so one peak). `south = north.parallel(offset=15 m, diameter=6 m, axis_depth=20 m)`, the same V_L and k. By symmetry the peak is midway, at o = 7.5:
+- o = 7.5: S = 2 S_max exp(−7.5²/200) = 2 × 1.1279827e-2 × 0.75483960 = 1.7028921e-2 m; u_n = 0.
+- o = 0 (north's axis): S = S_max (1 + exp(−225/200)) = 1.4941851e-2 m; u_n = −(−15/20) S_max exp(−1.125) = +2.7465178e-3 m (toward south, to the right).
+- o = 15: S = 1.4941851e-2 m; u_n = −2.7465178e-3 m.
+- o = 22.5: S = S_max (exp(−0.28125) + exp(−2.53125)) = 9.4118778e-3 m; u_n = −4.2025173e-3 m.
+
+**B. Equal twins, 30 m apart** (2a = 30 m > 2i, so two peaks, and neither is over an axis). South at offset 30 m, as A otherwise.
+- o = 15 (midway): S = 2 S_max exp(−1.125) = 7.3240475e-3 m, a local minimum; u_n = 0.
+- o = 0 and 30 (the axes): S = S_max (1 + exp(−4.5)) = 1.1405135e-2 m; u_n = ±1.8796134e-4 m (+ at 0).
+- **The peaks.** With x = o − 15 from the midpoint, dS/do = 0 where (x − a) e^{−(x−a)²/2i²} + (x + a) e^{−(x+a)²/2i²} = 0, which rearranges to (a − x)/(a + x) = exp(−2ax/i²), a = 15 m. The root in (0, a), by bisection to machine precision, is x = 14.632437 m (residual 3e-17), so the peaks are at o = 0.36756261 and 29.632437 m, with S = 1.1412031e-2 m. A union of the two troughs' critical distances would put them at 0 and 30.
+
+**C. Unequal twins.** South at offset 15 m, z₀ = 30 m, D = 6 m, V_L = 1.5 %, k = 0.4: i = 12.0 m, S_max = 0.015 × 28.274334/(√(2π) × 12) = 1.4099784e-2 m. The axes are √(15² + 10²) = 18.0 m apart, more than D, so the bores don't overlap.
+
+| o (m) | north S | north u_n | south S | south u_n | S | u_n |
+|---|---|---|---|---|---|---|
+| 0 | 1.1279827e-2 | 0 | 6.4553515e-3 | 3.2276758e-3 | 1.7735179e-2 | 3.2276758e-3 |
+| 7.5 | 8.5144603e-3 | −3.1929226e-3 | 1.1598166e-2 | 2.8995415e-3 | 2.0112626e-2 | −2.9338112e-4 |
+| 15 | 3.6620237e-3 | −2.7465178e-3 | 1.4099784e-2 | 0 | 1.7761808e-2 | −2.7465178e-3 |
+
+**D. The third derivative of one trough.** With r = o/i and dS/do = −(o/i²) S, d²S/do² = (r² − 1) S/i² (M1 (a)):
+- d³S/do³ = d/do[(r² − 1) S/i²] = (2o/i⁴) S + (r² − 1)(−o/i⁴) S = (o/i⁴) S (3 − r²).
+- u_n = −(i S_max/z₀) r e^{−r²/2} and r e^{−r²/2} = −(d/dr) e^{−r²/2}, so with the Hermite polynomials (dⁿ/drⁿ) e^{−r²/2} = (−1)ⁿ Heₙ(r) e^{−r²/2}, d³(r e^{−r²/2})/dr³ = −He₄(r) e^{−r²/2} = −(r⁴ − 6r² + 3) e^{−r²/2}, and d³u_n/do³ = (S/(z₀ i²))(r⁴ − 6r² + 3). (The same route gives M1 (a)'s d²u_n/do², a check.)
+- Values: o = 0: 0 and 1.6919741e-5 1/m²; o = 10: 1.3683122e-5 and −6.8415611e-6; o = 20: −3.0531172e-6 and −3.8163965e-6. Fourth-order central differences of the hand formulas for S and u_n agree to 1e-6 relative.
+- The zeros of d³u_n/do³, r² = 3 ± √6, are r = 0.74196378 and 2.3344142: the peaks of `along_strain_gradient`, which decision 8 leaves out.
+
+**E. Inconsistent inputs.**
+- North at z₀ 20 m, D 6 m; south parallel at offset 5 m, z₀ 20 m: the axes are 5 m apart, less than 6 m, so it raises. At offset 6 m they touch, and it doesn't.
+- Crossing: east at reference point (0, 50), azimuth 90°, D 6 m. At z₀ 24 m, |Δz₀| = 4 m < 6 m, so it raises; at 26 m (6 m) it doesn't.
+- North given by `axis_elevation=80 m, ground_elevation=100 m`, south by `axis_elevation=80 m, ground_elevation=100.5 m`: raises. With 100 m for both, or south by `axis_depth=20 m`, it doesn't.
+
+### Acceptance criteria
+Tolerance 1e-6 relative for values carried to 8 figures, as in M1; sums checked to 1e-12 relative, since they are exact; critical distances to 1e-8 m.
+
+1. **Golden values:** cases A, B and C through `movement_profile` (spacing 2.5 m, utility from offset −30 to 60 m), at the offsets given, for `vertical` and `along`.
+2. **Exact sums** (hypothesis, over two or three troughs on parallel and crossing tunnels and points at the surface): displacement, gradient, Hessian and third derivative equal the sum of the sources'; the verdict is the worst of theirs.
+3. **Third derivative:** case D's values; and (hypothesis, as M1 (a)'s gradient and Hessian tests) the third derivative matches central differences of the Hessian, and is symmetric in its last three indices. `Movement` raises on a wrongly shaped `third_derivative`.
+4. **Feature length:** a trough returns i; a superposition the least of its sources', nested ones included.
+5. **Critical distances, case B:** they include 0.36756261, 15 and 29.632437 m from the axis (vertical slope zero, to 1e-12 of its scale, at each), and the profile marks those stations critical.
+6. **Critical distances, one trough:** the root-finding helper applied to a lone trough, on level segments at any angle and position (hypothesis), returns its analytic `critical_distances` to 1e-8 m.
+7. **Nothing missed:** for cases A, B, C and a crossing at 45°, sampling each of the eight functions at h/20 finds no sign change (outside the negligible band of decision 9) without a returned critical distance between the two samples; and each returned distance is a zero of one of them (below 1e-9 of its scale).
+8. **Records:** case C's inputs include `north.volume_loss` (0.01) and `south.volume_loss` (0.015), `south.offset` (15 m), `south.axis_depth` (30 m), and the two critical-distance constants; method and assumptions hold one trough record, the superposition method and the superposition assumption, each once.
+9. **Flags:** a utility below the surface over twin troughs is `outside` at every station, with two flags, `source` `"north"` and `"south"`; `to_dict()`, the summary and the figure notes show the names. A point inside south's bore raises a `ValueError` starting `"south: "`, and the profile's message names the stations' distances.
+10. **Inconsistent inputs:** each raise and non-raise of case E.
+11. **Arguments:** one source raises; a positional argument, a non-source, and a name with a dot (through `**{}`) raise `TypeError`; nested superpositions name records `outer.north.volume_loss`.
+12. **Parallel builder:** the new tunnel's reference point is p₀ + offset·n on a rotated tunnel (azimuth 30°, reference station 1000); a point's station is the same from either tunnel and its offsets differ by `offset`; missing diameter or axis raises; the records of decision 11.
+13. **Sweep:** varying `"south.volume_loss"` over [1.0, 1.5, 2.0] % calls `run(south_volume_loss=...)`, and the table's column is `"south.volume_loss"` with 0.01, 0.015, 0.02; a run that changes north's volume loss instead raises the existing error; `"a.b-c"` and `{"a.b", "a_b"}` raise `TypeError`; M1's sweep tests pass unchanged.
+14. **Cross-section:** case A draws `tunnel:north`, `tunnel:south`, both axes and both dashed troughs, and the combined trough's settlement at o = 7.5 is case A's; the crossing case draws one bore and the note naming the other; a lone trough's figure is unchanged (M1's figure tests pass). Checked by eye at close-out.
+15. **Docs:** the guide page and its example build with `--strict`; every new public name has a reference docstring (equations, inputs and outputs with units, assumptions); mypy strict and the `lowest` job pass.

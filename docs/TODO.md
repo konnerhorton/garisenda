@@ -26,7 +26,8 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 
 ### 3. Subsurface movements · You and Claude · SPEC §13 Q2, M2
 - **To verify:** Mair et al. (1993) for trough width below the surface in clay, with its stated validity limit; Taylor (1995) for horizontal movements below the surface; New & Bowers (1994).
-- **Open:** which method for granular soil, and what the validity limits are (including the depth limit Mair et al. state for their method).
+- **For M2 (b)** (decided 2026-11-03, M2 (a)'s intent): the papers will be supplied; Mair et al. (1993) for clay, plus i = k (z₀ − z) from a given k as the user's own choice. To confirm against the paper: whether i(z) is linear in depth, which keeps the derivatives with respect to depth short.
+- **Open:** a granular-specific method (SPEC §13 Q2), and the validity limits (including the depth limit Mair et al. state for their method).
 
 ### 4. Utility check definitions · You (supply) and Claude (verify) · SPEC §7, M3
 - **To verify:** how axial strain, bending strain, radius of curvature, joint pullout and joint rotation are defined from movements, in Bracegirdle et al. (1996) or its successor guidance. Verify against the primary source, not a summary of it.
