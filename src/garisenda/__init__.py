@@ -2,10 +2,20 @@
 
 from importlib.metadata import version
 
-from garisenda import sources
+from garisenda import sources, utilities
 from garisenda._inputs import Sourced
+from garisenda._result import Result
 from garisenda._units import units
+from garisenda.profile import movement_profile
 
 __version__ = version("garisenda")
 
-__all__ = ["Sourced", "__version__", "sources", "units"]
+__all__ = [
+    "Result",
+    "Sourced",
+    "__version__",
+    "movement_profile",
+    "sources",
+    "units",
+    "utilities",
+]

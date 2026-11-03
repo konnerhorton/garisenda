@@ -31,6 +31,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.26",
+    "pandas>=2.1.1,<3",
     "pint>=0.24.4",
 ]
 
@@ -81,3 +82,8 @@ strict = true
 warn_unreachable = true
 # Every `# type: ignore` names its error code (SPEC §12.1).
 enable_error_code = ["ignore-without-code", "redundant-expr"]
+
+# pandas ships without type information (pandas-stubs isn't used), as in hangtu.
+[[tool.mypy.overrides]]
+module = ["pandas.*"]
+ignore_missing_imports = true
