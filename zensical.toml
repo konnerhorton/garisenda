@@ -25,6 +25,7 @@ nav = [
   ] },
   { "Guides" = [
     "guides/sweep.md",
+    "guides/several-tunnels.md",
   ] },
   { "Reference" = [
     "reference/garisenda.md",
