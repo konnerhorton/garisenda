@@ -131,3 +131,37 @@ Tolerance 1e-6 relative, as in M1 (a), for values carried to 8 figures; exact ze
 11. **Nothing dropped:** a perpendicular utility through the bore raises, naming the utility and the stations inside the bore.
 12. **Docstrings** of every public name state inputs and outputs with units, conventions and assumptions; ruff's numpy docstring rules pass.
 13. **Dependencies:** pandas added with its floor, passing the `lowest` job; mypy strict passes.
+
+## Plan
+
+Six build commits, each with ruff check, ruff format check, mypy and pytest green, and each kept near 300 changed lines (M1 (a)'s lesson): source, docstrings and tests for one piece per commit.
+
+### 1. `M1 (b): add the utility and the perpendicular builder`
+- `src/garisenda/utilities/__init__.py`, `src/garisenda/utilities/_utility.py`: `Utility` (frozen; checks of decision 1), `BuildRecord`, `perpendicular_utility()` (decisions 2–3), using `record()` for every input and the tunnel's `tangent`, `normal` and `reference_station`.
+- `src/garisenda/__init__.py`: export `utilities`.
+- Tests: `tests/utilities/test_utility.py`: AC 1, 2, 3, 4.
+
+### 2. `M1 (b): add critical distances to the source interface`
+- `src/garisenda/sources/_movement.py`: `critical_distances(*, start, end)` on the `Source` protocol.
+- `src/garisenda/sources/_transverse.py`: the surface trough's, from the offsets of the segment's ends (decision 4).
+- Tests: `tests/sources/test_transverse.py`: case A's and case D's critical distances; a segment parallel to the tunnel has none; a segment that reaches only some crossings returns only those (AC 5, in part).
+
+### 3. `M1 (b): add the result and its views`
+- `pyproject.toml`, `uv.lock`: `pandas>=2.1.1,<3`; mypy override for `pandas.*` (no types shipped), as hangtu has.
+- `src/garisenda/_result.py`: `Result` (decision 9), `to_frame()`, `to_dict()`, `repr()` (decision 10). The summary's extremes read named columns and are skipped when a column is absent, so later analyses reuse it.
+- `src/garisenda/__init__.py`: export `Result`.
+- Tests: `tests/test_result.py`, on a `Result` built by hand: `to_frame()` is a copy with attrs; `to_dict()` through `json.dumps`; `repr()` lists validity, warnings by distance range and extremes (AC 10, in part).
+
+### 4. `M1 (b): add the movement profile`
+- `src/garisenda/profile/__init__.py`, `src/garisenda/profile/_movement_profile.py`: `movement_profile()` with `@judgments(spacing=...)`: stations (decision 5), directions (decision 6), the columns (decision 7) from the source's gradient and Hessian, re-raising the source's errors naming the utility (decision 8), and the `Result`.
+- `src/garisenda/__init__.py`: export `movement_profile`.
+- Tests: `tests/profile/test_movement_profile.py`: cases A–D (AC 5, 6, 8), result parts (AC 9), the bore (AC 11), `repr()` extremes for case A (AC 10).
+
+### 5. `M1 (b): add property tests for the profile`
+- `tests/profile/test_movement_profile_properties.py` (hypothesis): AC 7, finite differences of the profile's displacements and first derivatives along utilities at any angle and level. The tunnel and trough strategies are copied from M1 (a)'s property tests rather than shared (M1 (a) plan, step 4); if a third copy is needed, they move to `conftest.py`.
+
+### 6. `M1 (b): close out`
+- Run the `lowest` job locally, then `git checkout uv.lock`.
+- `docs/work/m1b-movement-profile.md`: `## Result`, each acceptance criterion met or not, with evidence.
+- `SPEC.md`: the 🟡 items this unit settled (§3 critical distances and the profile, §5.1 the result, §8.3 the builder) marked decided.
+- `CLAUDE.md`: the "Next" sentence points to M1 (c); a convention line if one emerged.
