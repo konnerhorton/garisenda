@@ -147,6 +147,8 @@ Every analysis returns a `gs.Result` with the same parts (decided 2026-11-03, M1
 - **validity:** the verdict (§5.2), with the limit that set it;
 - **warnings:** everything that was flagged.
 
+🟡 **Governing values** (M1 (c), [`docs/work/m1c-figures-sweep-docs.md`](docs/work/m1c-figures-sweep-docs.md)): `Result.governing()` tabulates the extremes of `values` (settlement, tension and compression along, hogging and sagging), each with its distance and verdict; a sign with no value is NaN, never zero. The summary, `gs.sweep` and the figures read it, so they agree. A result also keeps its source and asset, outside the views, so a figure can draw what the table doesn't hold.
+
 **One calculation, many views** (decided 2026-11-03, M1 (b)): `.to_dict()` (JSON-ready), `.to_frame()`, a short text summary as its `repr()`, as in hangtu, and the figures (§9). Views never recalculate, so two views can't disagree.
 
 ### 5.2 Validity verdict
@@ -158,7 +160,7 @@ Every analysis returns a `gs.Result` with the same parts (decided 2026-11-03, M1
 Pass/fail on a check is separate from validity.
 
 ### 5.3 Sensitivity runs
-🟡 **Every calculation can be run over arrays of one to three of its inputs** with one function, `gs.sweep(analysis, inputs, vary={name: array, ...}, mode="grid" | "paired")`, returning a tidy table: one row per run, with the varied inputs, the governing values, each check's utilization, pass/fail and the verdict. Fixed inputs are recorded once in `df.attrs`. A run that raises records the error in its row. So every analysis is a pure function of its arguments, with no hidden state and no file reading. Volume loss and the trough width parameter are the obvious inputs to vary.
+🟡 **Every calculation can be run over arrays of one to three of its inputs** with one function, `gs.sweep(run, *, vary={name: array, ...}, mode="grid" | "paired")` (M1 (c), [`docs/work/m1c-figures-sweep-docs.md`](docs/work/m1c-figures-sweep-docs.md)), where `run` is the user's function from those inputs to a `Result`: the inputs worth varying belong to the source, upstream of the analysis, and a function keeps every step visible. It returns a tidy table: one row per run, with the varied inputs as used, the governing values (§5.1), each check's utilization, pass/fail and the verdict. Fixed inputs are recorded once in `df.attrs`. Each varied value must reach the run's input records, and inputs not varied must not change between runs, or `sweep` raises. `mode` is required with two or more inputs. A run that raises records the error in its row. So every analysis is a pure function of its arguments, with no hidden state and no file reading. Volume loss and the trough width parameter are the obvious inputs to vary.
 
 ## 6. Units
 - 🟡 **SI is the preferred system:** m, mm, kPa, MPa. Strain is dimensionless and reported in microstrain or percent only in views.
@@ -225,7 +227,7 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 
 ## 9. Figures
 - **Figures are part of every assessment** (decided 2026-10-31): they are needed for the deliverable in every case, and are the fastest check that a result is sensible.
-- 🟡 **One plot contract:** `gs.plot.<name>(result, *, ax=None, display_units=None) -> (fig, ax)`, using matplotlib. A figure draws from the result and never recalculates.
+- 🟡 **One plot contract:** `gs.plot.<name>(result, *, ax=None, display_units=None) -> (fig, ax)`, using matplotlib; a multi-panel figure takes `axs=` and returns `(fig, axs)`, as `plt.subplots` does (M1 (c)). Styling is applied in a context, never as global state. A figure draws from the result and never recalculates the result's values; it may evaluate the result's source on a grid to draw the field (§3). Display units are given per kind of quantity (length, displacement, strain, curvature), defaulting to m, mm, microstrain and 1/km, and every axis label states its unit.
 - 🟡 **Each milestone ships the figures for what it builds**, starting with M1's transverse trough. The core figure of Phase 1 is the profile along an asset: movement, strain and each check against its limit, plotted against distance along the asset, with flagged locations marked. Alongside it: a plan of the tunnels and assets with flagged stations marked, and, for an asset built from station and offset, the cross-section at that station (tunnels, trough and asset in place), the figure of a traditional assessment.
 - Figures are checked by eye at close-out, not only by tests.
 
@@ -250,10 +252,10 @@ Every table describes 3D geometry. Station-and-offset input is a way of building
 - **Release to PyPI on a `v*` tag** (decided 2026-11-02, M0), with trusted publishing (`release.yml`): the tag must match the version in `pyproject.toml`, and the tests run against the built wheel on all three operating systems before upload. A manual run publishes to TestPyPI instead, as a rehearsal.
 
 ### 12.2 Package layout
-- 🟡 `src/` layout, package `garisenda`, tests mirroring the package. Modules by role: `garisenda.sources` (movement fields), `garisenda.profile` (the profile along an asset, §3), `garisenda.utilities`, `garisenda.buildings`, `garisenda.site`, `garisenda.plot`, `garisenda.presets`.
+- 🟡 `src/` layout, package `garisenda`, tests mirroring the package. Modules by role: `garisenda.sources` (movement fields), `garisenda.profile` (the profile along an asset, §3), `garisenda.utilities`, `garisenda.buildings`, `garisenda.site`, `garisenda.plot` (figures, §9), `garisenda.presets`; `gs.sweep` at the top level (§5.3).
 
 ### 12.3 Docs
-- 🟡 **Docs are written as we go:** each milestone's close-out writes the user docs for what it built. The docs site (Zensical, with the API reference from docstrings) is set up in M1.
+- 🟡 **Docs are written as we go:** each milestone's close-out writes the user docs for what it built. The docs site (Zensical, with the API reference from docstrings) is set up in M1 (c) as hangtu's is: pages in `docs/site/` (the rest of `docs/` is internal), each page's example a script run before the build so every figure comes from code that runs, a `--strict` build in CI, published to GitHub Pages from `main`, and a test that every public name has a reference entry.
 
 ### 12.4 Milestones (Phase 1)
 Revised 2026-11-01: spreadsheet-style input first (M1–M4), which replaces the spreadsheet, then real geometry (M5–M6). The analysis is the same throughout (§3).
