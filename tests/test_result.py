@@ -111,3 +111,63 @@ def test_repr_skips_absent_columns():
     assert "settlement" in text
     assert "strain" not in text
     assert "curvature" not in text
+
+
+# AC 1: governing values
+
+
+def test_governing_reads_the_extremes():
+    governing = result().governing().set_index("name")
+    assert list(governing.index) == [
+        "largest_settlement",
+        "largest_tension",
+        "largest_compression",
+        "largest_hogging",
+        "largest_sagging",
+    ]
+    assert governing.loc["largest_settlement"].to_dict() == {
+        "column": "vertical",
+        "value": 0.004,
+        "unit": "m",
+        "distance": 10.0,
+        "verdict": "outside",
+    }
+    assert governing.loc["largest_compression", "value"] == -2e-4
+    assert governing.loc["largest_hogging", "distance"] == 0.0
+    assert governing.loc["largest_hogging", "verdict"] == "within"
+
+
+def test_governing_with_no_value_of_a_sign_is_nan_not_zero():
+    values = pd.DataFrame(
+        {
+            "distance": [0.0, 10.0],
+            "along_strain": [-1e-4, -2e-4],
+            "verdict": ["within", "within"],
+        }
+    )
+    governing = result(values=values).governing().set_index("name")
+    tension = governing.loc["largest_tension"]
+    assert pd.isna(tension["value"])
+    assert pd.isna(tension["distance"])
+    assert tension["verdict"] is None
+    assert governing.loc["largest_compression", "value"] == -2e-4
+    text = repr(result(values=values, warnings=()))
+    assert "strain along: tension none; compression -0.0002 at 10 m" in text
+
+
+def test_governing_tie_goes_to_the_smaller_distance():
+    values = pd.DataFrame(
+        {
+            "distance": [0.0, 10.0, 20.0],
+            "along_strain": [3e-4, -1e-4, 3e-4 * (1 + 1e-12)],
+        }
+    )
+    governing = result(values=values).governing().set_index("name")
+    assert governing.loc["largest_tension", "distance"] == 0.0
+    assert governing.loc["largest_tension", "verdict"] is None
+
+
+def test_governing_leaves_out_absent_columns():
+    values = pd.DataFrame({"distance": [0.0, 1.0], "vertical": [0.0, 0.1]})
+    governing = result(values=values).governing()
+    assert governing["name"].tolist() == ["largest_settlement"]

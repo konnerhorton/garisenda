@@ -69,7 +69,7 @@ No topic doc holds this, so the spec is here. 🟡 marks a proposal for this rev
    | `largest_sagging` | `vertical_curvature` | most negative |
 
    Columns `name`, `column`, `value` (signed, as in `values`), `unit`, `distance` and `verdict` (the station's). Rows whose column the result doesn't have are left out, so later analyses reuse it.
-3. 🟡 **No extreme of a sign is NaN, not zero:** if no station is in tension, `largest_tension` has `value` and `distance` NaN and `verdict` None, because nothing was there to report (SPEC §10: never filled). **Ties go to the smallest distance** (a symmetric trough has equal tension peaks either side; the first is reported). The `repr()` reads `governing()` and prints "none" for a NaN row.
+3. 🟡 **No extreme of a sign is NaN, not zero:** if no station is in tension, `largest_tension` has `value` and `distance` NaN and `verdict` None, because nothing was there to report (SPEC §10: never filled). **Ties go to the smallest distance** (a symmetric trough has equal tension peaks either side; the first is reported); values within 1e-9 relative of the extreme count as tied, so rounding can't pick the far peak. The `repr()` reads `governing()` and prints "none" for a NaN row.
 
 **`gs.sweep` (intent decision 4)**
 

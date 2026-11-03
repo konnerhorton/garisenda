@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import math
 
@@ -356,3 +357,42 @@ def test_repr_of_case_c_lists_the_warning_range():
 def test_utility_through_the_bore_raises_naming_it():
     with pytest.raises(ValueError, match=r"Utility 'W-1'.*inside the bore.* 20 m"):
         case_a(depth=20.0)
+
+
+# M1 (c) AC 1, 2: governing values and the result's source and asset
+
+# The spec's hand table, row 1 (V_L 1 %, k 0.5): name -> (value, distance).
+GOVERNING_A = {
+    "largest_settlement": (1.1279827e-2, 20.0),
+    "largest_tension": (2.5168697e-4, 20 - 10 * ROOT3),
+    "largest_compression": (-5.6399136e-4, 20.0),
+    "largest_hogging": (5.0337393e-5, 20 - 10 * ROOT3),
+    "largest_sagging": (-1.1279827e-4, 20.0),
+}
+
+
+def test_case_a_governing_values():
+    governing = case_a().governing().set_index("name")
+    assert list(governing.index) == list(GOVERNING_A)
+    for name, (value, distance) in GOVERNING_A.items():
+        row = governing.loc[name]
+        assert row["value"] == pytest.approx(value, rel=REL), name
+        assert row["distance"] == pytest.approx(distance, rel=1e-12), name
+        assert row["verdict"] == "within"
+    assert (
+        governing["unit"].tolist()
+        == ["m", "dimensionless", "dimensionless"] + ["1/m"] * 2
+    )
+
+
+def test_result_keeps_its_source_and_asset_outside_the_views():
+    source = trough()
+    utility = built(source)
+    result = gs.movement_profile(utility, source, spacing=5.0)
+    assert result.source is source
+    assert result.asset is utility
+    assert "source" not in result.to_dict()
+    assert "asset" not in result.to_dict()
+    assert "Trough" not in repr(result)
+    assert list(result.to_frame().columns) == COLUMNS_BUILT
+    assert dataclasses.replace(result, source=None, asset=None) == result

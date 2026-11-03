@@ -231,6 +231,8 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         inputs=(*source.inputs, *utility.inputs, spacing_record, merge_record),
         validity=validity,
         warnings=flags,
+        source=source,
+        asset=utility,
     )
 
 
