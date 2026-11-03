@@ -130,7 +130,7 @@ def profile(
         panels[-1].set_xlabel(display.label("Distance along utility", "length"))
         _mark_governing(panels, result, display)
         _offset_axis(panels[0], values, length, display)
-        _flag_notes(panels[-1], result, distance, display)
+        flag_notes(panels[-1], result, distance, display)
         fig.suptitle(f"Movement profile along {result.subject}", fontsize=10)
     return fig, panels
 
@@ -271,7 +271,7 @@ def _offset_axis(
     top.set_xlabel(display.label("Offset from tunnel axis", "length"))
 
 
-def _flag_notes(
+def flag_notes(
     ax: Axes, result: Result, distance: FloatArray, display: DisplayUnits
 ) -> None:
     """Print each flag's reason and distance range under the figure."""

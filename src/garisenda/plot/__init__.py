@@ -5,6 +5,7 @@ Every figure takes a result and returns ``(fig, ax)`` for one axes or
 draws from the result's values and never recalculates them.
 """
 
+from garisenda.plot._cross_section import cross_section
 from garisenda.plot._profile import profile
 
-__all__ = ["profile"]
+__all__ = ["cross_section", "profile"]
