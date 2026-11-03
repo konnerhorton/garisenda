@@ -193,17 +193,7 @@ class Result:
                 for record in self.method
             ],
             "assumptions": list(self.assumptions),
-            "inputs": [
-                {
-                    "name": entry.name,
-                    "magnitude": _plain(np.asarray(entry.value.magnitude).tolist()),
-                    "unit": f"{entry.value.units:~}" or "dimensionless",
-                    "kind": entry.kind,
-                    "given_as": entry.given_as,
-                    "source": entry.source,
-                }
-                for entry in self.inputs
-            ],
+            "inputs": [input_dict(entry) for entry in self.inputs],
             "validity": self.validity,
             "warnings": [
                 {
@@ -254,6 +244,23 @@ class Result:
                 )
         lines.append(f"  {len(self.assumptions)} assumptions (see .assumptions)")
         return "\n".join(lines)
+
+
+def input_dict(entry: InputRecord) -> dict[str, Any]:
+    """Return an input record as plain JSON types, as `Result.to_dict` gives it."""
+    return {
+        "name": entry.name,
+        "magnitude": _plain(np.asarray(entry.value.magnitude).tolist()),
+        "unit": unit_text(entry),
+        "kind": entry.kind,
+        "given_as": entry.given_as,
+        "source": entry.source,
+    }
+
+
+def unit_text(entry: InputRecord) -> str:
+    """Return an input record's unit as text, ``"dimensionless"`` for none."""
+    return f"{entry.value.units:~}" or "dimensionless"
 
 
 def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
