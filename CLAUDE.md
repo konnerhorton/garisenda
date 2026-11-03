@@ -1,6 +1,6 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0 and M1 are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M2 (movements below the surface, several tunnels).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1 and M2 (a) are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M2 (b), movements below the surface (waits on the subsurface papers, TODO #3).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
@@ -25,6 +25,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Sources produce a movement field; assessments consume it** as a profile along the asset, keyed by distance along it (SPEC §3).
 - **Every result has the same shape** and a validity verdict; outside a method's range it is flagged, not raised (SPEC §2.5, §5).
 - **Every assessment has a figure** (SPEC §9).
+- **Test a source on segments at any angle, not only perpendicular to the tunnel**: an oblique segment has a lateral component, and its peaks (M1's lateral-curvature peaks) are missed by perpendicular-only hand calculations.
 - **Never fill missing data**, never drop it silently (SPEC §10).
 - **Names are written out in full**, no units in names, American spelling (SPEC §8.5).
 - **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).

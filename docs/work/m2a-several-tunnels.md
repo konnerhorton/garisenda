@@ -112,7 +112,7 @@ No topic doc holds this, so the spec is here. Every 🟡 proposal below was acce
 
 14. 🟡 **With a superposition**, `gs.plot.cross_section` finds its tunnels through `source.sources`, nested ones included; offsets are from the utility's reference tunnel (`built.tunnel`), which needn't be one of them.
    - **Each tunnel parallel to the reference tunnel** is drawn in the section at its offset and depth, labeled with its name, with its axis depth and cover dimensioned and its axis as a dash-dot line on every panel (gids `tunnel:<name>`, `axis:<name>`).
-   - **The troughs:** the superposition as the solid line (gid `vertical` and `horizontal`, as now, label "Combined"), and each source's own trough thin and dashed (gid `trough:<name>:vertical`, `trough:<name>:horizontal`), so the user sees what was added. The ±i marks are drawn only with one tunnel.
+   - **The troughs:** the superposition as the solid line (gid `vertical` and `horizontal`, as now, label "Combined"), and each source's own trough thin and dashed, each with its own dash pattern so the legend tells them apart (added at close-out, 2026-11-03) (gid `trough:<name>:vertical`, `trough:<name>:horizontal`), so the user sees what was added. The ±i marks are drawn only with one tunnel.
    - **Reach:** the utility's offsets and each drawn tunnel's offset ± 3i.
    - **A tunnel not parallel** to the reference tunnel isn't drawn; a note under the figure (gid `note`) names it and says the troughs include it and the plan figure (M5) shows it. Its dashed trough is still drawn, being the field along the section.
    - The x label becomes "Offset from reference tunnel axis" with several tunnels. One tunnel, or a lone trough, draws as now.

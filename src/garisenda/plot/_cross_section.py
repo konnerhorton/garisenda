@@ -29,6 +29,8 @@ TROUGH_PANELS = (
     ("vertical", "Settlement at the surface", "down +", "C0"),
     ("horizontal", "Horizontal at the surface", "right +", "C1"),
 )
+DASHES = ("--", ":", (0, (6, 2, 1, 2)), (0, (1, 3)))
+"""Each source's own trough, in turn, so the legend tells them apart."""
 GRID_POINTS = 401
 """The points the trough is drawn with across the section."""
 WIDTHS = 3.0
@@ -87,16 +89,16 @@ def cross_section(
 
     **Several tunnels** (a source from `garisenda.superpose`, nested ones
     included): the solid line is the combined trough, and each source's own
-    trough is drawn thin and dashed, so what was added shows. Each tunnel
-    parallel to the reference tunnel is drawn in the section at its offset and
-    depth, labeled with its name and with its axis depth and cover
-    dimensioned, and its axis is a dash-dot line on every panel. The troughs
-    are drawn over the utility's offsets and each drawn tunnel's offset ±3i
-    (or ±3 z0 for a source with no trough width). The ±i marks are left out.
-    A tunnel that isn't parallel to the reference tunnel isn't drawn, since
-    its section here would mislead; a note under the figure names it, its
-    dashed trough is still drawn (it is the field along the section), and the
-    plan figure (M5) shows it.
+    trough is drawn thin and dashed, each its own pattern, so what was added
+    shows. Each tunnel parallel to the reference tunnel is drawn in the
+    section at its offset and depth, labeled with its name and with its axis
+    depth and cover dimensioned, and its axis is a dash-dot line on every
+    panel. The troughs are drawn over the utility's offsets and each drawn
+    tunnel's offset ±3i (or ±3 z0 for a source with no trough width). The ±i
+    marks are left out. A tunnel that isn't parallel to the reference tunnel
+    isn't drawn, since its section here would mislead; a note under the
+    figure names it, its dashed trough is still drawn (it is the field along
+    the section), and the plan figure (M5) shows it.
 
     Parameters
     ----------
@@ -215,12 +217,12 @@ def cross_section(
                 label="Combined" if several else "Trough",
                 gid=key,
             )
-            for name, part in own.items():
+            for index, (name, part) in enumerate(own.items()):
                 ax.plot(
                     x,
                     part[key] * move,
                     color=color,
-                    linestyle="--",
+                    linestyle=DASHES[index % len(DASHES)],
                     linewidth=0.8,
                     alpha=0.7,
                     label=name,
@@ -514,6 +516,21 @@ def _bore(ax: Axes, bore: _Bore, length: float, unit: str) -> float:
             arrowprops={"arrowstyle": "<->", "linewidth": 0.7, "color": "0.3"},
             gid=f"{kind}{suffix}",
         )
+        if bore.name:
+            # Bores side by side would put one bore's label beside the
+            # next one's arrow; written along its own arrow, it can't.
+            ax.annotate(
+                label,
+                (x, (top_y + bottom_y) / 2),
+                xytext=(-2, 0),
+                textcoords="offset points",
+                rotation=90,
+                ha="right",
+                va="center",
+                fontsize=7,
+                color="0.2",
+            )
+            continue
         ax.text(
             x,
             (top_y + bottom_y) / 2,

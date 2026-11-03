@@ -209,9 +209,11 @@ def test_twins_draw_both_bores_axes_and_troughs(twins_a):
         assert "inflection" not in gids(ax)
     for ax, key in ((top, "vertical"), (middle, "horizontal")):
         assert line(ax, key).get_label() == "Combined"
-        for name in ("north", "south"):
-            dashed = line(ax, f"trough:{name}:{key}")
-            assert dashed.get_linestyle() == "--"
+        # Each tunnel's own trough is dashed differently, so the legend
+        # tells them apart.
+        north, south = (line(ax, f"trough:{name}:{key}") for name in ("north", "south"))
+        assert north.get_linestyle() == "--"
+        assert south.get_linestyle() == ":"
     assert bottom.get_xlabel() == "Offset from reference tunnel axis (m)"
     assert "note" not in gids(bottom)
 
