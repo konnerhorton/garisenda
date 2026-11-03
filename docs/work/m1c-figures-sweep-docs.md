@@ -146,3 +146,58 @@ Tolerance 1e-6 relative for the hand values, as in M1 (a) and (b).
 12. **Docs site:** `prepare_site.py` runs every example; `zensical build --clean --strict` passes locally and in CI; every public name has a reference entry (test).
 13. **Docstrings** of every new public name state inputs, outputs with units and conventions; ruff's numpy docstring rules pass.
 14. **Dependencies:** `matplotlib` with its floor passing the `lowest` job; mypy strict passes.
+
+## Plan
+
+Eight build commits, each with ruff check, ruff format check, mypy and pytest green, and each near 300 changed lines: source, docstrings and tests for one piece. The result changes and `gs.sweep` come first, since the figures and docs need them; then the figures; then a pause for the user to look at them, since the plots may change; then the docs site and pages, built around the settled figures.
+
+
+### 1. `M1 (c): add governing values and the result's source and asset`
+- `src/garisenda/_result.py`: `source` and `asset` fields (`field(default=None, repr=False, compare=False)`), left out of `to_dict()`/`to_frame()`; `governing()` (decisions 2–3) replacing the `EXTREMES` loop, with the NaN rule and ties to the smaller distance; `__repr__` reads `governing()` and prints "none".
+- `src/garisenda/profile/_movement_profile.py`: pass `source=source, asset=utility`.
+- Tests: `tests/test_result.py` (no tension → NaN/None, tie, absent columns, "none"); `tests/profile/test_movement_profile.py` (case A's `governing()` = hand table row 1; AC 2 equality and views). AC 1, 2.
+
+### 2. `M1 (c): add gs.sweep`
+- `src/garisenda/_sweep.py`: `sweep(run, *, vary, mode=None)` (decisions 4–8): argument checks before any run; `itertools.product` / `zip`; per run, the varied-input check against `result.inputs` (convert the given value with `garisenda._units.to_si` into the record's unit, 1e-12 relative) and the fixed-input check against the first successful run; error rows; all-failed raises the first; table columns and `attrs` (`units`, `run`, `mode`, `vary`, `fixed_inputs` in `to_dict()`'s input form; reuse that conversion from `_result.py` as a helper rather than duplicating it).
+- `src/garisenda/__init__.py`: export `sweep`.
+- Tests: `tests/test_sweep.py`: grid and paired against the hand table (AC 3, 4); each row equals a direct call (AC 5); errors (AC 6), including a utility-depth sweep through the bore.
+
+### 3. `M1 (c): add the plot framework and microstrain`
+- `pyproject.toml`, `uv.lock`: `matplotlib>=3.8` (hangtu's floor); the pyparsing deprecation filters hangtu needs on that floor, only if the `lowest` run shows them.
+- `src/garisenda/_units.py`: define `microstrain = 1e-6 = µε` (decision 15).
+- `src/garisenda/plot/__init__.py`, `plot/_style.py` (house style as an `rc_context`, no global state), `plot/_display.py` (resolve `display_units` per kind with defaults m, mm, microstrain, 1/km; unknown kind or wrong dimension raises; `Quantity (unit)` labels; a conversion factor from the SI column unit).
+- `tests/conftest.py`: Agg backend. Tests `tests/plot/test_display.py`: AC 10.
+
+### 4. `M1 (c): add the profile figure`
+- `src/garisenda/plot/_profile.py`: `profile(result, *, axs=None, display_units=None) -> (fig, axs)` (decisions 9–11): four panels on shared x (settlement y down; along and lateral; strain along; vertical and lateral curvature), governing marks from `governing()`, critical ticks, verdict shading with the flag reasons under the figure, top offset axis for a built utility.
+- Tests `tests/plot/test_profile.py`: AC 7, AC 9 (rcParams unchanged), `axs=` creates no figure.
+
+### 5. `M1 (c): add the cross-section figure`
+- `src/garisenda/plot/_cross_section.py`: `cross_section(result, *, axs=None, display_units=None) -> (fig, axs)` (decisions 12–13): trough panel from `result.source.evaluate` at the surface on 401 offsets over the wider of the utility's offsets and ±3i, horizontal movement toward the axis, stations from `values`, ±i marked; section panel to scale with bore, axis, utility band, ground line; raises for an unbuilt utility or a source without a `tunnel`.
+- Tests `tests/plot/test_cross_section.py`: AC 8, AC 9.
+
+**Pause after step 5:** save PNGs of both figures for cases A, C and D (where they apply) to the scratchpad and show them to the user. Changes they ask for are made here, with the spec's decisions 10–12 updated in the same commit, before step 6.
+
+### 6. `M1 (c): set up the docs site`
+- `pyproject.toml`, `uv.lock`: `docs` group, `zensical==0.0.70`, `mkdocstrings-python>=2.0.9`.
+- `zensical.toml`, `docs/prepare_site.py` (hangtu's `run_example`/`run_examples`, no logo), `docs/site/index.md`, `install.md`, `docs/site/reference/*.md` (`gs`, `gs.sources`, `gs.utilities`, `gs.plot`), `.gitignore` for `build/` and `docs/site/img/generated/`.
+- `.github/workflows/ci.yml`: a `docs` job as hangtu's (strict build, griffe warnings fail); `.github/workflows/docs.yml`: publish to Pages from `main`.
+- Tests `tests/docs/test_site.py`: every example runs clean in an empty folder; every name in the `__all__` of `garisenda`, `.sources`, `.utilities`, `.plot` (less `__version__`, `units`) has a `::: ` entry. AC 12 (part).
+
+### 7. `M1 (c): write M1's user docs`
+- `docs/site/getting-started.md`, `conventions.md`, `figures/profile.md`, `figures/cross-section.md`, `guides/sweep.md`, each with its example in `docs/site/examples/`; nav in `zensical.toml`. Invented geometry only; the getting-started page states the trough's sources are unverified (TODO #2) and explains each Phase 1 assumption on the result.
+- `README.md`: link to the site.
+- Verify: `uv run --group docs python docs/prepare_site.py && uv run --group docs zensical build --clean --strict`. AC 12.
+
+### 8. `M1 (c): close out`
+- `lowest` run locally (`UV_RESOLUTION=lowest-direct`, scratch env), then `git checkout uv.lock`.
+- `docs/img/m1c/*.png`: the figures of decision 16, looked at (AC 11).
+- Work file `## Result`: each AC with evidence.
+- `SPEC.md`: settled items decided (§5.1 governing, §5.3 sweep, §9 contract and figures if the user approved them, §12.1 matplotlib, §12.3 docs site); §12.4 M1 done.
+- `CLAUDE.md`: next is M2; the docs commands (`uv sync --group docs`, prepare and build); `docs/site/` is published and the rest of `docs/` internal; any recurring lesson.
+
+### Verification
+- Each step: the CI command from `CLAUDE.md`.
+- Step 5: the figures looked at by the user and by me.
+- Steps 6–7: the docs build with `--strict` locally; CI's docs job on push.
+- Step 8: the floors run; every AC reported met or not in `## Result`.
