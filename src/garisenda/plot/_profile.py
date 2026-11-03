@@ -272,9 +272,14 @@ def _offset_axis(
 
 
 def flag_notes(
-    ax: Axes, result: Result, distance: FloatArray, display: DisplayUnits
+    ax: Axes,
+    result: Result,
+    distance: FloatArray,
+    display: DisplayUnits,
+    *,
+    below: float = 30.0,
 ) -> None:
-    """Print each flag's reason and distance range under the figure."""
+    """Print each flag's reason and distance range, `below` points under `ax`."""
     lines = []
     unit = display.symbol("length")
     for flag in result.warnings:
@@ -292,7 +297,7 @@ def flag_notes(
         "\n".join(lines),
         (0.0, 0.0),
         xycoords="axes fraction",
-        xytext=(0, -30),
+        xytext=(0, -below),
         textcoords="offset points",
         va="top",
         ha="left",
