@@ -171,3 +171,132 @@ Tolerance 1e-6 relative for values carried to 8 figures, as in M1; sums checked 
 13. **Sweep:** varying `"south.volume_loss"` over [1.0, 1.5, 2.0] % calls `run(south_volume_loss=...)`, and the table's column is `"south.volume_loss"` with 0.01, 0.015, 0.02; a run that changes north's volume loss instead raises the existing error; `"a.b-c"` and `{"a.b", "a_b"}` raise `TypeError`; M1's sweep tests pass unchanged.
 14. **Cross-section:** case A draws `tunnel:north`, `tunnel:south`, both axes and both dashed troughs, and the combined trough's settlement at o = 7.5 is case A's; the crossing case draws one bore and the note naming the other; a lone trough's figure is unchanged (M1's figure tests pass). Checked by eye at close-out.
 15. **Docs:** the guide page and its example build with `--strict`; every new public name has a reference docstring (equations, inputs and outputs with units, assumptions); mypy strict and the `lowest` job pass.
+
+## Plan
+
+Eleven build commits, each with lint, format, mypy strict and pytest green. Opus does 1–6, Sonnet does 7–10, and Opus does 11 (figures by eye, then close-out), so a new session starts before 7 and before 11.
+
+### 1. `M2 (a): add the third derivative and feature_length to sources` (Opus)
+- `src/garisenda/sources/_movement.py`: `Movement.third_derivative`, shape (N, 3, 3, 3, 3), with its shape checked in `__post_init__` like the other arrays. `Source.feature_length(*, start, end) -> float` added to the protocol.
+- `src/garisenda/sources/_transverse.py`: the third derivative (d³/do³)·g⊗g⊗g, using spec decision 6's formulas for S and u_n, written into the `evaluate` docstring. `feature_length` returns i.
+- Tests in `tests/sources/test_transverse.py` and `test_transverse_properties.py`:
+  - case D's values at o = 0, 10, 20;
+  - hypothesis: the third derivative matches central differences of the Hessian, is symmetric in its last three indices, and has every depth component exactly zero;
+  - `Movement` raises on a `third_derivative` of the wrong shape;
+  - `feature_length` returns i (AC 3, the trough half of AC 4).
+
+### 2. `M2 (a): move segment reading and directions into sources` (Opus)
+A refactor with no change in behavior.
+- New `src/garisenda/sources/_segment.py`:
+  - `read_segment(start, end) -> (start, end, length)`, which records, checks finiteness and refuses zero length; taken from the trough's `critical_distances`;
+  - `directions(start, end) -> (a, v, l)`, which raises for a vertical segment; taken from `movement_profile`.
+- `_transverse.py` and `profile/_movement_profile.py` use them. The profile keeps its utility-specific error message by catching and re-wording.
+- Tests: the existing suite passes unchanged.
+
+### 3. `M2 (a): find critical distances by root-finding` (Opus)
+- New `src/garisenda/sources/_critical.py`: `find_critical_distances(source, *, start, end, sampling, tolerance) -> ndarray`, a private helper implementing spec decisions 8–10:
+  - **Functions:** the eight functions of s, built from the gradient, Hessian and third derivative contracted with a, v, l.
+  - **Sampling:** h = L / ceil(L / (sampling · feature_length)).
+  - **Bracketing:** sign changes, with an exact zero counted as a sign of its own, outside the 1e-10 negligible band (per order, over the segment and all three components).
+  - **Refining:** vectorized bisection, with every bracket's midpoints evaluated in one `evaluate` call per iteration, until each bracket is shorter than `tolerance`.
+  - **Returned:** the midpoints, sorted, clipped to [0, L], with any within `tolerance` of each other merged.
+  - The docstring states what it can miss (decision 10).
+- 🟡 **Not in the spec, proposed here:** if `evaluate` raises at a sample (the utility passes through a bore), the helper re-raises the same type with the sample indices replaced by their distances along the segment ("at distances 12.5, 13.75 m along the segment"), and leaves no bracketed index list in the message. The profile then prefixes the utility's name. So AC 9's "the profile's message names the distances" holds through the samples, which come before any station is evaluated.
+- Tests in new `tests/sources/test_critical.py`:
+  - AC 6: hypothesis over lone troughs on level segments at any angle and position; the helper's distances equal `trough.critical_distances` to 1e-8 m;
+  - a segment parallel to the tunnel returns none;
+  - the bore message gives distances.
+
+### 4. `M2 (a): build a tunnel parallel to another` (Opus)
+- `src/garisenda/sources/_tunnel.py`: `IdealizedTunnel.parallel(*, offset, diameter, axis_depth=None, axis_elevation=None, ground_elevation=None)`, following spec decision 11:
+  - It reuses the constructor with `reference_point = p₀ + offset·n`, then replaces the records of `reference_point`, `azimuth` and `reference_station` with given-as `"parallel to a tunnel at offset <o> m"`.
+  - It adds an `offset` record (geometry).
+- Tests in `tests/sources/test_tunnel.py` (AC 12):
+  - azimuth 30°, reference station 1000: the new reference point is p₀ + offset·n;
+  - a point's station is the same from both tunnels, and its offsets differ by `offset`;
+  - missing diameter or axis raises;
+  - the records match decision 11;
+  - offset 0 is allowed.
+
+### 5. `M2 (a): add gs.superpose` (Opus)
+- `src/garisenda/sources/_movement.py`: `Flag.source: str = ""`.
+- New `src/garisenda/sources/_superposition.py`:
+  - `superpose(**sources)` checks its arguments as decision 1 says:
+    - at least two sources;
+    - each name an identifier;
+    - each value has the six source attributes, or `TypeError`.
+  - It checks inputs for consistency as decision 4 says:
+    - `ground_elevation` records at any depth of nesting differ by no more than 1 µm;
+    - no two bores overlap. Tunnels are found through `.tunnel` and through nested `.sources`; the parallel test is |sin Δθ| ≤ 1e-9; touching bores are allowed.
+  - `Superposition`, a frozen dataclass with `sources` held as a `MappingProxyType`:
+    - `evaluate` sums the four arrays, takes the worst verdict, re-tags flags with `source`, prefixing names for nesting, and re-raises errors as `"<name>: …"`;
+    - `critical_distances` calls `find_critical_distances` with the two constants;
+    - `feature_length` returns the least of its sources';
+    - `inputs`, `method` and `assumptions` follow decision 3, with identical records kept once.
+- `src/garisenda/sources/__init__.py` exports `Superposition`. `src/garisenda/__init__.py` exports `superpose`.
+- Tests in new `tests/sources/test_superposition.py`:
+  - AC 1: cases A, B and C through `movement_profile` (spacing 2.5 m, offsets −30 to 60 m), `vertical` and `along` at the offsets given, to 1e-6. South is built with `parallel`.
+  - AC 2 (hypothesis, in `test_superposition_properties.py`): two or three troughs on parallel and crossing tunnels; all four arrays equal the sum to 1e-12 relative; the verdict is the worst.
+  - AC 4, the superposition half: nested superpositions included.
+  - AC 8: case C's records.
+  - AC 9, the source part: two `outside` flags with `source` "north" and "south"; a point in south's bore raises `"south: …"`; through the profile, the message names the distances.
+  - AC 10: every raise and non-raise of case E.
+  - AC 11: one source, a positional argument, a non-source and a dotted name raise; nested names read `outer.north.volume_loss`.
+
+### 6. `M2 (a): test critical distances against dense sampling` (Opus)
+Tests only. If a test fails, the fix goes in this commit with the cause stated.
+- AC 5: case B's distances include 0.36756261, 15 and 29.632437 m, each a zero of vertical slope to 1e-12 of its scale, and the profile marks those stations critical.
+- AC 7: cases A, B, C and a 45° crossing:
+  - at h/20, every sign change outside the negligible band has a returned distance between its two samples;
+  - every returned distance is a zero of one of the eight functions, below 1e-9 of that function's scale.
+
+### 7. `M2 (a): take dotted names in gs.sweep` (Sonnet)
+- `src/garisenda/_sweep.py`:
+  - `_check_vary` maps each record name to a keyword with dots replaced by underscores, and raises `TypeError` if the result isn't an identifier or two keys collide;
+  - `run` is called with the keywords;
+  - `_check_varied`, `_check_fixed` and `_table` keep the record names;
+  - the docstring gets a several-tunnels example.
+- Tests in `tests/test_sweep.py` (AC 13):
+  - `"south.volume_loss"` over 1.0, 1.5 and 2.0 % calls `run(south_volume_loss=…)`, and the column holds 0.01, 0.015, 0.02;
+  - a run that changes north's volume loss instead raises the existing error;
+  - `"a.b-c"` and `{"a.b", "a_b"}` raise;
+  - M1's sweep tests pass unchanged.
+
+### 8. `M2 (a): show each flag's source` (Sonnet)
+- `src/garisenda/_result.py`: `to_dict()` adds `"source"` to each warning, and the summary prints `"<source>: <reason>"` when it is set.
+- `src/garisenda/plot/_profile.py`: `flag_notes` does the same.
+- Tests in `tests/test_result.py` and `tests/plot/test_profile.py` (AC 9, the display part): a lone source's output is unchanged.
+
+### 9. `M2 (a): draw several tunnels in the cross-section` (Sonnet)
+- `src/garisenda/plot/_cross_section.py`:
+  - With a `Superposition`, tunnels are collected through `sources`, nested ones included, with offsets from `built.tunnel`.
+  - Each parallel tunnel is drawn in `_section` at its offset, labeled, with z0 and C dimensioned, and its axis dash-dot on every panel (`tunnel:<name>`, `axis:<name>`).
+  - Each source's trough is drawn thin and dashed (`trough:<name>:vertical|horizontal`), with the combined trough labeled "Combined".
+  - ±i marks appear only with one tunnel.
+  - Reach: each drawn tunnel's offset ± 3i, and the utility's offsets.
+  - A tunnel that isn't parallel gets a `note` naming it.
+  - The x label becomes "Offset from reference tunnel axis".
+  - A lone trough draws exactly as now. The docstring is updated.
+- Tests in `tests/plot/test_cross_section.py` (AC 14):
+  - case A's gids, and the combined settlement at o = 7.5;
+  - a crossing draws one bore and the note;
+  - M1's figure tests pass unchanged; `rcParams` are unchanged.
+
+### 10. `M2 (a): write the several-tunnels guide` (Sonnet)
+- New `docs/site/guides/several-tunnels.md` and `docs/site/examples/several-tunnels.py`: twins built with `parallel`, the profile, the cross-section, a sweep of `south.volume_loss`, and what superposition assumes.
+- `zensical.toml` nav.
+- `docs/site/reference/garisenda.md` and `sources.md`: entries for `superpose`, `Superposition`, `IdealizedTunnel.parallel`, `Movement.third_derivative`, `Source.feature_length` and `Flag.source`.
+- Tests: `tests/docs/test_site.py` picks up the example. The docs build passes with `--strict` and no `griffe:` warnings (AC 15).
+
+### 11. `M2 (a): check figures and close out` (Opus)
+- Check the figures in `docs/site/img/generated/` by eye against spec decision 14 (the rest of AC 14), and fix anything found.
+- Run every check:
+  - the CI line;
+  - Python 3.13 and 3.14;
+  - the `lowest-direct` floors (numpy 1.26: no numpy 2-only functions), then `git checkout uv.lock`.
+- Close-out:
+  - SPEC §12.4 marks M2 (a) done with its date;
+  - `CLAUDE.md`'s status and "Next" sentence point to M2 (b);
+  - any recurring mistake goes into the `CLAUDE.md` conventions;
+  - every new public calculation has a complete docstring;
+  - report each of the 15 ACs as met or not, with its evidence.
