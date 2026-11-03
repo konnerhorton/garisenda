@@ -166,9 +166,12 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
             f"spacing {spacing_m:g} m is too fine for {where}, {length:g} m long: "
             f"it gives more than {MAXIMUM_STATIONS:,} stations."
         )
-    critical = np.asarray(
-        source.critical_distances(start=start, end=end), dtype=np.float64
-    )
+    try:
+        critical = np.asarray(
+            source.critical_distances(start=start, end=end), dtype=np.float64
+        )
+    except ValueError as error:
+        raise ValueError(f"{where}: {error}") from error
     distance, is_critical = _stations(length, spacing_m, critical)
 
     points = start + distance[:, None] * along_direction
