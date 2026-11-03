@@ -5,4 +5,6 @@ Every figure takes a result and returns ``(fig, ax)`` for one axes or
 draws from the result's values and never recalculates them.
 """
 
-__all__: list[str] = []
+from garisenda.plot._profile import profile
+
+__all__ = ["profile"]
