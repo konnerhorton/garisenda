@@ -284,3 +284,40 @@ def test_critical_distances_bad_segment_raises():
         trough().critical_distances(start=(1, 1, 1), end=(1, 1, 1))
     with pytest.raises(ValueError, match="three finite values"):
         trough().critical_distances(start=(1, 1), end=(2, 1, 1))
+
+
+# M2 (a): the third derivative and feature length (spec decisions 6-7, case D).
+# o, d3S/do3, d3u_n/do3.
+THIRD = [
+    (0.0, 0.0, 1.6919741e-5),
+    (10.0, 1.3683122e-5, -6.8415611e-6),
+    (20.0, -3.0531172e-6, -3.8163965e-6),
+]
+
+
+@pytest.mark.parametrize("row", THIRD, ids=lambda row: f"o={row[0]}")
+def test_third_derivative_golden_values(row):
+    o, d3_s, d3_n = row
+    movement = trough().evaluate(x=o, y=0.0, depth=0.0)
+    close(movement.third_derivative[0, 2, 0, 0, 0], d3_s, 1e-5)
+    close(movement.third_derivative[0, 0, 0, 0, 0], d3_n, 1e-5)
+    assert movement.third_derivative.shape == (1, 3, 3, 3, 3)
+
+
+def test_movement_refuses_a_misshapen_third_derivative():
+    movement = trough().evaluate(x=[0.0, 5.0], y=[0.0, 0.0], depth=[0.0, 0.0])
+    with pytest.raises(ValueError, match=r"third_derivative has shape"):
+        gs.sources.Movement(
+            movement.displacement,
+            movement.gradient,
+            movement.hessian,
+            movement.third_derivative[:, :, :, :, :2],
+            movement.verdict,
+            movement.flags,
+        )
+
+
+def test_feature_length_is_the_trough_width():
+    source = trough(trough_width_parameter=0.4)
+    assert source.feature_length(start=(-20, 0, 0), end=(20, 0, 0)) == 8.0
+    assert source.feature_length(start=(5, -10, 0), end=(5, 30, 2)) == 8.0

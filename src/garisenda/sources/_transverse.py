@@ -194,13 +194,15 @@ class TransverseSurfaceTrough:
         """Return the movement and its exact derivatives at points.
 
         With g = (n_x, n_y, 0) the gradient of the offset o, the derivatives
-        are exact: du/dx_j = (du/do) g_j and d2u/dx_j dx_k = (d2u/do2) g_j g_k,
-        where
+        are exact: du/dx_j = (du/do) g_j, d2u/dx_j dx_k = (d2u/do2) g_j g_k and
+        d3u/dx_j dx_k dx_l = (d3u/do3) g_j g_k g_l, where, with r = o / i,
 
         - dS/do = -(o / i^2) S
-        - d2S/do2 = (o^2 / i^2 - 1) S / i^2
-        - du_n/do = -(S / z0)(1 - o^2 / i^2)
-        - d2u_n/do2 = -(S / z0)(o / i^2)(o^2 / i^2 - 3)
+        - d2S/do2 = (r^2 - 1) S / i^2
+        - d3S/do3 = (o / i^4) S (3 - r^2)
+        - du_n/do = -(S / z0)(1 - r^2)
+        - d2u_n/do2 = -(S / z0)(o / i^2)(r^2 - 3)
+        - d3u_n/do3 = (S / (z0 i^2))(r^4 - 6 r^2 + 3)
 
         Every derivative with respect to depth is exactly zero, and with respect
         to station zero to rounding.
@@ -216,9 +218,10 @@ class TransverseSurfaceTrough:
         Returns
         -------
         Movement
-            Displacement (u_x, u_y, settlement) in m, its gradient and Hessian,
-            a verdict per point and the flags. A point deeper than 1 mm gets the
-            surface values at its plan position and is flagged ``"outside"``.
+            Displacement (u_x, u_y, settlement) in m, its gradient, Hessian and
+            third derivative, a verdict per point and the flags. A point deeper
+            than 1 mm gets the surface values at its plan position and is
+            flagged ``"outside"``.
 
         Raises
         ------
@@ -328,6 +331,14 @@ class TransverseSurfaceTrough:
         inside = (distances >= 0) & (distances <= length)
         return np.sort(distances[inside])
 
+    def feature_length(self, *, start: object, end: object) -> float:
+        """Return the trough width i, in m, whatever the segment.
+
+        The trough changes over a length of order i everywhere: its peaks and
+        zeros are at 0, +-i and +-sqrt(3) i in offset.
+        """
+        return self.trough_width
+
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         i, z0 = self.trough_width, self.tunnel.axis_depth
         ratio = o**2 / i**2
@@ -337,6 +348,10 @@ class TransverseSurfaceTrough:
         second = (
             (ratio - 1) * settlement / i**2,
             -(settlement / z0) * (o / i**2) * (ratio - 3),
+        )
+        third = (
+            (o / i**4) * settlement * (3 - ratio),
+            settlement / (z0 * i**2) * (ratio**2 - 6 * ratio + 3),
         )
 
         n_x, n_y = self.tunnel.normal
@@ -355,6 +370,10 @@ class TransverseSurfaceTrough:
         displacement = components(normal, settlement)
         gradient = components(first[1], first[0])[:, :, None] * g
         hessian = components(second[1], second[0])[:, :, None, None] * np.outer(g, g)
+        # g_j g_k g_l, multiplied in sorted index order so it is exactly symmetric.
+        index = np.sort(np.indices((3, 3, 3)).reshape(3, -1), axis=0)
+        g3 = (g[index[0]] * g[index[1]] * g[index[2]]).reshape(3, 3, 3)
+        third_derivative = components(third[1], third[0])[:, :, None, None, None] * g3
 
         deep = depth > self.surface_tolerance
         verdict = np.where(deep, "outside", "within")
@@ -369,4 +388,6 @@ class TransverseSurfaceTrough:
                     tuple(np.flatnonzero(deep).tolist()),
                 ),
             )
-        return Movement(displacement, gradient, hessian, verdict, flags)
+        return Movement(
+            displacement, gradient, hessian, third_derivative, verdict, flags
+        )

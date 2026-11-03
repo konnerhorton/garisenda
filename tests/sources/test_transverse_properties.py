@@ -52,6 +52,7 @@ def test_derivatives_match_finite_differences(source, station, offset):
     base = np.array([x, y, depth])
     gradient_scale = source.maximum_settlement / source.trough_width
     hessian_scale = gradient_scale / source.trough_width
+    third_scale = hessian_scale / source.trough_width
     movement = source.evaluate(x=x, y=y, depth=depth)
     for j in range(3):
         shift = np.zeros(3)
@@ -74,16 +75,28 @@ def test_derivatives_match_finite_differences(source, station, offset):
             rtol=0,
             atol=1e-6 * hessian_scale,
         )
+        np.testing.assert_allclose(
+            (ahead.hessian[0] - behind.hessian[0]) / (2 * step),
+            movement.third_derivative[0, :, :, :, j],
+            rtol=0,
+            atol=1e-6 * third_scale,
+        )
 
 
 @given(troughs(), stations, offsets)
-def test_hessian_is_symmetric_and_depth_derivatives_are_zero(source, station, offset):
+def test_derivatives_are_symmetric_and_zero_in_depth(source, station, offset):
     x, y = point(source, station, offset)
     movement = source.evaluate(x=x, y=y, depth=0.0)
     np.testing.assert_array_equal(movement.hessian, np.swapaxes(movement.hessian, 2, 3))
     assert np.all(movement.gradient[0, :, 2] == 0)
     assert np.all(movement.hessian[0, :, 2, :] == 0)
     assert np.all(movement.hessian[0, :, :, 2] == 0)
+    third = movement.third_derivative[0]
+    for axes in [(1, 2), (2, 3), (1, 3)]:
+        np.testing.assert_array_equal(third, np.swapaxes(third, *axes))
+    assert np.all(third[:, 2, :, :] == 0)
+    assert np.all(third[:, :, 2, :] == 0)
+    assert np.all(third[:, :, :, 2] == 0)
     # Along the station: zero to rounding.
     tangent = np.array([*source.tunnel.tangent, 0.0])
     scale = source.maximum_settlement / source.trough_width

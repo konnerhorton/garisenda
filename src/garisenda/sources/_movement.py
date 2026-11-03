@@ -80,6 +80,10 @@ class Movement:
         ``gradient[n, i, j]`` is du_i/dx_j, dimensionless.
     hessian : numpy.ndarray, shape (N, 3, 3, 3)
         ``hessian[n, i, j, k]`` is d2u_i/dx_j dx_k, in 1/m; symmetric in j, k.
+    third_derivative : numpy.ndarray, shape (N, 3, 3, 3, 3)
+        ``third_derivative[n, i, j, k, l]`` is d3u_i/dx_j dx_k dx_l, in 1/m^2;
+        symmetric in j, k, l. A superposition needs it to find where curvature
+        peaks (SPEC §3).
     verdict : numpy.ndarray of str, shape (N,)
         ``"within"``, ``"marginal"`` or ``"outside"`` for each point.
     flags : tuple of Flag
@@ -89,6 +93,7 @@ class Movement:
     displacement: npt.NDArray[np.float64]
     gradient: npt.NDArray[np.float64]
     hessian: npt.NDArray[np.float64]
+    third_derivative: npt.NDArray[np.float64]
     verdict: npt.NDArray[np.str_]
     flags: tuple[Flag, ...]
 
@@ -99,6 +104,7 @@ class Movement:
             "displacement": (count, 3),
             "gradient": (count, 3, 3),
             "hessian": (count, 3, 3, 3),
+            "third_derivative": (count, 3, 3, 3, 3),
             "verdict": (count,),
         }
         for name, shape in expected.items():
@@ -141,5 +147,14 @@ class Source(Protocol):
         For the straight segment from `start` to `end`, each (x, y, depth) in m,
         the distances from `start` in m, sorted and within [0, L], so a profile
         that puts stations there never misses a peak between them.
+        """
+        ...
+
+    def feature_length(self, *, start: object, end: object) -> float:
+        """Return the shortest length over which the field changes on a segment.
+
+        For the straight segment from `start` to `end`, each (x, y, depth) in m,
+        a length in m that a sampling interval can be tied to, such as a
+        trough's width i.
         """
         ...
