@@ -9,6 +9,8 @@ import pint
 units = pint.UnitRegistry()
 """The registry every quantity given to or returned by garisenda belongs to."""
 
+units.define("microstrain = 1e-6 = µε")
+
 PlainNumber = Literal["read as SI", "refuse"]
 """What a plain number means for an input.
 

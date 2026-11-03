@@ -1,0 +1,100 @@
+# The docs site (docs/work/m1c-figures-sweep-docs.md, spec decisions 17-19).
+# Build with:
+#   uv run --group docs python docs/prepare_site.py
+#   uv run --group docs zensical build --clean --strict
+
+[project]
+site_name = "garisenda"
+site_url = "https://konnerhorton.github.io/garisenda/"
+site_description = "Ground movements from tunneling and their effect on utilities and buildings, traceable, with figures for every result"
+repo_url = "https://github.com/konnerhorton/garisenda"
+docs_dir = "docs/site"
+site_dir = "build/site"
+extra_javascript = [
+  "javascripts/mathjax.js",
+  "https://unpkg.com/mathjax@3.2.2/es5/tex-mml-chtml.js",
+]
+nav = [
+  { "Home" = "index.md" },
+  { "Install" = "install.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Conventions" = "conventions.md" },
+  { "Figures" = [
+    "figures/profile.md",
+    "figures/cross-section.md",
+  ] },
+  { "Guides" = [
+    "guides/sweep.md",
+  ] },
+  { "Reference" = [
+    "reference/garisenda.md",
+    "reference/sources.md",
+    "reference/utilities.md",
+    "reference/plot.md",
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.smartsymbols = {}
+pymdownx.snippets.base_path = [
+  "docs/site/examples",
+  "docs/site/img/generated",
+]
+pymdownx.snippets.check_paths = true
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "numpy"
+show_source = false
+show_root_heading = true
+show_signature_annotations = true
+separate_signature = true
+members_order = "source"
+filters = ["!^_"]

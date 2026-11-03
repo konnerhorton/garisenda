@@ -1,14 +1,18 @@
 """The one result shape every analysis returns (SPEC §5.1)."""
 
 import math
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from garisenda._inputs import InputRecord
 from garisenda.sources._movement import Flag, MethodRecord, Verdict
+
+if TYPE_CHECKING:
+    from garisenda.sources._movement import Source
+    from garisenda.utilities._utility import Utility
 
 CHECK_COLUMNS = (
     "check",
@@ -20,12 +24,32 @@ CHECK_COLUMNS = (
 )
 """The columns of `Result.checks`, empty until the utility checks (M3)."""
 
-# The extremes the summary reports, for the columns a result has: the column,
-# its label, and the labels of its largest and smallest values (None to skip).
-EXTREMES: tuple[tuple[str, str, str | None, str | None], ...] = (
-    ("vertical", "settlement", "largest", None),
-    ("along_strain", "strain along", "tension", "compression"),
-    ("vertical_curvature", "vertical curvature", "hogging", "sagging"),
+GOVERNING_COLUMNS = ("name", "column", "value", "unit", "distance", "verdict")
+"""The columns of `Result.governing()`."""
+
+# The governing values, in order: the row's name, the column it reads, and the
+# sign of the extreme (+1 the largest positive, -1 the most negative).
+EXTREMES: tuple[tuple[str, str, int], ...] = (
+    ("largest_settlement", "vertical", 1),
+    ("largest_tension", "along_strain", 1),
+    ("largest_compression", "along_strain", -1),
+    ("largest_hogging", "vertical_curvature", 1),
+    ("largest_sagging", "vertical_curvature", -1),
+)
+
+# How the summary prints them: per column, its label and the rows' short names.
+SUMMARY: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    ("vertical", "settlement", (("largest_settlement", "largest"),)),
+    (
+        "along_strain",
+        "strain along",
+        (("largest_tension", "tension"), ("largest_compression", "compression")),
+    ),
+    (
+        "vertical_curvature",
+        "vertical curvature",
+        (("largest_hogging", "hogging"), ("largest_sagging", "sagging")),
+    ),
 )
 
 
@@ -65,6 +89,11 @@ class Result:
         The worst verdict over the stations and the flags (SPEC §5.2).
     warnings : tuple of Flag
         Everything flagged, with ``points`` as row positions in `values`.
+    source : Source or None
+        The source the analysis evaluated, kept so a figure can draw the field
+        beyond the asset (SPEC §9). Not part of the views or of equality.
+    asset : Utility or None
+        The asset it was run on, kept for the same reason.
     """
 
     analysis: str
@@ -76,6 +105,58 @@ class Result:
     inputs: tuple[InputRecord, ...]
     validity: Verdict
     warnings: tuple[Flag, ...]
+    source: "Source | None" = field(default=None, repr=False, compare=False)
+    asset: "Utility | None" = field(default=None, repr=False, compare=False)
+
+    def governing(self) -> pd.DataFrame:
+        """Return the governing values: the extremes of `values`, never recalculated.
+
+        One row per extreme whose column the result has, in this order:
+
+        - ``largest_settlement``: the largest positive ``vertical``;
+        - ``largest_tension``: the largest positive ``along_strain``;
+        - ``largest_compression``: the most negative ``along_strain``;
+        - ``largest_hogging``: the largest positive ``vertical_curvature``;
+        - ``largest_sagging``: the most negative ``vertical_curvature``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Columns ``name``, ``column``, ``value`` (signed, as in `values`),
+            ``unit``, ``distance`` (m, where it occurs) and ``verdict`` (the
+            station's, or None if `values` has no verdicts). If no station has
+            a value of the extreme's sign, ``value`` and ``distance`` are NaN
+            and ``verdict`` None: nothing is there to report, and nothing is
+            filled in (SPEC §10). Equal extremes, within 1e-9 of the
+            extreme's size, go to the smallest distance.
+        """
+        values = self.values
+        units: dict[str, str] = values.attrs.get("units", {})
+        rows = []
+        for name, column, sign in EXTREMES:
+            if column not in values:
+                continue
+            row: dict[str, Any] = {
+                "name": name,
+                "column": column,
+                "value": math.nan,
+                "unit": units.get(column, ""),
+                "distance": math.nan,
+                "verdict": None,
+            }
+            signed = sign * values[column].to_numpy(dtype=np.float64)
+            found = np.isfinite(signed) & (signed > 0)
+            if found.any():
+                extreme = float(np.max(signed[found]))
+                tied = np.flatnonzero(found & (signed >= extreme * (1 - 1e-9)))
+                index = _first_by_distance(values, tied)
+                row["value"] = float(values[column].iloc[index])
+                if "distance" in values:
+                    row["distance"] = float(values["distance"].iloc[index])
+                if "verdict" in values:
+                    row["verdict"] = str(values["verdict"].iloc[index])
+            rows.append(row)
+        return pd.DataFrame(rows, columns=list(GOVERNING_COLUMNS))
 
     def to_frame(self) -> pd.DataFrame:
         """Return a copy of `values`, with its units in ``attrs["units"]``."""
@@ -112,17 +193,7 @@ class Result:
                 for record in self.method
             ],
             "assumptions": list(self.assumptions),
-            "inputs": [
-                {
-                    "name": entry.name,
-                    "magnitude": _plain(np.asarray(entry.value.magnitude).tolist()),
-                    "unit": f"{entry.value.units:~}" or "dimensionless",
-                    "kind": entry.kind,
-                    "given_as": entry.given_as,
-                    "source": entry.source,
-                }
-                for entry in self.inputs
-            ],
+            "inputs": [input_dict(entry) for entry in self.inputs],
             "validity": self.validity,
             "warnings": [
                 {
@@ -138,26 +209,27 @@ class Result:
     def __repr__(self) -> str:
         """Return a short text summary: validity, warnings and the extremes."""
         values = self.values
-        units: dict[str, str] = values.attrs.get("units", {})
         lines = [
             f"{self.analysis} of {self.subject!r}: {self.validity}, "
             f"{len(values)} stations"
         ]
         distance = values.get("distance")
-        for column, label, high, low in EXTREMES:
-            if column not in values or len(values) == 0:
-                continue
-            data = values[column].to_numpy(dtype=np.float64)
-            if not np.isfinite(data).any():
+        governing = self.governing().set_index("name")
+        for column, label, names in SUMMARY:
+            if column not in values:
                 continue
             parts = []
-            for name, index in ((high, np.nanargmax(data)), (low, np.nanargmin(data))):
-                if name is None:
+            for name, short in names:
+                row = governing.loc[name]
+                if not math.isfinite(row["value"]):
+                    parts.append(f"{short} none")
                     continue
-                where = "" if distance is None else f" at {distance.iloc[index]:.4g} m"
-                parts.append(
-                    f"{name} {data[index]:.5g}{_unit(units.get(column))}{where}"
+                where = (
+                    ""
+                    if not math.isfinite(row["distance"])
+                    else f" at {row['distance']:.4g} m"
                 )
+                parts.append(f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}")
             lines.append(f"  {label}: {'; '.join(parts)}")
         if not self.checks.empty:
             failing = int((~self.checks["passes"].astype(bool)).sum())
@@ -172,6 +244,31 @@ class Result:
                 )
         lines.append(f"  {len(self.assumptions)} assumptions (see .assumptions)")
         return "\n".join(lines)
+
+
+def input_dict(entry: InputRecord) -> dict[str, Any]:
+    """Return an input record as plain JSON types, as `Result.to_dict` gives it."""
+    return {
+        "name": entry.name,
+        "magnitude": _plain(np.asarray(entry.value.magnitude).tolist()),
+        "unit": unit_text(entry),
+        "kind": entry.kind,
+        "given_as": entry.given_as,
+        "source": entry.source,
+    }
+
+
+def unit_text(entry: InputRecord) -> str:
+    """Return an input record's unit as text, ``"dimensionless"`` for none."""
+    return f"{entry.value.units:~}" or "dimensionless"
+
+
+def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
+    """Return the position, of some, with the smallest distance (or the first)."""
+    if "distance" not in values:
+        return int(positions[0])
+    distance = values["distance"].to_numpy(dtype=np.float64)[positions]
+    return int(positions[int(np.argmin(distance))])
 
 
 def _unit(unit: str | None) -> str:

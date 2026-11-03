@@ -1,0 +1,265 @@
+import math
+
+import numpy as np
+import pytest
+
+import garisenda as gs
+
+u = gs.units
+REL = 1e-6  # hand calculation carried to 8 figures (spec, acceptance criteria)
+ROOT3 = math.sqrt(3)
+
+GOVERNING = [
+    "largest_settlement",
+    "largest_tension",
+    "largest_compression",
+    "largest_hogging",
+    "largest_sagging",
+]
+
+# The spec's hand table: (V_L, k) -> settlement, tension, compression, hogging,
+# sagging, and the distance of tension and hogging (the others are at 20 m).
+HAND = {
+    (0.01, 0.5): (
+        1.1279827e-2,
+        2.5168697e-4,
+        -5.6399136e-4,
+        5.0337393e-5,
+        -1.1279827e-4,
+        2.6794919,
+    ),
+    (0.02, 0.5): (
+        2.2559654e-2,
+        5.0337393e-4,
+        -1.1279827e-3,
+        1.0067479e-4,
+        -2.2559654e-4,
+        2.6794919,
+    ),
+    (0.01, 0.4): (
+        1.4099784e-2,
+        3.1460871e-4,
+        -7.0498920e-4,
+        9.8315221e-5,
+        -2.2030913e-4,
+        6.1435935,
+    ),
+    (0.02, 0.4): (
+        2.8199568e-2,
+        6.2921741e-4,
+        -1.4099784e-3,
+        1.9663044e-4,
+        -4.4061825e-4,
+        6.1435935,
+    ),
+}
+
+
+def crossing(volume_loss=1 * u.percent, trough_width_parameter=0.5, depth=0.0):
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    trough = gs.sources.transverse_surface_trough(
+        tunnel,
+        volume_loss=volume_loss,
+        trough_width_parameter=trough_width_parameter,
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="W-1",
+        station=50,
+        start_offset=-20,
+        end_offset=20,
+        depth=depth,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    return gs.movement_profile(utility, trough, spacing=5.0)
+
+
+def check_row(row, volume_loss, k):
+    *values, peak = HAND[(volume_loss, k)]
+    for name, value in zip(GOVERNING, values, strict=True):
+        assert row[name] == pytest.approx(value, rel=REL), name
+    assert row["largest_tension_distance"] == pytest.approx(peak, rel=REL)
+    assert row["largest_hogging_distance"] == pytest.approx(peak, rel=REL)
+    for name in ("largest_settlement", "largest_compression", "largest_sagging"):
+        assert row[f"{name}_distance"] == pytest.approx(20.0, rel=1e-12)
+    assert row["validity"] == "within"
+    assert row["error"] is None
+
+
+# AC 3: grid
+
+
+def test_grid_against_the_hand_table():
+    table = gs.sweep(
+        crossing,
+        vary={
+            "volume_loss": [1, 2] * u.percent,
+            "trough_width_parameter": [0.4, 0.5],
+        },
+        mode="grid",
+    )
+    assert table["run"].tolist() == [0, 1, 2, 3]
+    expected = [(0.01, 0.4), (0.01, 0.5), (0.02, 0.4), (0.02, 0.5)]
+    np.testing.assert_allclose(
+        table[["volume_loss", "trough_width_parameter"]].to_numpy(),
+        expected,
+        rtol=1e-12,
+    )
+    for (_, row), key in zip(table.iterrows(), expected, strict=True):
+        check_row(row, *key)
+    attrs = table.attrs
+    assert attrs["units"]["volume_loss"] == "dimensionless"
+    assert attrs["units"]["largest_settlement"] == "m"
+    assert attrs["units"]["largest_sagging"] == "1/m"
+    assert attrs["units"]["largest_tension_distance"] == "m"
+    assert attrs["run"] == "crossing"
+    assert attrs["mode"] == "grid"
+    assert attrs["vary"] == ["volume_loss", "trough_width_parameter"]
+    fixed = [entry["name"] for entry in attrs["fixed_inputs"]]
+    for name in ("axis_depth", "diameter", "station", "depth", "spacing"):
+        assert name in fixed
+    assert fixed.count("diameter") == 2
+    assert "volume_loss" not in fixed
+    assert "trough_width_parameter" not in fixed
+    assert list(table.columns[-3:]) == ["validity", "warnings", "error"]
+
+
+# AC 4: paired
+
+
+def test_paired_against_the_hand_table():
+    table = gs.sweep(
+        crossing,
+        vary={
+            "volume_loss": [1 * u.percent, 2 * u.percent],
+            "trough_width_parameter": np.array([0.5, 0.4]),
+        },
+        mode="paired",
+    )
+    assert len(table) == 2
+    check_row(table.iloc[0], 0.01, 0.5)
+    check_row(table.iloc[1], 0.02, 0.4)
+    assert table.attrs["mode"] == "paired"
+
+
+def test_one_input_needs_no_mode():
+    table = gs.sweep(crossing, vary={"volume_loss": [1, 2] * u.percent})
+    assert len(table) == 2
+    check_row(table.iloc[1], 0.02, 0.5)
+    assert table.attrs["mode"] is None
+
+
+# AC 5: a sweep row equals a direct call (SPEC §11)
+
+
+def test_each_row_equals_a_direct_call():
+    vary = {
+        "volume_loss": [0.5, 1.5] * u.percent,
+        "trough_width_parameter": [0.35, 0.6],
+    }
+    table = gs.sweep(crossing, vary=vary, mode="grid")
+    for (_, row), (volume_loss, k) in zip(
+        table.iterrows(),
+        [(a, b) for a in vary["volume_loss"] for b in vary["trough_width_parameter"]],
+        strict=True,
+    ):
+        direct = crossing(volume_loss=volume_loss, trough_width_parameter=k)
+        for item in direct.governing().itertuples():
+            assert row[item.name] == item.value
+            assert row[f"{item.name}_distance"] == item.distance
+        assert row["validity"] == direct.validity
+        assert row["warnings"] == len(direct.warnings)
+
+
+# AC 6: errors
+
+
+def test_a_run_through_the_bore_is_recorded():
+    table = gs.sweep(crossing, vary={"depth": [0.0, 20.0, 2.7]})
+    assert table["error"].iloc[0] is None
+    assert table["error"].iloc[1].startswith("ValueError: Utility 'W-1'")
+    assert table["validity"].iloc[1] is None
+    assert np.isnan(table["largest_settlement"].iloc[1])
+    assert table["depth"].tolist() == [0.0, 20.0, 2.7]
+    assert table["validity"].iloc[2] == "outside"
+    assert table["warnings"].iloc[2] == 1
+
+
+def test_every_run_raising_raises_the_first_error():
+    def fails(depth):
+        raise ValueError(f"failed at {depth}")
+
+    with pytest.raises(ValueError, match=r"failed at 1$"):
+        gs.sweep(fails, vary={"depth": [1, 2]})
+
+
+def test_a_varied_input_run_ignores_raises():
+    def ignores(volume_loss):
+        return crossing()
+
+    with pytest.raises(ValueError, match=r"run 1 was given volume_loss=.*pass"):
+        gs.sweep(ignores, vary={"volume_loss": [1, 2] * u.percent})
+
+
+def test_a_misnamed_input_raises():
+    def misnamed(vl):
+        return crossing(volume_loss=vl)
+
+    with pytest.raises(ValueError, match="no input record named vl"):
+        gs.sweep(misnamed, vary={"vl": [1, 2] * u.percent})
+
+
+def test_an_input_outside_vary_that_changes_raises():
+    def drifts(volume_loss):
+        return crossing(volume_loss=volume_loss, trough_width_parameter=volume_loss.m)
+
+    with pytest.raises(ValueError, match="trough_width_parameter isn't in vary"):
+        gs.sweep(drifts, vary={"volume_loss": [1, 2] * u.percent})
+
+
+@pytest.mark.parametrize(
+    ("vary", "mode", "error", "match"),
+    [
+        (
+            {"volume_loss": [1] * u.percent, "trough_width_parameter": [0.5]},
+            None,
+            TypeError,
+            "mode is required with 2",
+        ),
+        ({"volume_loss": [1] * u.percent}, "grid", TypeError, "mode is for two"),
+        (
+            {"volume_loss": [1] * u.percent, "trough_width_parameter": [0.5]},
+            "zip",
+            ValueError,
+            'mode must be "grid"',
+        ),
+        ({"a": [1], "b": [1], "c": [1], "d": [1]}, "grid", TypeError, "one to 3"),
+        ({}, None, TypeError, "one to 3"),
+        ({"volume_loss": []}, None, ValueError, "is empty"),
+        ({"volume_loss": 1 * u.percent}, None, TypeError, "one-dimensional"),
+        (
+            {"volume_loss": [1, 2] * u.percent, "trough_width_parameter": [0.5]},
+            "paired",
+            ValueError,
+            "equal length",
+        ),
+    ],
+)
+def test_bad_arguments_raise_before_any_run(vary, mode, error, match):
+    calls = []
+
+    def counts(**kwargs):
+        calls.append(kwargs)
+        return crossing()
+
+    with pytest.raises(error, match=match):
+        gs.sweep(counts, vary=vary, mode=mode)
+    assert calls == []
+
+
+def test_run_must_return_a_result():
+    with pytest.raises(TypeError, match="returned dict"):
+        gs.sweep(lambda volume_loss: {}, vary={"volume_loss": [1] * u.percent})

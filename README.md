@@ -4,7 +4,9 @@ Ground movements from tunneling and their effect on utilities and buildings: gre
 
 The name is the Garisenda, the leaning tower in Bologna whose lean comes from settlement of its foundations.
 
-> **Status:** in design; nothing is built yet. The plan is in [SPEC.md](SPEC.md).
+> **Status:** pre-alpha. The transverse surface trough, the movement along a utility, its figures and sweeps work; the trough's sources aren't verified yet, so results are for trying the library, not for design. The plan is in [SPEC.md](SPEC.md).
+
+**Docs:** [konnerhorton.github.io/garisenda](https://konnerhorton.github.io/garisenda/), with a [getting-started walkthrough](https://konnerhorton.github.io/garisenda/getting-started/).
 
 ## Install
 
@@ -12,7 +14,7 @@ The name is the Garisenda, the leaning tower in Bologna whose lean comes from se
 pip install garisenda      # or: uv add garisenda
 ```
 
-The release on PyPI is a placeholder for the name; there is nothing to use yet.
+The release on PyPI is a placeholder for the name; install the latest version from GitHub as the [install page](https://konnerhorton.github.io/garisenda/install/) says.
 
 ## License
 
