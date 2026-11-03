@@ -205,3 +205,28 @@ Eight build commits, each with ruff check, ruff format check, mypy and pytest gr
 - Step 5: the figures looked at by the user and by me.
 - Steps 6–7: the docs build with `--strict` locally; CI's docs job on push.
 - Step 8: the floors run; every AC reported met or not in `## Result`.
+
+## Result
+
+Closed 2026-11-03. Every acceptance criterion is met; the evidence is the test that checks it.
+
+| AC | Met | Evidence |
+|---|---|---|
+| 1 `governing()` | Yes | `tests/profile/test_movement_profile.py::test_case_a_governing_values` (hand table row 1, 1e-6); `tests/test_result.py`: NaN and None with no value of a sign, tie to the smaller distance, absent columns, "none" in `repr()` |
+| 2 `source` and `asset` | Yes | `test_result_keeps_its_source_and_asset_outside_the_views` |
+| 3 Sweep, grid | Yes | `tests/test_sweep.py::test_grid_against_the_hand_table` (all four rows, product order, as-used values, units, `fixed_inputs`) |
+| 4 Sweep, paired | Yes | `test_paired_against_the_hand_table` (rows 1 and 4) |
+| 5 Row equals a direct call | Yes | `test_each_row_equals_a_direct_call` (exact equality) |
+| 6 Sweep errors | Yes | `test_a_run_through_the_bore_is_recorded`, `test_every_run_raising_raises_the_first_error`, `test_a_varied_input_run_ignores_raises`, `test_a_misnamed_input_raises`, `test_an_input_outside_vary_that_changes_raises`, `test_bad_arguments_raise_before_any_run` (no run made) |
+| 7 Profile figure | Yes | `tests/plot/test_profile.py`: four axes; lines equal the columns in mm, µε and 1/km, and in m with `display_units`; governing marks; case C shaded 0–40 m with the reason; no offset axis for case D; `axs=` creates no figure |
+| 8 Cross-section figure | Yes | `tests/plot/test_cross_section.py`: three axes (changed at the figure review, decisions 12–13); the trough equals the source at sampled offsets; horizontal positive right; stations from `values`; bore at (0, 20 m), radius 3 m; utility band; a direct utility raises naming the plan figure |
+| 9 No global state | Yes | `test_leaves_no_global_state` in both figure tests, and for `style()` |
+| 10 Display units | Yes | `tests/plot/test_display.py` |
+| 11 Figures by eye | Yes | `docs/img/m1c/` (cases A, C, D; no cross-section for D, which isn't built), reviewed with the user 2026-11-03 |
+| 12 Docs site | Yes | `tests/docs/test_site.py` (six examples run clean; every public name has an entry); `zensical build --clean --strict` passes locally with no `griffe:` warnings |
+| 13 Docstrings | Yes | ruff's numpy docstring rules pass on `src/` |
+| 14 Dependencies | Yes | 204 tests pass on matplotlib 3.8.0, numpy 1.26.0, pandas 2.1.1, pint 0.24.4; mypy strict passes |
+
+**Changed during the build** (each recorded in its commit and above): ties in `governing()` within 1e-9 relative (decision 3); flagged stations ringed on the cross-section (decision 12); horizontal movement positive right in every view, on its own cross-section panel (SPEC §8.1, decisions 12–13); hangtu's pyparsing warning filters, which the floor needs.
+
+**Left for later:** the profile's straight segments and the lateral lines, TODO #11; enabling GitHub Pages in the repository settings, for the author.

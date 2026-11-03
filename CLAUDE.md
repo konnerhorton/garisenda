@@ -1,12 +1,13 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1 (a) (units, input rules, the idealized tunnel, the source interface and the transverse surface trough) and M1 (b) (the station-and-offset builder, the movement profile along a utility, `gs.Result`) are done. Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M1 (c) (the cross-section and profile figures, `gs.sweep`, the docs site and M1's user docs).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0 and M1 are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M2 (movements below the surface, several tunnels).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
 - `docs/work/<id>.md`: intent, spec and plan for each unit of work (the spec-driven-development skill). Files for merged units are history.
 - `docs/drafts/`: notes for later work, including `scope-discussion.md`. Not decisions unless marked "decided".
 - `docs/TODO.md`: research items and pending decisions, referenced as "TODO #n".
+- `docs/site/`: the published docs site (Zensical); each page's example is a script in `docs/site/examples/`. The rest of `docs/` is internal.
 
 ## Commands
 - `uv sync`: install
@@ -15,6 +16,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - `uv run mypy`: type check `src/` in strict mode; a `# type: ignore` names its error code and says why
 - `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`: what CI runs (`.github/workflows/ci.yml`)
 - Oldest allowed dependency versions: `UV_RESOLUTION=lowest-direct UV_PROJECT_ENVIRONMENT=<scratch dir> uv run pytest`, then `git checkout uv.lock`, because it rewrites the lock (commit an intended lock change first, or the checkout discards it)
+- Docs: `uv sync --group docs`, then `uv run --group docs python docs/prepare_site.py && uv run --group docs zensical build --clean --strict` (CI fails on any `griffe:` warning too). Look at the figures in `docs/site/img/generated/` after changing a plot
 - Release (needs approval): set `version` in `pyproject.toml`, `uv lock`, commit and push to `main`; rehearse with `gh workflow run release.yml --ref main` (TestPyPI); then `git tag vX.Y.Z && git push origin vX.Y.Z` (PyPI; the `pypi` environment waits for your approval on GitHub)
 
 ## Conventions
@@ -27,6 +29,8 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).
 - **Code and tests run on the dependency floors** (numpy 1.26): no numpy 2-only functions such as `numpy.trapezoid`. The `lowest` job catches it, the default run doesn't.
 - **Docstrings use ASCII `-` for minus** (ruff RUF002); the specs keep `−`.
+- **Figures draw with `garisenda.plot._style.style()`** (an `rc_context`), never by setting `rcParams`; tests check `rcParams` are unchanged. Panels are found in tests by artist `gid`.
+- **On the pint floor (0.24.4), write units with non-ASCII symbols as strings** (`u.Quantity(1, "µε")`): Python normalizes `µ` in an identifier to Greek mu, which old pint doesn't know.
 
 ## Git and commits
 - Defaults from the spec-driven-development skill: a branch per unit off `main`, merged with `--no-ff`; a commit per loop step; stage files by name; `<scope>: <imperative summary>`.
