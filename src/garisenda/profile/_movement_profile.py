@@ -10,6 +10,7 @@ import pandas as pd
 from garisenda._inputs import judgments, record
 from garisenda._result import Result, empty_checks
 from garisenda.sources._movement import MethodRecord, Source, worst
+from garisenda.sources._segment import directions
 from garisenda.utilities._utility import Utility
 
 MERGE_TOLERANCE = 1e-6
@@ -152,17 +153,13 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     where = f"Utility {utility.utility_id!r}"
     start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
     length = float(np.linalg.norm(end - start))
-    along_direction = (end - start) / length
-    horizontal = math.hypot(along_direction[0], along_direction[1])
-    if horizontal < 1e-12:
+    try:
+        along_direction, vertical_direction, lateral_direction = directions(start, end)
+    except ValueError as error:
         raise ValueError(
             f"{where} is vertical, so it has no lateral direction; a profile "
             "needs a utility that runs some way in plan."
-        )
-    lateral_direction = (
-        np.array([along_direction[1], -along_direction[0], 0.0]) / horizontal
-    )
-    vertical_direction = np.cross(lateral_direction, along_direction)
+        ) from error
 
     if length / spacing_m + 1 > MAXIMUM_STATIONS:
         raise ValueError(

@@ -8,6 +8,7 @@ import numpy.typing as npt
 
 from garisenda._inputs import InputRecord, judgments, record
 from garisenda.sources._movement import Flag, MethodRecord, Movement
+from garisenda.sources._segment import read_segment
 from garisenda.sources._tunnel import IdealizedTunnel
 
 SURFACE_TOLERANCE = 1e-3
@@ -304,22 +305,9 @@ class TransverseSurfaceTrough:
         ValueError
             If an end isn't three finite values, or the segment has zero length.
         """
-        ends = []
-        for name, value in (("start", start), ("end", end)):
-            magnitude, _ = record(
-                name, value, kind="geometry", unit="m", plain_number="read as SI"
-            )
-            point = np.asarray(magnitude, dtype=np.float64)
-            if point.shape != (3,) or not np.isfinite(point).all():
-                raise ValueError(
-                    f"{name} must be three finite values (x, y, depth), not {point}."
-                )
-            ends.append(point)
-        length = float(np.linalg.norm(ends[1] - ends[0]))
-        if length == 0:
-            raise ValueError("The segment has zero length: start and end are equal.")
+        start_m, end_m, length = read_segment(start, end)
         _, offsets = self.tunnel.station_offset(
-            x=np.array([ends[0][0], ends[1][0]]), y=np.array([ends[0][1], ends[1][1]])
+            x=np.array([start_m[0], end_m[0]]), y=np.array([start_m[1], end_m[1]])
         )
         o_start, o_end = (float(value) for value in np.atleast_1d(offsets))
         change = o_end - o_start
