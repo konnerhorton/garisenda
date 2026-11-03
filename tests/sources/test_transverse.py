@@ -229,3 +229,58 @@ def test_method_cites_its_unverified_sources():
     assert "🔬" in method.source
     assert "TODO #2" in method.source
     assert "S(o) = S_max exp(-o^2 / (2 i^2))" in method.equations
+
+
+# M1 (b): critical distances along a segment (spec decision 4, AC 5).
+ROOT3 = math.sqrt(3)
+
+
+def test_critical_distances_perpendicular():
+    # Case A: x from -20 to 20 at y = 50, offset = distance - 20.
+    distances = trough().critical_distances(start=(-20, 50, 0), end=(20, 50, 0))
+    expected = [20 - 10 * ROOT3, 10, 20, 30, 20 + 10 * ROOT3]
+    np.testing.assert_allclose(distances, expected, rtol=1e-12)
+    assert distances[0] == pytest.approx(2.6794919, rel=REL)
+    assert distances[-1] == pytest.approx(37.320508, rel=REL)
+
+
+def test_critical_distances_reversed():
+    distances = trough().critical_distances(start=(20, 50, 0), end=(-20, 50, 0))
+    expected = [20 - 10 * ROOT3, 10, 20, 30, 20 + 10 * ROOT3]
+    np.testing.assert_allclose(distances, expected, rtol=1e-12)
+
+
+def test_critical_distances_at_45_degrees():
+    # Case D: offset = -20 + distance / sqrt(2).
+    distances = trough().critical_distances(start=(-20, -20, 0), end=(20, 20, 0))
+    expected = [3.7893738, 14.142136, 28.284271, 42.426407, 52.779169]
+    np.testing.assert_allclose(distances, expected, rtol=REL)
+
+
+def test_segment_parallel_to_the_tunnel_has_none():
+    distances = trough().critical_distances(start=(5, -10, 0), end=(5, 30, 2))
+    assert distances.shape == (0,)
+
+
+def test_segment_reaching_only_some_crossings():
+    # Offsets 5 to 25: only i and sqrt(3) i are crossed.
+    distances = trough().critical_distances(start=(5, 0, 0), end=(25, 0, 0))
+    np.testing.assert_allclose(distances, [5, 10 * ROOT3 - 5], rtol=1e-12)
+
+
+def test_crossing_at_an_end_is_included():
+    distances = trough().critical_distances(start=(0, 0, 0), end=(10, 0, 0))
+    np.testing.assert_allclose(distances, [0, 10], atol=1e-12)
+
+
+def test_critical_distances_measured_in_3d():
+    # A sloping segment: distance along it is longer than in plan.
+    distances = trough().critical_distances(start=(-20, 0, 0), end=(20, 0, 30))
+    np.testing.assert_allclose(distances[2], 25.0, rtol=1e-12)
+
+
+def test_critical_distances_bad_segment_raises():
+    with pytest.raises(ValueError, match="zero length"):
+        trough().critical_distances(start=(1, 1, 1), end=(1, 1, 1))
+    with pytest.raises(ValueError, match="three finite values"):
+        trough().critical_distances(start=(1, 1), end=(2, 1, 1))

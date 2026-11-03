@@ -273,6 +273,61 @@ class TransverseSurfaceTrough:
 
         return self._movement(o, depth_m)
 
+    def critical_distances(
+        self, *, start: object, end: object
+    ) -> npt.NDArray[np.float64]:
+        """Return where the trough's quantities peak or change sign on a segment.
+
+        These are where the segment's offset crosses 0 (the axis: peak
+        settlement, sagging curvature and compressive strain), +-i (the
+        inflection points: peak slope and horizontal movement, zero curvature
+        and strain) and +-sqrt(3) i (peak hogging curvature and tensile strain).
+        Offset is linear in distance along a straight segment, so each crossing
+        is exact: s = L (c - o_start) / (o_end - o_start) for each offset c.
+
+        Parameters
+        ----------
+        start, end : array of three lengths
+            The segment's ends as (x, y, depth), in m if plain numbers.
+
+        Returns
+        -------
+        numpy.ndarray
+            The distances from `start` in m, sorted, within [0, L]. A segment at
+            constant offset (parallel to the tunnel) has none.
+
+        Raises
+        ------
+        ValueError
+            If an end isn't three finite values, or the segment has zero length.
+        """
+        ends = []
+        for name, value in (("start", start), ("end", end)):
+            magnitude, _ = record(
+                name, value, kind="geometry", unit="m", plain_number="read as SI"
+            )
+            point = np.asarray(magnitude, dtype=np.float64)
+            if point.shape != (3,) or not np.isfinite(point).all():
+                raise ValueError(
+                    f"{name} must be three finite values (x, y, depth), not {point}."
+                )
+            ends.append(point)
+        length = float(np.linalg.norm(ends[1] - ends[0]))
+        if length == 0:
+            raise ValueError("The segment has zero length: start and end are equal.")
+        _, offsets = self.tunnel.station_offset(
+            x=np.array([ends[0][0], ends[1][0]]), y=np.array([ends[0][1], ends[1][1]])
+        )
+        o_start, o_end = (float(value) for value in np.atleast_1d(offsets))
+        change = o_end - o_start
+        if abs(change) <= 1e-12 * length:
+            return np.empty(0)
+        i = self.trough_width
+        targets = np.array([-math.sqrt(3), -1.0, 0.0, 1.0, math.sqrt(3)]) * i
+        distances = length * (targets - o_start) / change
+        inside = (distances >= 0) & (distances <= length)
+        return np.sort(distances[inside])
+
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         i, z0 = self.trough_width, self.tunnel.axis_depth
         ratio = o**2 / i**2

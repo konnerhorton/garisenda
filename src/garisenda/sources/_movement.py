@@ -132,3 +132,14 @@ class Source(Protocol):
     def evaluate(self, *, x: object, y: object, depth: object) -> Movement:
         """Return the movement at points (x, y, depth)."""
         ...
+
+    def critical_distances(
+        self, *, start: object, end: object
+    ) -> npt.NDArray[np.float64]:
+        """Return where the source's quantities peak or change sign on a segment.
+
+        For the straight segment from `start` to `end`, each (x, y, depth) in m,
+        the distances from `start` in m, sorted and within [0, L], so a profile
+        that puts stations there never misses a peak between them.
+        """
+        ...
