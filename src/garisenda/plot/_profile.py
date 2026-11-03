@@ -11,7 +11,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 
-from garisenda._result import Result
+from garisenda._result import Result, flag_text
 from garisenda.plot._display import DisplayUnits, resolve
 from garisenda.plot._style import style
 
@@ -285,7 +285,7 @@ def flag_notes(
                 f" ({len(flag.points)} stations, {covered.min():.4g} to "
                 f"{covered.max():.4g} {unit})"
             )
-        lines.append(f"{flag.verdict.capitalize()}{where}: {flag.reason}")
+        lines.append(f"{flag.verdict.capitalize()}{where}: {flag_text(flag)}")
     if not lines:
         return
     ax.annotate(

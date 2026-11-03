@@ -207,7 +207,10 @@ class Result:
             ``analysis``, ``subject``, ``values`` (a list per column),
             ``units``, ``checks`` (a list of rows), ``method``, ``assumptions``,
             ``inputs`` (each with ``name``, ``magnitude``, ``unit``, ``kind``,
-            ``given_as`` and ``source``), ``validity`` and ``warnings``.
+            ``given_as`` and ``source``), ``validity`` and ``warnings`` (each
+            with ``verdict``, ``reason``, ``limit``, ``points`` and
+            ``source``, the name of the source in a superposition it came
+            from, empty for a lone source).
         """
         return {
             "analysis": self.analysis,
@@ -235,6 +238,7 @@ class Result:
                     "reason": flag.reason,
                     "limit": flag.limit,
                     "points": list(flag.points),
+                    "source": flag.source,
                 }
                 for flag in self.warnings
             ],
@@ -269,7 +273,7 @@ class Result:
             failing = int((~self.checks["passes"].astype(bool)).sum())
             lines.append(f"  checks: {len(self.checks)}, {failing} failing")
         for flag in self.warnings:
-            lines.append(f"  {flag.verdict}: {flag.reason}")
+            lines.append(f"  {flag.verdict}: {flag_text(flag)}")
             if distance is not None and flag.points:
                 covered = distance.iloc[list(flag.points)]
                 lines.append(
@@ -278,6 +282,11 @@ class Result:
                 )
         lines.append(f"  {len(self.assumptions)} assumptions (see .assumptions)")
         return "\n".join(lines)
+
+
+def flag_text(flag: Flag) -> str:
+    """Return a flag's reason, prefixed ``"<source>: "`` when it has one."""
+    return f"{flag.source}: {flag.reason}" if flag.source else flag.reason
 
 
 def input_dict(entry: InputRecord) -> dict[str, Any]:

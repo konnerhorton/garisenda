@@ -182,3 +182,34 @@ def test_equality_compares_tables_by_content():
     assert first != result(values=changed)
     assert first != result(subject="W-2")
     assert first != "W-1"
+
+
+# M2 (a), spec decision 13, AC 9: each flag names the source it came from.
+
+
+def test_a_flag_from_a_lone_source_is_shown_as_before():
+    data = result().to_dict()
+    assert data["warnings"][0]["source"] == ""
+    assert "  outside: Below the surface." in repr(result()).splitlines()
+
+
+def test_a_flag_shows_its_source():
+    flag = Flag("outside", "Below the surface.", "depth", (1, 2), source="twins.north")
+    named = result(warnings=(flag,))
+    assert named.to_dict()["warnings"][0]["source"] == "twins.north"
+    assert "  outside: twins.north: Below the surface." in repr(named).splitlines()
+
+
+def test_twins_below_the_surface_flag_each_tunnel(twins_below_the_surface):
+    twins = twins_below_the_surface
+    assert set(twins.values["verdict"]) == {"outside"}
+    assert [flag.source for flag in twins.warnings] == ["north", "south"]
+    stations = len(twins.values)
+    for flag in twins.warnings:
+        assert flag.verdict == "outside"
+        assert flag.points == tuple(range(stations))
+    data = json.loads(json.dumps(twins.to_dict(), allow_nan=False))
+    assert [warning["source"] for warning in data["warnings"]] == ["north", "south"]
+    text = repr(twins)
+    for flag in twins.warnings:
+        assert f"outside: {flag.source}: {flag.reason}" in text
