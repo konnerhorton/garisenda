@@ -165,3 +165,28 @@ Six build commits, each with ruff check, ruff format check, mypy and pytest gree
 - `docs/work/m1b-movement-profile.md`: `## Result`, each acceptance criterion met or not, with evidence.
 - `SPEC.md`: the 🟡 items this unit settled (§3 critical distances and the profile, §5.1 the result, §8.3 the builder) marked decided.
 - `CLAUDE.md`: the "Next" sentence points to M1 (c); a convention line if one emerged.
+
+## Result
+
+Built in six commits as planned; ruff, ruff format, mypy strict and 139 tests pass, and the tests pass on the dependency floors (numpy 1.26.0, pandas 2.1.1, pint 0.24.4).
+
+| AC | Met | Evidence |
+|---|---|---|
+| 1. Builder geometry | Yes | `tests/utilities/test_utility.py`: `test_case_a_vertices`, `test_rotated_tunnel_vertices_at_station_and_offsets` (station 1025, offsets, a·t < 1e-12) |
+| 2. Builder record | Yes | `test_build_record_inputs_and_assumption` |
+| 3. Elevation reference | Yes | `test_case_c_elevation_reference` (invert and crown give 2.7 m), `test_axis_reference_by_depth`, `test_missing_elevation_reference_names_it`, `test_unknown_elevation_reference_lists_the_three`, `test_level_given_ambiguously_raises` |
+| 4. Utility checks | Yes | `test_three_vertices_raise_naming_m5`, `test_bad_vertices_raise`, `test_bad_diameter_raises`, `test_empty_id_raises` |
+| 5. Stations | Yes | `tests/sources/test_transverse.py` (critical distances, cases A and D, parallel, partial, 3D); `tests/profile/test_movement_profile.py`: `test_case_a_stations` (11 stations, five critical), `test_case_d_critical_distances`, spacing larger than L, missing, ≤ 0 and too fine |
+| 6. Golden values | Yes | Cases A, B and D at 1e-6 relative. Hand calculation B was wrong about `along_strain_gradient`, which changes sign on reversal; corrected in the spec (build step 4) and in SPEC §3 |
+| 7. Exact derivatives | Yes | `tests/profile/test_movement_profile_properties.py`: central differences along utilities at any plan angle, pitch (±30°) and level, to 1e-6 of the scale |
+| 8. Below the surface | Yes | `test_case_c_buried_is_outside_with_surface_values` |
+| 9. Result parts | Yes | `test_result_parts` |
+| 10. Views | Yes | `tests/test_result.py`; `test_views_of_case_a` (settlement 0.01128 m at 20 m), `test_repr_of_case_c_lists_the_warning_range` |
+| 11. Nothing dropped | Yes | `test_utility_through_the_bore_raises_naming_it` (names the utility and the station at 20 m) |
+| 12. Docstrings | Yes | ruff's numpy docstring rules pass on `src/`; each public name gives units, signs and assumptions |
+| 13. Dependencies | Yes | `pandas>=2.1.1,<3`, the floor run above; mypy strict passes |
+
+Beyond the plan:
+- The inputs also record `station_merge_tolerance` (1 µm) as a constant or setting, as the trough records its surface tolerance (SPEC §4).
+- When a source raises for some stations, the message adds their distances along the utility to the indices the source names.
+- The summary reports the extremes decision 10 lists (settlement, strain along, vertical curvature), not the lateral curvature, which is zero for a perpendicular utility.
