@@ -26,7 +26,6 @@ EXTREMES: tuple[tuple[str, str, str | None, str | None], ...] = (
     ("vertical", "settlement", "largest", None),
     ("along_strain", "strain along", "tension", "compression"),
     ("vertical_curvature", "vertical curvature", "hogging", "sagging"),
-    ("lateral_curvature", "lateral curvature", "largest", "smallest"),
 )
 
 
