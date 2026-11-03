@@ -263,3 +263,76 @@ def test_bad_arguments_raise_before_any_run(vary, mode, error, match):
 def test_run_must_return_a_result():
     with pytest.raises(TypeError, match="returned dict"):
         gs.sweep(lambda volume_loss: {}, vary={"volume_loss": [1] * u.percent})
+
+
+# M2 (a), spec decision 12, AC 13: inputs named for their source.
+
+
+def twins(south_volume_loss=1 * u.percent, north_volume_loss=1 * u.percent):
+    north = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    south = north.parallel(offset=15.0, diameter=6.0, axis_depth=20.0)
+    source = gs.superpose(
+        north=gs.sources.transverse_surface_trough(
+            north, volume_loss=north_volume_loss, trough_width_parameter=0.5
+        ),
+        south=gs.sources.transverse_surface_trough(
+            south, volume_loss=south_volume_loss, trough_width_parameter=0.5
+        ),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        north,
+        utility_id="W-1",
+        station=50,
+        start_offset=-30,
+        end_offset=60,
+        depth=0.0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    return gs.movement_profile(utility, source, spacing=2.5)
+
+
+def test_a_dotted_name_is_passed_with_underscores():
+    calls = []
+
+    def run(**keywords):
+        calls.append(keywords)
+        return twins(**keywords)
+
+    table = gs.sweep(run, vary={"south.volume_loss": [1.0, 1.5, 2.0] * u.percent})
+    assert [list(call) for call in calls] == [["south_volume_loss"]] * 3
+    assert list(table.columns[:2]) == ["run", "south.volume_loss"]
+    assert table["south.volume_loss"].tolist() == pytest.approx(
+        [0.01, 0.015, 0.02], rel=1e-12
+    )
+    assert table.attrs["vary"] == ["south.volume_loss"]
+    assert table.attrs["units"]["south.volume_loss"] == "dimensionless"
+    fixed = [entry["name"] for entry in table.attrs["fixed_inputs"]]
+    assert "north.volume_loss" in fixed
+    assert "south.volume_loss" not in fixed
+
+
+def test_a_dotted_run_that_varies_the_wrong_tunnel_raises():
+    def run(south_volume_loss):
+        return twins(north_volume_loss=south_volume_loss)
+
+    with pytest.raises(ValueError, match=r"run 0 was given south\.volume_loss=.*pass"):
+        gs.sweep(run, vary={"south.volume_loss": [1.5, 2.0] * u.percent})
+
+
+@pytest.mark.parametrize(
+    ("vary", "match"),
+    [
+        ({"a.b-c": [1, 2]}, r"'a\.b-c' must be an input record's name"),
+        ({"a.b": [1, 2], "a_b": [1, 2]}, r"'a\.b' and 'a_b'.*as a_b"),
+        ({3: [1, 2]}, "3 must be an input record's name"),
+    ],
+)
+def test_keys_that_dont_become_one_keyword_each_raise(vary, match):
+    def run(**keywords):
+        raise AssertionError("run before the arguments were checked")
+
+    with pytest.raises(TypeError, match=match):
+        gs.sweep(run, vary=vary, mode="grid" if len(vary) > 1 else None)
