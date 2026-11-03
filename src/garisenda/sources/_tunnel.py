@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from garisenda._inputs import InputRecord, record
-from garisenda._units import Magnitude
+from garisenda._units import Magnitude, units
 
 IDEALIZED_ASSUMPTION = (
     "Idealized straight tunnel: no ends, shafts, curves or junctions, and the "
@@ -163,6 +163,80 @@ class IdealizedTunnel:
         }
         for name, value in values.items():
             object.__setattr__(self, name, value)
+
+    def parallel(
+        self,
+        *,
+        offset: object,
+        diameter: object,
+        axis_depth: object = None,
+        axis_elevation: object = None,
+        ground_elevation: object = None,
+    ) -> "IdealizedTunnel":
+        """Return an idealized tunnel parallel to this one, such as a twin bore.
+
+        The new tunnel has the same azimuth and reference station, and its
+        reference point is p0 + offset n, so a point's station is the same from
+        either tunnel and its offset from the new one is o - offset (SPEC §8.3).
+
+        Parameters
+        ----------
+        offset : length
+            The plan offset of the new axis from this one, positive to the
+            right looking up-station (SPEC §8.1), in m if a plain number. Zero
+            is allowed: stacked bores.
+        diameter : length
+            The new tunnel's excavated diameter, in m if a plain number. Not
+            copied from this tunnel: twin bores can differ.
+        axis_depth : length, optional
+            The new axis's depth below the ground surface.
+        axis_elevation, ground_elevation : length, optional
+            Instead of `axis_depth`, as for the constructor. Not copied either:
+            stacked bores are at different depths.
+
+        Returns
+        -------
+        IdealizedTunnel
+            The new tunnel. Its input records are `offset`, `diameter` and the
+            axis as given, and `reference_point`, `azimuth` and
+            `reference_station` as derived, given as ``"parallel to a tunnel
+            at offset <o> m"``. Whether the two bores overlap is checked where
+            they are combined (`garisenda.superpose`).
+
+        Raises
+        ------
+        TypeError
+            As the constructor, if the axis isn't given one way.
+        ValueError
+            As the constructor, or if `offset` isn't finite.
+        """
+        offset_m, offset_record = record(
+            "offset", offset, kind="geometry", unit="m", plain_number="read as SI"
+        )
+        offset_m = float(offset_m)
+        if not math.isfinite(offset_m):
+            raise ValueError(f"offset must be finite, not {offset_m}.")
+        new = IdealizedTunnel(
+            reference_point=(
+                self.reference_x + offset_m * self.normal[0],
+                self.reference_y + offset_m * self.normal[1],
+            ),
+            azimuth=self.azimuth * units.radian,
+            diameter=diameter,
+            axis_depth=axis_depth,
+            axis_elevation=axis_elevation,
+            ground_elevation=ground_elevation,
+            reference_station=self.reference_station,
+        )
+        derived = f"parallel to a tunnel at offset {offset_m:.6g} m"
+        inputs = tuple(
+            replace(entry, given_as=derived, source=None)
+            if entry.name in {"reference_point", "azimuth", "reference_station"}
+            else entry
+            for entry in new.inputs
+        )
+        object.__setattr__(new, "inputs", (offset_record, *inputs))
+        return new
 
     def station_offset(self, *, x: object, y: object) -> tuple[Magnitude, Magnitude]:
         """Return the station and offset of points in plan.
