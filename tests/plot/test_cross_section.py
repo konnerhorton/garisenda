@@ -271,3 +271,75 @@ def test_several_tunnels_leave_no_global_state(crossing):
     before = dict(mpl.rcParams)
     gs.plot.cross_section(crossing)
     assert dict(mpl.rcParams) == before
+
+
+# M2 (b), spec decision 9, AC 10: the trough at the utility's depth.
+
+
+def mair(*, depth, start_offset=-20, end_offset=20):
+    """M1's tunnel with Mair's trough, a utility at a depth across it."""
+    tunnel = north_tunnel()
+    source = gs.sources.transverse_trough(
+        tunnel,
+        volume_loss=1 * u.percent,
+        trough_width=gs.sources.mair_trough_width(),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="W-1",
+        station=50,
+        start_offset=start_offset,
+        end_offset=end_offset,
+        depth=depth,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    return gs.movement_profile(utility, source, spacing=5.0)
+
+
+def test_mair_trough_drawn_at_the_utility_depth():
+    _, (top, middle, _) = gs.plot.cross_section(mair(depth=10.0))
+    trough = line(top, "vertical")
+    offset = np.asarray(trough.get_xdata())
+    assert offset[200] == pytest.approx(0.0, abs=1e-12)
+    # Case A, z = 10 m, o = 0: S = 1.67108552e-2 m.
+    assert trough.get_ydata()[200] == pytest.approx(16.7108552, rel=1e-6)
+    assert top.get_ylabel() == "Settlement at depth 10 m (mm)"
+    assert middle.get_ylabel() == "Horizontal at depth 10 m (mm)"
+    for ax in (top, middle):
+        marks = [item for item in ax.get_lines() if item.get_gid() == "inflection"]
+        assert sorted(item.get_xdata()[0] for item in marks) == pytest.approx(
+            [-6.75, 6.75]
+        )
+
+
+def test_a_surface_trough_is_still_drawn_at_the_surface(case_c):
+    _, (top, _, _) = gs.plot.cross_section(case_c)
+    assert top.get_ylabel() == "Settlement at the surface (mm)"
+
+
+def test_a_utility_beside_the_bore_draws_with_a_break():
+    result = mair(depth=18.0, start_offset=5, end_offset=20)
+    _, (top, middle, _) = gs.plot.cross_section(result)
+    for ax, key in ((top, "vertical"), (middle, "horizontal")):
+        trough = line(ax, key)
+        offset = np.asarray(trough.get_xdata())
+        drawn = np.asarray(trough.get_ydata())
+        # Inside the bore at 18 m: |o| < sqrt(3^2 - 2^2).
+        inside = np.abs(offset) < np.sqrt(5.0)
+        assert inside.any()
+        assert np.isnan(drawn[inside]).all()
+        assert np.isfinite(drawn[~inside]).all()
+    assert not result.values.isna().any().any()
+    # Below the crown, i is the crown's: 4.475 m.
+    marks = [item for item in top.get_lines() if item.get_gid() == "inflection"]
+    assert sorted(item.get_xdata()[0] for item in marks) == pytest.approx(
+        [-4.475, 4.475]
+    )
+    assert top.get_ylabel() == "Settlement at depth 18 m (mm)"
+
+
+def test_a_trough_at_depth_leaves_no_global_state():
+    before = dict(mpl.rcParams)
+    gs.plot.cross_section(mair(depth=18.0, start_offset=5, end_offset=20))
+    assert dict(mpl.rcParams) == before
