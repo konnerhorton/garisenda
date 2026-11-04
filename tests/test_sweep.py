@@ -1,9 +1,11 @@
 import math
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
 
 import garisenda as gs
+from garisenda._inputs import record_method
 
 u = gs.units
 REL = 1e-6  # hand calculation carried to 8 figures (spec, acceptance criteria)
@@ -336,3 +338,136 @@ def test_keys_that_dont_become_one_keyword_each_raise(vary, match):
 
     with pytest.raises(TypeError, match=match):
         gs.sweep(run, vary=vary, mode="grid" if len(vary) > 1 else None)
+
+
+# M2 (b), plan step 1: a method record in a sweep (AC 9, with stand-ins)
+
+
+@dataclass(frozen=True)
+class StandIn:
+    name: str
+
+
+def with_method(result, name):
+    _, entry = record_method(
+        "trough_width",
+        StandIn(name),
+        kind="design judgment",
+        expected=StandIn,
+        how="Write a stand-in.",
+    )
+    return replace(result, inputs=(*result.inputs, entry))
+
+
+def test_a_method_that_stays_the_same_is_a_fixed_input():
+    def run(volume_loss):
+        return with_method(crossing(volume_loss=volume_loss), "a")
+
+    table = gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})
+    assert list(table["error"]) == [None, None]
+    fixed = {entry["name"]: entry for entry in table.attrs["fixed_inputs"]}
+    assert fixed["trough_width"]["magnitude"] == "a"
+    assert fixed["trough_width"]["unit"] == ""
+
+
+def test_a_method_that_changes_between_runs_raises_naming_both():
+    def run(volume_loss):
+        return with_method(
+            crossing(volume_loss=volume_loss), "a" if volume_loss.m < 1.5 else "b"
+        )
+
+    with pytest.raises(
+        ValueError, match=r"trough_width isn't in vary but changed.*\(a in .*, b in"
+    ):
+        gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})
+
+
+def test_a_method_cant_be_varied():
+    def run(trough_width):
+        return with_method(crossing(), trough_width)
+
+    with pytest.raises(
+        ValueError, match=r"run 0 was given trough_width=.*is a method.*per method"
+    ):
+        gs.sweep(run, vary={"trough_width": ["a", "b"]})
+
+
+# M2 (b), AC 9: a sweep of the trough at depth
+
+
+def at_depth(trough_width):
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    trough = gs.sources.transverse_trough(
+        tunnel, volume_loss=1 * u.percent, trough_width=trough_width
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="W-1",
+        station=50,
+        start_offset=-30,
+        end_offset=30,
+        depth=10,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    return gs.movement_profile(utility, trough, spacing=2.5)
+
+
+def test_a_sweep_of_k_for_the_linear_method():
+    def run(trough_width_parameter):
+        return at_depth(
+            gs.sources.linear_trough_width(
+                trough_width_parameter=trough_width_parameter
+            )
+        )
+
+    table = gs.sweep(run, vary={"trough_width_parameter": [0.4, 0.5, 0.6]})
+    assert list(table["error"]) == [None] * 3
+    np.testing.assert_allclose(table["trough_width_parameter"], [0.4, 0.5, 0.6])
+    # S_max = Q / i at z = 10 m, i = 10 k, Q = 0.11279827 m^2 (M2 (b) spec).
+    np.testing.assert_allclose(
+        table["largest_settlement"],
+        [2.81995675e-2, 2.25596545e-2, 1.87997117e-2],
+        rtol=REL,
+    )
+    fixed = {entry["name"]: entry for entry in table.attrs["fixed_inputs"]}
+    assert fixed["trough_width"]["magnitude"] == "linear"
+
+
+def test_a_sweep_that_switches_method_raises():
+    def run(volume_loss):
+        tunnel = gs.sources.IdealizedTunnel(
+            reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+        )
+        width = (
+            gs.sources.mair_trough_width()
+            if volume_loss.m > 1.5
+            else gs.sources.linear_trough_width(trough_width_parameter=0.5)
+        )
+        trough = gs.sources.transverse_trough(
+            tunnel, volume_loss=volume_loss, trough_width=width
+        )
+        return gs.movement_profile(
+            gs.utilities.perpendicular_utility(
+                tunnel,
+                utility_id="W-1",
+                station=50,
+                start_offset=-30,
+                end_offset=30,
+                depth=10,
+                elevation_reference="axis",
+                diameter=0.3,
+            ),
+            trough,
+            spacing=2.5,
+        )
+
+    # The method changes between runs, so its record does: linear, then Mair's.
+    with pytest.raises(
+        ValueError,
+        match=r"trough_width isn't in vary but changed.*\(linear in .*"
+        r"Mair et al\. \(1993\), clay in run 1",
+    ):
+        gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})

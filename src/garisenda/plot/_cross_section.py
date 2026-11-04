@@ -21,14 +21,17 @@ from garisenda.sources._superposition import (
     Superposition,
     tunnels,
 )
+from garisenda.sources._transverse_trough import TransverseTrough
 from garisenda.sources._tunnel import IdealizedTunnel
 
 PANELS = 3
 # The trough's panels: the quantity, its label, its sign convention and color.
 TROUGH_PANELS = (
-    ("vertical", "Settlement at the surface", "down +", "C0"),
-    ("horizontal", "Horizontal at the surface", "right +", "C1"),
+    ("vertical", "Settlement", "down +", "C0"),
+    ("horizontal", "Horizontal", "right +", "C1"),
 )
+SURFACE_TOLERANCE = 1e-3
+"""Depth in m within which the trough is drawn and titled as at the surface."""
 DASHES = ("--", ":", (0, (6, 2, 1, 2)), (0, (1, 3)))
 """Each source's own trough, in turn, so the legend tells them apart."""
 GRID_POINTS = 401
@@ -66,8 +69,8 @@ def cross_section(
     right looking up-station, SPEC §8.1); with several tunnels, from the axis
     of the utility's reference tunnel, the one it was built from:
 
-    1. settlement at the ground surface, its axis pointing down;
-    2. horizontal movement at the ground surface, perpendicular to the
+    1. settlement at the utility's depth, its axis pointing down;
+    2. horizontal movement at the utility's depth, perpendicular to the
        tunnel, positive to the right (toward increasing offset, as in every
        view, SPEC §8.1), on its own panel because settlement's axis points
        down;
@@ -77,11 +80,22 @@ def cross_section(
        dimensioned.
 
     On the first two, the utility's stations are marked on the trough from the
-    result's values, and the inflection points at ±i are marked.
+    result's values, and the inflection points at ±i are marked, with i at the
+    drawn depth (capped at the crown, as the trough's values are).
+
+    **The depth drawn.** A source whose trough changes with depth
+    (`garisenda.sources.transverse_trough`) is drawn at the utility's axis
+    depth, and the panels say so ("Settlement at depth 10 m"). A source that
+    has only a surface trough (`garisenda.sources.transverse_surface_trough`)
+    is drawn at the surface, titled so, since that is what it gives at any
+    depth; its stations below the surface are ringed as flagged. With several
+    sources, the depth is the utility's if any of them changes with depth.
+    Points of the drawn line inside a bore aren't evaluated, and the line
+    breaks there.
 
     The trough runs past the utility's ends and its curve between stations
-    isn't in the result, so the figure evaluates ``result.source`` at the
-    surface on 401 points over the wider of the utility's offsets and ±3i, for
+    isn't in the result, so the figure evaluates ``result.source`` at that
+    depth on 401 points over the wider of the utility's offsets and ±3i, for
     drawing only (SPEC §3). The utility's own values come from the result,
     never recalculated. Stations that aren't ``"within"`` are ringed by
     verdict, and each flag's reason is printed under the figure with its
@@ -160,22 +174,29 @@ def cross_section(
     move = display.factor("displacement")
     values = result.values
     offsets = values["offset"].to_numpy(dtype=np.float64)
+    every = list(parts.values()) if several else [source]
+    deep = any(isinstance(part, TransverseTrough) for part in every)
+    depth = float(np.mean(asset.vertices[:, 2])) if deep else 0.0
+    if depth <= SURFACE_TOLERANCE:
+        depth = 0.0
     if several:
-        bores, skipped = _bores(reference, found, parts)
+        bores, skipped = _bores(reference, found, parts, depth)
         width = None
         reaches = [(bore.offset, _reach(bore)) for bore in bores]
         low = min([float(np.min(offsets))] + [o - r for o, r in reaches])
         high = max([float(np.max(offsets))] + [o + r for o, r in reaches])
     else:
         reference = found[0][1]
-        width = getattr(source, "trough_width", None)
+        width = _width(source, depth)
         bores = [_Bore("", reference, 0.0, width)]
         skipped = []
         high = max(float(np.max(np.abs(offsets))), _reach(bores[0]))
         low = -high
     grid = np.linspace(low, high, GRID_POINTS)
 
-    # The surface along the section, for drawing only (SPEC §3).
+    # The trough along the section at the drawn depth, for drawing only
+    # (SPEC §3). Points inside a bore can't be evaluated; the drawn line
+    # breaks there (NaN in the drawing arrays only, never in a result).
     station = built.station - reference.reference_station
     tangent, normal = np.array(reference.tangent), np.array(reference.normal)
     plan = (
@@ -183,13 +204,22 @@ def cross_section(
         + station * tangent
         + grid[:, None] * normal
     )
+    clear = np.ones(len(grid), dtype=bool)
+    for _, bored in found:
+        _, across = bored.station_offset(x=plan[:, 0], y=plan[:, 1])
+        clear &= np.hypot(across, depth - bored.axis_depth) >= bored.diameter / 2
 
     def surface_of(field: Source) -> dict[str, npt.NDArray[np.float64]]:
-        movement = field.evaluate(x=plan[:, 0], y=plan[:, 1], depth=np.zeros(len(grid)))
-        return {
-            "vertical": movement.displacement[:, 2],
-            "horizontal": movement.displacement[:, :2] @ normal,
-        }
+        drawn = {key: np.full(len(grid), np.nan) for key in ("vertical", "horizontal")}
+        if clear.any():
+            movement = field.evaluate(
+                x=plan[clear, 0],
+                y=plan[clear, 1],
+                depth=np.full(int(clear.sum()), depth),
+            )
+            drawn["vertical"][clear] = movement.displacement[:, 2]
+            drawn["horizontal"][clear] = movement.displacement[:, :2] @ normal
+        return drawn
 
     surface = surface_of(source)
     own = {name: surface_of(part) for name, part in parts.items()}
@@ -207,6 +237,11 @@ def cross_section(
         trough_panels = dict(zip(("vertical", "horizontal"), panels, strict=False))
         x = grid * length
         verdict = values["verdict"].astype(str).to_numpy()
+        where = (
+            f"at depth {depth * length:.4g} {display.symbol('length')}"
+            if depth
+            else "at the surface"
+        )
         for (key, label, convention, color), ax in zip(
             TROUGH_PANELS, panels, strict=False
         ):
@@ -276,7 +311,7 @@ def cross_section(
                     fontsize=8,
                 )
             ax.margins(y=0.15)
-            ax.set_ylabel(display.label(label, "displacement"))
+            ax.set_ylabel(display.label(f"{label} {where}", "displacement"))
             ax.set_title(convention, loc="right", fontsize=7, color="0.35")
             ax.legend(loc="best", fontsize=7)
         trough_panels["vertical"].invert_yaxis()
@@ -324,6 +359,7 @@ def _bores(
     reference: IdealizedTunnel,
     found: list[tuple[str, IdealizedTunnel]],
     parts: Mapping[str, Source],
+    depth: float,
 ) -> tuple[list[_Bore], list[str]]:
     """Split the tunnels into those parallel to the reference and the rest."""
     bores: list[_Bore] = []
@@ -333,9 +369,22 @@ def _bores(
             skipped.append(name)
             continue
         _, offset = reference.station_offset(x=tunnel.reference_x, y=tunnel.reference_y)
-        width = getattr(parts.get(name), "trough_width", None)
+        part = parts.get(name)
+        width = None if part is None else _width(part, depth)
         bores.append(_Bore(name, tunnel, float(offset), width))
     return bores, skipped
+
+
+def _width(source: Source, depth: float) -> float | None:
+    """Return a source's trough width i in m at a depth, if it has one.
+
+    i at the depth capped at the crown for a trough at depth, so the marks
+    match the values drawn below it; M1's surface width otherwise.
+    """
+    if isinstance(source, TransverseTrough):
+        return float(source.width_at(depth))
+    width = getattr(source, "trough_width", None)
+    return float(width) if isinstance(width, int | float) else None
 
 
 def _reach(bore: _Bore) -> float:

@@ -324,3 +324,65 @@ def test_nested_names():
         "outer.south",
         "east",
     ]
+
+
+# M2 (b), AC 9: troughs at depth, one of each method, superposed.
+
+
+def mixed():
+    north = north_tunnel()
+    south = north.parallel(offset=30.0, diameter=6.0, axis_depth=20.0)
+    return gs.superpose(
+        north=gs.sources.transverse_trough(
+            north,
+            volume_loss=1 * u.percent,
+            trough_width=gs.sources.mair_trough_width(),
+        ),
+        south=gs.sources.transverse_trough(
+            south,
+            volume_loss=1.5 * u.percent,
+            trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.4),
+        ),
+    )
+
+
+def test_troughs_at_depth_sum():
+    source = mixed()
+    x = np.array([-12.0, 0.0, 7.5, 15.0, 31.0, 45.0])
+    depth = np.array([0.0, 4.0, 10.0, 12.5, 16.0, 19.0])
+    y = np.full_like(x, 50.0)
+    total = source.evaluate(x=x, y=y, depth=depth)
+    parts = [part.evaluate(x=x, y=y, depth=depth) for part in source.sources.values()]
+    for name in ("displacement", "gradient", "hessian", "third_derivative"):
+        np.testing.assert_allclose(
+            getattr(total, name),
+            sum(getattr(part, name) for part in parts),
+            rtol=1e-14,
+            atol=0,
+        )
+
+
+def test_troughs_at_depth_records():
+    source = mixed()
+    records = {entry.name: entry for entry in source.inputs}
+    assert records["north.trough_width"].value == "Mair et al. (1993), clay"
+    assert records["south.trough_width"].value == "linear"
+    assert records["south.trough_width_parameter"].value.magnitude == 0.4
+    assert "north.trough_width_parameter" not in records
+    assert records["north.depth_tolerance"].kind == "constant or setting"
+    data = profile(source, start_offset=-20, end_offset=50, depth=10.0).to_dict()
+    named = {entry["name"]: entry for entry in data["inputs"]}
+    assert named["north.trough_width"]["magnitude"] == "Mair et al. (1993), clay"
+    assert named["north.trough_width"]["unit"] == ""
+
+
+def test_troughs_at_depth_flag_below_each_crown_by_source():
+    # x = -6 and x = 36 are beside each bore, 19 m deep: below both crowns.
+    movement = mixed().evaluate(
+        x=np.array([-6.0, 15.0, 36.0]), y=np.full(3, 50.0), depth=np.full(3, 19.0)
+    )
+    assert list(movement.verdict) == ["outside"] * 3
+    assert [flag.source for flag in movement.flags] == ["north", "south"]
+    assert all(flag.points == (0, 1, 2) for flag in movement.flags)
+    assert "garisenda" not in movement.flags[0].reason
+    assert "applied to the linear method by garisenda" in movement.flags[1].reason

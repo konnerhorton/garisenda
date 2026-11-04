@@ -1,11 +1,12 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1 and M2 (a) are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M2 (b), movements below the surface (waits on the subsurface papers, TODO #3).
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1 and M2 are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M3, utility checks (waits on the check definitions, TODO #4).
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
 - `docs/work/<id>.md`: intent, spec and plan for each unit of work (the spec-driven-development skill). Files for merged units are history.
 - `docs/drafts/`: notes for later work, including `scope-discussion.md`. Not decisions unless marked "decided".
+- `docs/reference/sources.md`: the bibliography, each source with its key and the date it was verified (SPEC §2.2).
 - `docs/TODO.md`: research items and pending decisions, referenced as "TODO #n".
 - `docs/site/`: the published docs site (Zensical); each page's example is a script in `docs/site/examples/`. The rest of `docs/` is internal.
 
@@ -28,7 +29,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Test a source on segments at any angle, not only perpendicular to the tunnel**: an oblique segment has a lateral component, and its peaks (M1's lateral-curvature peaks) are missed by perpendicular-only hand calculations.
 - **Never fill missing data**, never drop it silently (SPEC §10).
 - **Names are written out in full**, no units in names, American spelling (SPEC §8.5).
-- **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).
+- **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record, **or, for a named method object, `record_method()`**, which records its name. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).
 - **Code and tests run on the dependency floors** (numpy 1.26): no numpy 2-only functions such as `numpy.trapezoid`. The `lowest` job catches it, the default run doesn't.
 - **Docstrings use ASCII `-` for minus** (ruff RUF002); the specs keep `−`.
 - **Figures draw with `garisenda.plot._style.style()`** (an `rc_context`), never by setting `rcParams`; tests check `rcParams` are unchanged. Panels are found in tests by artist `gid`.

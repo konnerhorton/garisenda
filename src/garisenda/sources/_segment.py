@@ -1,13 +1,79 @@
 """Straight segments: reading their ends and their directions (SPEC §3)."""
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 import numpy.typing as npt
 
 from garisenda._inputs import record
 
+if TYPE_CHECKING:
+    from garisenda.sources._tunnel import IdealizedTunnel
+
 FloatArray = npt.NDArray[np.float64]
+
+
+def read_points(
+    x: object, y: object, depth: object, *, surface_tolerance: float
+) -> tuple[FloatArray, FloatArray, FloatArray]:
+    """Return points' x, y and depth as flat arrays in m, checked.
+
+    Raises
+    ------
+    ValueError
+        If the arrays differ in length, a coordinate isn't finite (naming the
+        points), or a point is above the ground surface (depth less than
+        ``-surface_tolerance``).
+    """
+    coordinates = [
+        np.atleast_1d(
+            np.asarray(
+                record(
+                    name, value, kind="geometry", unit="m", plain_number="read as SI"
+                )[0],
+                dtype=np.float64,
+            )
+        )
+        for name, value in (("x", x), ("y", y), ("depth", depth))
+    ]
+    if len({array.shape for array in coordinates}) != 1:
+        raise ValueError(
+            "x, y and depth must have the same length; got shapes "
+            f"{', '.join(str(array.shape) for array in coordinates)}."
+        )
+    x_m, y_m, depth_m = (array.ravel() for array in coordinates)
+    missing = ~(np.isfinite(x_m) & np.isfinite(y_m) & np.isfinite(depth_m))
+    if missing.any():
+        raise ValueError(
+            "Every point needs finite x, y and depth; these points don't: "
+            f"{np.flatnonzero(missing).tolist()}."
+        )
+    above = depth_m < -surface_tolerance
+    if above.any():
+        raise ValueError(
+            "Points above the ground surface (negative depth) can't be "
+            f"evaluated: {np.flatnonzero(above).tolist()}."
+        )
+    return x_m, y_m, depth_m
+
+
+def check_outside_bore(
+    tunnel: "IdealizedTunnel", offset: FloatArray, depth: FloatArray
+) -> None:
+    """Raise if a point, at its offset from the axis and depth, is inside the bore.
+
+    Raises
+    ------
+    ValueError
+        Naming the points inside the bore.
+    """
+    inside = np.hypot(offset, depth - tunnel.axis_depth) < tunnel.diameter / 2
+    if inside.any():
+        raise ValueError(
+            f"Points inside the bore can't be evaluated: "
+            f"{np.flatnonzero(inside).tolist()}."
+        )
 
 
 def read_segment(start: object, end: object) -> tuple[FloatArray, FloatArray, float]:

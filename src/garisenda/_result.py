@@ -293,7 +293,11 @@ def input_dict(entry: InputRecord) -> dict[str, Any]:
     """Return an input record as plain JSON types, as `Result.to_dict` gives it."""
     return {
         "name": entry.name,
-        "magnitude": _plain(np.asarray(entry.value.magnitude).tolist()),
+        "magnitude": (
+            entry.value
+            if isinstance(entry.value, str)
+            else _plain(np.asarray(entry.value.magnitude).tolist())
+        ),
         "unit": unit_text(entry),
         "kind": entry.kind,
         "given_as": entry.given_as,
@@ -302,8 +306,21 @@ def input_dict(entry: InputRecord) -> dict[str, Any]:
 
 
 def unit_text(entry: InputRecord) -> str:
-    """Return an input record's unit as text, ``"dimensionless"`` for none."""
+    """Return an input record's unit as text, ``"dimensionless"`` for none.
+
+    A named method (a string value) has no unit: ``""``, so it doesn't read
+    as a number.
+    """
+    if isinstance(entry.value, str):
+        return ""
     return f"{entry.value.units:~}" or "dimensionless"
+
+
+def value_text(entry: InputRecord) -> str:
+    """Return an input record's value as text: the quantity, or the method's name."""
+    if isinstance(entry.value, str):
+        return entry.value
+    return f"{entry.value:~}"
 
 
 def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
