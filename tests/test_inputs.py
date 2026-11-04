@@ -1,9 +1,10 @@
 import inspect
+from dataclasses import dataclass
 
 import pytest
 
 import garisenda as gs
-from garisenda._inputs import judgments, record
+from garisenda._inputs import judgments, record, record_method
 
 u = gs.units
 
@@ -76,3 +77,59 @@ def test_judgment_with_default_is_refused_at_decoration():
         @judgments(volume_loss="x")
         def defaulted(*, volume_loss: float = 0.01) -> float:
             return volume_loss
+
+
+# M2 (b), plan step 1: an input record holding a named method
+
+
+@dataclass(frozen=True)
+class StandIn:
+    """A stand-in method object: only its name is recorded."""
+
+    name: str
+
+
+HOW = "Write it as StandIn('a') or StandIn('b')."
+
+
+def test_record_method_records_the_name():
+    method, entry = record_method(
+        "trough_width",
+        StandIn("a"),
+        kind="design judgment",
+        expected=StandIn,
+        how=HOW,
+    )
+    assert method == StandIn("a")
+    assert entry.name == "trough_width"
+    assert entry.value == "a"
+    assert entry.kind == "design judgment"
+    assert entry.given_as == "method"
+    assert entry.source is None
+
+
+def test_record_method_keeps_the_source():
+    method, entry = record_method(
+        "trough_width",
+        gs.Sourced(StandIn("b"), source="Basis of design, section 5"),
+        kind="design judgment",
+        expected=StandIn,
+        how=HOW,
+    )
+    assert method == StandIn("b")
+    assert entry.value == "b"
+    assert entry.source == "Basis of design, section 5"
+
+
+@pytest.mark.parametrize("value", [0.5, "a", 0.5 * u.dimensionless, None])
+def test_record_method_refuses_anything_else(value):
+    with pytest.raises(
+        TypeError, match=r"trough_width must be a method.*StandIn\('a'\)"
+    ):
+        record_method(
+            "trough_width",
+            gs.Sourced(value, source="x") if value is None else value,
+            kind="design judgment",
+            expected=StandIn,
+            how=HOW,
+        )

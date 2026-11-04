@@ -341,6 +341,7 @@ def _check_ground(inputs: list[InputRecord]) -> None:
         (entry.name, float(entry.value.to("m").magnitude))
         for entry in inputs
         if entry.name.rsplit(".", 1)[-1] == "ground_elevation"
+        and not isinstance(entry.value, str)
     ]
     if not grounds:
         return

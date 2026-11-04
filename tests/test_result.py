@@ -1,11 +1,12 @@
 import json
+from dataclasses import dataclass
 
 import pandas as pd
 import pytest
 
 import garisenda as gs
-from garisenda._inputs import record
-from garisenda._result import CHECK_COLUMNS, empty_checks
+from garisenda._inputs import record, record_method
+from garisenda._result import CHECK_COLUMNS, empty_checks, unit_text, value_text
 from garisenda.sources import Flag, MethodRecord
 
 u = gs.units
@@ -213,3 +214,53 @@ def test_twins_below_the_surface_flag_each_tunnel(twins_below_the_surface):
     text = repr(twins)
     for flag in twins.warnings:
         assert f"outside: {flag.source}: {flag.reason}" in text
+
+
+# M2 (b), plan step 1: a record holding a named method (AC 8, the views)
+
+
+def method_record():
+    _, entry = record_method(
+        "trough_width",
+        Method("Mair et al. (1993), clay"),
+        kind="design judgment",
+        expected=Method,
+        how="Write a method.",
+    )
+    return entry
+
+
+@dataclass(frozen=True)
+class Method:
+    name: str
+
+
+def test_to_dict_shows_a_method_by_name():
+    with_method = result(inputs=(*result().inputs, method_record()))
+    data = json.loads(json.dumps(with_method.to_dict(), allow_nan=False))
+    assert data["inputs"][2] == {
+        "name": "trough_width",
+        "magnitude": "Mair et al. (1993), clay",
+        "unit": "",
+        "kind": "design judgment",
+        "given_as": "method",
+        "source": None,
+    }
+
+
+def test_value_text_and_unit_text_of_a_method():
+    entry = method_record()
+    assert value_text(entry) == "Mair et al. (1993), clay"
+    assert unit_text(entry) == ""
+    _, quantity = record(
+        "spacing", 5, kind="design judgment", unit="m", plain_number="read as SI"
+    )
+    assert value_text(quantity) == "5.0 m"
+    assert unit_text(quantity) == "m"
+
+
+def test_views_take_a_method_record():
+    with_method = result(inputs=(*result().inputs, method_record()))
+    pd.testing.assert_frame_equal(with_method.to_frame(), result().to_frame())
+    assert repr(with_method) == repr(result())
+    assert with_method == result(inputs=(*result().inputs, method_record()))

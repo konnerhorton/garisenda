@@ -4,7 +4,7 @@ import functools
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, ParamSpec, TypeVar
+from typing import Literal, ParamSpec, Protocol, TypeVar
 
 import pint
 
@@ -48,8 +48,10 @@ class InputRecord:
     ----------
     name : str
         The argument's name.
-    value : pint.Quantity
-        The value used, in its SI unit.
+    value : pint.Quantity or str
+        The value used, in its SI unit; or, for a named method (such as a
+        trough width method), the method's name as a string, recorded by
+        `record_method`.
     kind : {"ground parameter", "design judgment", "constant or setting", "geometry"}
         Its kind (SPEC §4).
     given_as : str
@@ -60,7 +62,7 @@ class InputRecord:
     """
 
     name: str
-    value: pint.Quantity
+    value: pint.Quantity | str
     kind: Kind
     given_as: str
     source: str | None
@@ -97,6 +99,58 @@ def record(
     magnitude, given_as = to_si(name, value, unit=unit, plain_number=plain_number)
     quantity = units.Quantity(magnitude, unit)
     return magnitude, InputRecord(name, quantity, kind, given_as, source)
+
+
+class Named(Protocol):
+    """A method object: anything with a ``name``."""
+
+    @property
+    def name(self) -> str: ...
+
+
+def record_method[M: Named](
+    name: str, value: object, *, kind: Kind, expected: type[M], how: str
+) -> tuple[M, InputRecord]:
+    """Unwrap a `Sourced`, check a named method and record it by its name.
+
+    The counterpart of `record` for an input that is a method object rather
+    than a quantity (SPEC §5.1). The record's value is the method's ``name``
+    and its given-as is ``"method"``.
+
+    Parameters
+    ----------
+    name : str
+        The argument's name.
+    value : object
+        The method, or a `Sourced` holding it.
+    kind : {"ground parameter", "design judgment", "constant or setting", "geometry"}
+        The input's kind.
+    expected : type
+        The type the method must be.
+    how : str
+        How to write each method, put in the error when `value` isn't one.
+
+    Returns
+    -------
+    method : expected
+        The method.
+    record : InputRecord
+        The record of it, its value the method's name.
+
+    Raises
+    ------
+    TypeError
+        If `value` (unwrapped) isn't an instance of `expected`.
+    """
+    source = None
+    if isinstance(value, Sourced):
+        source = value.source
+        value = value.value
+    if not isinstance(value, expected):
+        raise TypeError(
+            f"{name} must be a method, not {type(value).__name__} ({value!r}). {how}"
+        )
+    return value, InputRecord(name, value.name, kind, "method", source)
 
 
 P = ParamSpec("P")

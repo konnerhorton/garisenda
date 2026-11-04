@@ -1,9 +1,11 @@
 import math
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
 
 import garisenda as gs
+from garisenda._inputs import record_method
 
 u = gs.units
 REL = 1e-6  # hand calculation carried to 8 figures (spec, acceptance criteria)
@@ -336,3 +338,55 @@ def test_keys_that_dont_become_one_keyword_each_raise(vary, match):
 
     with pytest.raises(TypeError, match=match):
         gs.sweep(run, vary=vary, mode="grid" if len(vary) > 1 else None)
+
+
+# M2 (b), plan step 1: a method record in a sweep (AC 9, with stand-ins)
+
+
+@dataclass(frozen=True)
+class StandIn:
+    name: str
+
+
+def with_method(result, name):
+    _, entry = record_method(
+        "trough_width",
+        StandIn(name),
+        kind="design judgment",
+        expected=StandIn,
+        how="Write a stand-in.",
+    )
+    return replace(result, inputs=(*result.inputs, entry))
+
+
+def test_a_method_that_stays_the_same_is_a_fixed_input():
+    def run(volume_loss):
+        return with_method(crossing(volume_loss=volume_loss), "a")
+
+    table = gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})
+    assert list(table["error"]) == [None, None]
+    fixed = {entry["name"]: entry for entry in table.attrs["fixed_inputs"]}
+    assert fixed["trough_width"]["magnitude"] == "a"
+    assert fixed["trough_width"]["unit"] == ""
+
+
+def test_a_method_that_changes_between_runs_raises_naming_both():
+    def run(volume_loss):
+        return with_method(
+            crossing(volume_loss=volume_loss), "a" if volume_loss.m < 1.5 else "b"
+        )
+
+    with pytest.raises(
+        ValueError, match=r"trough_width isn't in vary but changed.*\(a in .*, b in"
+    ):
+        gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})
+
+
+def test_a_method_cant_be_varied():
+    def run(trough_width):
+        return with_method(crossing(), trough_width)
+
+    with pytest.raises(
+        ValueError, match=r"run 0 was given trough_width=.*is a method.*per method"
+    ):
+        gs.sweep(run, vary={"trough_width": ["a", "b"]})

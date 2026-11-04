@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from garisenda._inputs import InputRecord, Sourced
-from garisenda._result import Result, input_dict, unit_text
+from garisenda._result import Result, input_dict, unit_text, value_text
 from garisenda._units import to_si
 
 Mode = Literal["grid", "paired"]
@@ -120,7 +120,8 @@ def sweep(
     ValueError
         If a sequence is empty, `mode` is unknown, ``"paired"`` sequences
         differ in length, a varied input isn't among a run's input records
-        with the value given (so `run` didn't pass it on), or an input that
+        with the value given (so `run` didn't pass it on), a varied input is
+        a method (a sweep varies quantities), or an input that
         isn't varied changes between runs (so `run` varies something it
         wasn't asked to). These are mistakes in `run`, raised at once.
     Exception
@@ -240,7 +241,12 @@ def _combinations(sequences: list[list[Any]], mode: object) -> list[tuple[Any, .
 
 
 def _as_used(entry: InputRecord, value: object) -> Any:
-    """Return a given value in the record's unit, or None if it won't convert."""
+    """Return a given value in the record's unit, or None if it won't convert.
+
+    A named method's record (a string) can't be varied: None.
+    """
+    if isinstance(entry.value, str):
+        return None
     if isinstance(value, Sourced):
         value = value.value
     try:
@@ -253,7 +259,12 @@ def _as_used(entry: InputRecord, value: object) -> Any:
 
 
 def _same(first: object, second: object) -> bool:
-    """Whether two magnitudes are equal to the relative tolerance."""
+    """Whether two magnitudes are equal to the relative tolerance.
+
+    Method names (strings) are equal only if they are the same string.
+    """
+    if isinstance(first, str) or isinstance(second, str):
+        return first == second
     a = np.asarray(first, dtype=np.float64)
     b = np.asarray(second, dtype=np.float64)
     if a.shape != b.shape:
@@ -268,7 +279,7 @@ def _match(result: Result, name: str, value: object) -> InputRecord | None:
         if entry.name != name:
             continue
         used = _as_used(entry, value)
-        if used is not None and _same(used, entry.value.magnitude):
+        if used is not None and _same(used, _magnitude_of(entry)):
             return entry
     return None
 
@@ -277,8 +288,15 @@ def _check_varied(result: Result, given: dict[str, Any], index: int) -> None:
     """Raise if a varied input isn't recorded with the value given."""
     for name, value in given.items():
         if _match(result, name, value) is None:
+            records = [entry for entry in result.inputs if entry.name == name]
+            if records and all(isinstance(entry.value, str) for entry in records):
+                raise ValueError(
+                    f"run {index} was given {name}={value!r}, but {name} is a "
+                    "method, and a sweep varies quantities. Run one sweep per "
+                    "method."
+                )
             recorded = [
-                f"{entry.value:~}" for entry in result.inputs if entry.name == name
+                value_text(entry) for entry in result.inputs if entry.name == name
             ]
             found = (
                 f"its records of {name} hold {', '.join(recorded)}"
@@ -290,6 +308,11 @@ def _check_varied(result: Result, given: dict[str, Any], index: int) -> None:
                 f"pass {name} on. Name run's arguments as the inputs they set, "
                 "and pass each one to the function that takes it."
             )
+
+
+def _magnitude_of(entry: InputRecord) -> Any:
+    """Return a record's magnitude, or its method name (a string)."""
+    return entry.value if isinstance(entry.value, str) else entry.value.magnitude
 
 
 def _grouped(result: Result, skip: Sequence[str]) -> dict[str, list[InputRecord]]:
@@ -309,12 +332,12 @@ def _check_fixed(
     for name in sorted(first.keys() | this.keys()):
         before, after = first.get(name, []), this.get(name, [])
         same = len(before) == len(after) and all(
-            unit_text(a) == unit_text(b) and _same(a.value.magnitude, b.value.magnitude)
+            unit_text(a) == unit_text(b) and _same(_magnitude_of(a), _magnitude_of(b))
             for a, b in zip(before, after, strict=True)
         )
         if not same:
-            was = ", ".join(f"{entry.value:~}" for entry in before) or "absent"
-            now = ", ".join(f"{entry.value:~}" for entry in after) or "absent"
+            was = ", ".join(value_text(entry) for entry in before) or "absent"
+            now = ", ".join(value_text(entry) for entry in after) or "absent"
             raise ValueError(
                 f"{name} isn't in vary but changed between runs ({was} in the "
                 f"first successful run, {now} in run {index}), so the sweep's "
@@ -404,7 +427,7 @@ def _used_value(outcome: _Run, name: str, entry: InputRecord) -> Any:
     if outcome.result is not None:
         matched = _match(outcome.result, name, outcome.given[name])
         assert matched is not None  # checked when the run completed
-        used: Any = matched.value.magnitude
+        used: Any = _magnitude_of(matched)
     else:
         used = _as_used(entry, outcome.given[name])
         if used is None:
