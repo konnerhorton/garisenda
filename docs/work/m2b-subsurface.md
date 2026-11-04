@@ -221,3 +221,97 @@ Tolerance 1e-6 relative for values carried to 8 figures, as in M1 and M2 (a); cr
 9. **Superposition and sweep:** two subsurface troughs (one each method) superpose and their sum and records are as M2 (a)'s AC 2 and 8; `gs.sweep` varying `trough_width_parameter` over [0.4, 0.5, 0.6] runs; changing the method between runs raises the unchanged-inputs error.
 10. **Cross-section:** a utility at depth 10 m over Mair's trough draws the settlement panel at that depth (its value at o = 0 is case A's), titled with the depth, with ±i marks at ±6.75 m; M1's figure tests pass unchanged. Checked by eye at close-out.
 11. **Citations and docs:** every new public calculation's docstring has its equations, inputs and outputs with units, validity limits and the citations of decision 11; `docs/reference/sources.md` has decision 12's entries; the guide page and its example build with `--strict`; mypy strict and the `lowest` job pass.
+
+## Plan
+
+Nine build commits, each with lint, format, mypy strict and pytest green. Opus does 1–6, Sonnet does 7–8, and Opus does 9 (figures by eye, then close-out), so a new session starts before 7 and before 9. The golden values and citations come from the spec, never from running the code; docstrings copy the citations from decision 11 as written there.
+
+### 1. `M2 (b): let an input record hold a named method` (Opus)
+- `src/garisenda/_inputs.py`:
+  - `InputRecord.value` becomes `pint.Quantity | str` (SPEC §5.1, decision 2), its docstring saying when it's a string.
+  - 🟡 **Not in the spec, proposed here:** a new `record_method(name, value, *, kind, expected, how) -> (method, InputRecord)`, the counterpart of `record()` for a method object: it unwraps `Sourced`, raises `TypeError` with `how` (how to write each method) if `value` isn't an `expected`, and records the method's `name` with given-as `"method"`. `record()` stays for quantities, so "every input goes through `record()`" becomes "through `record()` or `record_method()`" (CLAUDE.md, at close-out).
+- `src/garisenda/_result.py`: `input_dict` gives a string's `magnitude` as the string, and `unit_text` gives `""` for it (🟡 proposed: no unit, rather than `"dimensionless"`, which would read as a number); a new `value_text(entry)` for messages and the summary.
+- `src/garisenda/_sweep.py`: `_as_used` returns None for a string record (a method can't be varied); `_same` and `_check_fixed` compare strings by equality; every `f"{entry.value:~}"` uses `value_text`.
+- Tests in `tests/test_inputs.py`, `tests/test_result.py`, `tests/test_sweep.py`, with a stand-in method class:
+  - the record's value, kind, given-as and source (through `Sourced`); a wrong type raises `TypeError` with the `how` text;
+  - `to_dict()`, `to_frame()` and the summary show the name (AC 8, the views part);
+  - a sweep whose runs record different method names raises the unchanged-inputs error, naming both (AC 9, the sweep part, with stand-ins);
+  - M1's and M2 (a)'s tests pass unchanged.
+
+### 2. `M2 (b): add the trough width methods` (Opus)
+- New `src/garisenda/sources/_trough_width.py`, decision 10:
+  - `TroughWidth`, a frozen dataclass: `name`, `surface_coefficient` (c₀), `rate` (c₁), `inputs`, `equations`, `source`, `assumptions`, and `at(*, depth, axis_depth)`, computing i = c₀ z₀ + c₁ (z₀ − z), never K (z₀ − z).
+  - `mair_trough_width()`: (0.175, 0.325), name `"Mair et al. (1993), clay"`, no input records, decision 5's clay assumption, decision 11's citations.
+  - `linear_trough_width(*, trough_width_parameter)`: `@judgments` with M1's explanation of k; `record()` as M1 does; `ValueError` for k ≤ 0 or not finite; (0, k), name `"linear"`, the `trough_width_parameter` record, decision 5's linear assumption.
+  - Docstrings: the equations, inputs and outputs with units, the crown limit (decision 7), the extrapolation note (decision 7, no `marginal` band), citations.
+- `src/garisenda/sources/__init__.py`: export `TroughWidth`, `mair_trough_width`, `linear_trough_width`.
+- Tests in new `tests/sources/test_trough_width.py`:
+  - i from cases A and B at each depth, and i = K (z₀ − z) with K from Taylor's and Mair's forms at z = 0, 10, 15, 17 (case A's K column), to 1e-12;
+  - case E's widths at 2, 12 and 17 m;
+  - AC 8's linear part: missing k raises the judgment error; k = 0, −0.5, NaN, inf raise `ValueError`.
+
+### 3. `M2 (b): share point reading between the troughs` (Opus)
+A refactor with no change in behavior.
+- `src/garisenda/sources/_segment.py`: `read_points(x, y, depth, *, surface_tolerance) -> (x, y, depth)`, taken from `TransverseSurfaceTrough.evaluate` (records the coordinates, checks shapes and finiteness, raises above the surface), and `check_outside_bore(tunnel, offset, depth)`, which raises for points inside the bore.
+- `src/garisenda/sources/_transverse.py` uses them.
+- Tests: the existing suite passes unchanged.
+
+### 4. `M2 (b): add the transverse trough at depth` (Opus)
+- New `src/garisenda/sources/_transverse_trough.py`:
+  - `transverse_trough(tunnel, *, volume_loss, trough_width)`, `@judgments` for both (decision 1). `volume_loss` as in M1. `trough_width` through `record_method` with `expected=TroughWidth` and a `how` that writes both methods, so a number or string raises `TypeError` naming them.
+  - Records (decision 2): the tunnel's, `volume_loss`, `trough_width`, the method's own inputs (`trough_width_parameter` for the linear method), then `depth_tolerance`, `critical_distance_sampling` and `critical_distance_tolerance`. Method `"Transverse Gaussian trough at depth"` with decision 3's equations and the width's source. Assumptions per decision 5, then the width's, then the tunnel's.
+  - `TransverseTrough`, a frozen dataclass, with `evaluate`:
+    - `read_points` and `check_outside_bore`; depth capped at z_c for points deeper than z_c + 1 mm, which are `outside` with decision 7's reason and limit (the linear method's reason adds "(applied to the linear method by garisenda)");
+    - S and u_n and their derivatives from decision 6's P_ab and R_ab tables, held as polynomial coefficients and evaluated in r = o/i, with the factor Q c₁^b / i^(1+a+b) (and c₁^(b+1) for u_n); at capped points every b ≥ 1 term is exactly zero;
+    - assembled with g = (n_x, n_y, 0) and e_z: a tensor component whose indices include b twos takes the (a, b) derivative times the product of g over its other indices. That is symmetric by construction, and at z = 0 with the linear method reduces to M1's.
+  - `critical_distances` and `feature_length` are added in step 5; this commit has them raise `NotImplementedError`, so the protocol is met. 🟡 Proposed so step 4 stays under 300 lines; step 5 follows straight after.
+- `src/garisenda/sources/_transverse.py`: `BELOW_SURFACE` names `gs.sources.transverse_trough` as the method for depth.
+- `src/garisenda/sources/__init__.py`: export `transverse_trough`, `TransverseTrough`.
+- Tests in new `tests/sources/test_transverse_trough.py`:
+  - AC 1, the `evaluate` part: cases A, B and D, with the normal along +x and at azimuth 30°;
+  - AC 2: case C's 20 values read from the gradient, Hessian and third derivative;
+  - AC 4, the fixed cases: linear at z = 0 equals M1 at k = 0.5 (o = 7: B's last line); Mair at z = 0 is M1's settlement and 0.65 of its horizontal movement;
+  - AC 5: case D's verdicts, values and flag; 0.5 mm below the crown is `within`; depth derivatives below the crown are exactly zero; inside the bore (o = 0, z = 18) and above the surface raise; the linear method's reason;
+  - AC 8, the trough part: `trough_width` missing, a number, a string; the records and their values.
+- Tests in new `tests/sources/test_transverse_trough_properties.py` (hypothesis, both methods, any azimuth, points above the crown):
+  - AC 2: the gradient, Hessian and third derivative match central differences of the next lower order, and are symmetric;
+  - AC 3: the trace of the gradient is zero to 1e-12 of its terms' scale;
+  - AC 4: the linear method at z = 0 equals M1's displacement and x, y derivatives to 1e-12 relative, for any k.
+
+### 5. `M2 (b): find the trough's critical distances at depth` (Opus)
+- `src/garisenda/sources/_transverse_trough.py`: `critical_distances` calls `find_critical_distances` with the two constants (decision 8); `feature_length` is i at the segment's deeper end, depth capped at the crown. Docstrings say what root-finding can miss, as M2 (a)'s superposition does.
+- Tests:
+  - AC 6 (hypothesis, in the properties file): level segments at any angle, position and depth above the crown return 0, ±i, ±√3 i, and on oblique segments ±0.74196378 i and ±2.3344142 i, with i = i(z), to 1e-8 m;
+  - AC 7: sloped segments (2 m to 12 m deep; one crossing the crown; one at 45° in plan, descending), both methods, added as cases to `test_nothing_missed_against_dense_sampling` in `tests/sources/test_critical.py`, so M2 (a)'s check (`eight_functions`, h/20) is reused as it stands;
+  - case E's feature lengths.
+- If a test fails, the fix goes in this commit with the cause stated.
+
+### 6. `M2 (b): profile, superpose and sweep the trough at depth` (Opus)
+Tests only, unless a gap shows; then the fix goes here, with its cause.
+- `tests/profile/test_movement_profile.py`: AC 1's profile part, cases A and B at z = 10 m on a utility built perpendicular at station 50, depth 10 m, offsets −30 to 30 m, spacing 2.5 m, for `vertical` and `along` at the tabulated offsets.
+- `tests/sources/test_superposition.py`: AC 9, a Mair trough and a linear trough superposed: the sum, the records (`north.trough_width` holding the name), the flags tagged with their source.
+- `tests/test_sweep.py`: AC 9, `trough_width_parameter` over [0.4, 0.5, 0.6] with the linear method runs; a run that switches to Mair's raises the unchanged-inputs error.
+
+### 7. `M2 (b): draw the cross-section at the utility's depth` (Sonnet)
+- `src/garisenda/plot/_cross_section.py`, decision 9:
+  - `surface_of` becomes the movement at the built utility's axis depth (the mean of its vertices' depth, as `_section` already reads it), and the panels' titles say "Settlement at depth 10 m" or "Settlement at the surface" (and the same for horizontal) when the depth is within 1 mm of zero;
+  - a private `_width(source, depth)` replaces `getattr(..., "trough_width")`: `TroughWidth.at` at the utility's depth, capped at the crown (🟡 proposed, so the marks match the values drawn below the crown), or M1's float;
+  - 🟡 **Not in the spec, proposed here:** at a depth that crosses a bore, grid points inside it aren't evaluated, and the line breaks there (NaN in the drawing arrays only, not in any result: SPEC §10 is about data). Otherwise a utility beside the bore, which is a valid input, couldn't be drawn.
+  - The docstring says what depth is drawn.
+- Tests in `tests/plot/test_cross_section.py` (AC 10): a utility at depth 10 m over Mair's trough: the settlement panel's value at o = 0 is case A's 1.67108552e-2 m, its title names the depth, ±i marks at ±6.75 m; a utility at 18 m beside the bore draws with a break; M1's and M2 (a)'s figure tests pass unchanged; `rcParams` unchanged.
+
+### 8. `M2 (b): write the below-the-surface guide` (Sonnet)
+- New `docs/site/guides/below-the-surface.md` and `docs/site/examples/below-the-surface.py` (decision 14): a utility at depth over M1's tunnel; the profile and cross-section with Mair's method; the same with the linear method; what the crown flag means and when another method is needed; a sweep of `trough_width_parameter`.
+- `zensical.toml` nav, after "Several tunnels".
+- `docs/site/reference/sources.md`: entries for `transverse_trough`, `TransverseTrough`, `TroughWidth`, `mair_trough_width`, `linear_trough_width`.
+- Tests: `tests/docs/test_site.py` picks up the example. The docs build passes with `--strict` and no `griffe:` warnings (AC 11, the docs part).
+
+### 9. `M2 (b): check figures and close out` (Opus)
+- Check the figures in `docs/site/img/generated/` by eye against decision 9 (the rest of AC 10), and fix anything found.
+- Check every new public docstring against decision 11's citations and `docs/reference/sources.md` against decision 12 (AC 11).
+- Run every check: the CI line; Python 3.13 and 3.14; the `lowest-direct` floors, then `git checkout uv.lock`.
+- Close-out:
+  - SPEC §12.4 marks M2 (b), and so M2, done with its date; check §2.1, §2.5, §3, §5.1, §9 and §13 Q2 say what was built (they were written at the spec step);
+  - `docs/TODO.md` #3 keeps only reading Mair et al. (1993), the granular method and New & Bowers (1994);
+  - `CLAUDE.md`: status and "Next" point to M3; the `record()` convention names `record_method()`; any recurring mistake goes into the conventions;
+  - report each of the 11 ACs as met or not, with its evidence.
