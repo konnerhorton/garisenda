@@ -66,7 +66,7 @@ Each result lists its assumptions in `result.assumptions`. For this one:
 - **Transverse trough only:** the trough across the tunnel is used; the longitudinal trough ahead of the face isn't.
 - **Gaussian trough:** settlement follows the normal curve above.
 - **Ground moves toward the tunnel axis,** which sets horizontal movement from settlement.
-- **The surface trough is applied at each point's plan position, whatever its depth.** Below the surface the trough is narrower, so a buried utility's settlement and curvature are underestimated. Every station below the surface is flagged *outside*, and the figures mark it (the subsurface trough comes later).
+- **The surface trough is applied at each point's plan position, whatever its depth.** Below the surface the trough is narrower, so a buried utility's settlement and curvature are underestimated. Every station below the surface is flagged *outside*, and the figures mark it. [Below the surface](guides/below-the-surface.md) gives the trough at depth.
 - **No validity range is checked** for k, volume loss or cover, because the sources are unverified (above).
 - **Idealized straight tunnel:** no ends, shafts, curves or junctions.
 - **Perpendicular:** a utility built from station and offset crosses square to the tunnel, whatever its real angle.
