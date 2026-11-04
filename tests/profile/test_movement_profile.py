@@ -400,3 +400,49 @@ def test_result_keeps_its_source_and_asset_outside_the_views():
     assert "Trough" not in repr(result)
     assert list(result.to_frame().columns) == COLUMNS_BUILT
     assert dataclasses.replace(result, source=None, asset=None) == result
+
+
+# M2 (b), AC 1: the trough at depth through movement_profile, on a utility
+# built perpendicular at station 50, axis depth 10 m, offsets -30 to 30 m.
+# Distance runs toward +n, so along is u_n. (offset, S, u_n), from the M2 (b)
+# spec's cases A and B at z = 10 m.
+AT_DEPTH = {
+    "Mair": (
+        gs.sources.mair_trough_width,
+        [
+            (0.0, 1.67108552e-2, 0.0),
+            (6.75, 1.01356460e-2, -3.29408495e-3),
+            (10.0, 5.57707713e-3, -2.68525936e-3),
+            (-10.0, 5.57707713e-3, 2.68525936e-3),
+        ],
+    ),
+    "linear": (
+        lambda: gs.sources.linear_trough_width(trough_width_parameter=0.5),
+        [
+            (0.0, 2.25596545e-2, 0.0),
+            (5.0, 1.36831221e-2, -6.84156105e-3),
+            (10.0, 3.05311723e-3, -3.05311723e-3),
+            (-5.0, 1.36831221e-2, 6.84156105e-3),
+        ],
+    ),
+}
+
+
+@pytest.mark.parametrize("method", sorted(AT_DEPTH))
+def test_trough_at_depth_through_the_profile(method):
+    width, rows = AT_DEPTH[method]
+    source = gs.sources.transverse_trough(
+        tunnel(), volume_loss=1 * u.percent, trough_width=width()
+    )
+    utility = built(source, start_offset=-30, end_offset=30, depth=10)
+    result = gs.movement_profile(utility, source, spacing=2.5)
+    values = result.values
+    np.testing.assert_allclose(values["depth"], 10.0, rtol=1e-12)
+    for offset, settlement, along in rows:
+        row = row_at(result, offset + 30)
+        assert row["offset"] == pytest.approx(offset, abs=1e-9)
+        assert row["vertical"] == pytest.approx(settlement, rel=REL)
+        assert row["along"] == pytest.approx(along, rel=REL, abs=1e-15)
+    assert result.validity == "within"
+    records = {entry.name: entry for entry in result.inputs}
+    assert records["trough_width"].value == width().name
