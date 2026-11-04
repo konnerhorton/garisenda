@@ -33,6 +33,7 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 ### 4. Utility check definitions · You (supply) and Claude (verify) · SPEC §7, M3
 - **To verify:** how axial strain, bending strain, radius of curvature, joint pullout and joint rotation are defined from movements, in Bracegirdle et al. (1996) or its successor guidance. Verify against the primary source, not a summary of it.
 - Write the definitions and hand-calculated golden values into M3's spec.
+- **From M2 (b)** (2026-11-04): Bracegirdle et al. (1996) take joint pullout as the maximum horizontal movement, with movement toward the axis (their Eq. 3, smudged, read as (y/(z₀ − z_p)) S_v), which is 1.54 times garisenda's constant-volume field with Mair's width at the surface and 2.08 times at z₀/2. M3's spec decides which horizontal movement a pullout check paired with their method uses (`docs/work/m2b-subsurface.md`, decision 4).
 
 ### 5. Pipe length presets · You and Claude · SPEC §4, §7
 - Find citable nominal laying lengths by pipe type and diameter (manufacturer catalogs, AWWA or similar standards) for an opt-in preset. Old cast iron mains are the hard case: record what the source says about era and range.
