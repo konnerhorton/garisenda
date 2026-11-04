@@ -303,7 +303,7 @@ Tests only, unless a gap shows; then the fix goes here, with its cause.
 ### 8. `M2 (b): write the below-the-surface guide` (Sonnet)
 - New `docs/site/guides/below-the-surface.md` and `docs/site/examples/below-the-surface.py` (decision 14): a utility at depth over M1's tunnel; the profile and cross-section with Mair's method; the same with the linear method; what the crown flag means and when another method is needed; a sweep of `trough_width_parameter`.
 - `zensical.toml` nav, after "Several tunnels".
-- `docs/site/reference/sources.md`: entries for `transverse_trough`, `TransverseTrough`, `TroughWidth`, `mair_trough_width`, `linear_trough_width`.
+- `docs/site/reference/sources.md`: entries for `transverse_trough`, `TransverseTrough`, `TroughWidth`, `mair_trough_width`, `linear_trough_width`. *Changed in build:* added in steps 2 and 4 instead, since `tests/docs/test_site.py` requires an entry for every public name.
 - Tests: `tests/docs/test_site.py` picks up the example. The docs build passes with `--strict` and no `griffe:` warnings (AC 11, the docs part).
 
 ### 9. `M2 (b): check figures and close out` (Opus)

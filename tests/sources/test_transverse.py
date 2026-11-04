@@ -146,7 +146,7 @@ def test_point_below_the_surface_is_flagged_and_gets_surface_values():
     assert flag.verdict == "outside"
     assert flag.points == (2, 3)
     assert "below the ground surface" in flag.reason
-    assert "M2" in flag.reason
+    assert "gs.sources.transverse_trough" in flag.reason
     np.testing.assert_array_equal(movement.displacement[2], movement.displacement[0])
     np.testing.assert_array_equal(movement.gradient[3], movement.gradient[0])
 

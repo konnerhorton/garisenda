@@ -46,8 +46,8 @@ ASSUMPTIONS = (
 
 BELOW_SURFACE = (
     "Surface trough applied below the ground surface: the trough at depth is "
-    "narrower, so settlement and curvature there are underestimated. The "
-    "subsurface method is M2."
+    "narrower, so settlement and curvature there are underestimated. For the "
+    "trough at depth, use gs.sources.transverse_trough."
 )
 
 FloatArray = npt.NDArray[np.float64]
