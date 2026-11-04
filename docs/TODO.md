@@ -33,7 +33,14 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 ### 4. Utility check definitions · You (supply) and Claude (verify) · SPEC §7, M3
 - **To verify:** how axial strain, bending strain, radius of curvature, joint pullout and joint rotation are defined from movements, in Bracegirdle et al. (1996) or its successor guidance. Verify against the primary source, not a summary of it.
 - Write the definitions and hand-calculated golden values into M3's spec.
-- **From M2 (b)** (2026-11-04): Bracegirdle et al. (1996) take joint pullout as the maximum horizontal movement, with movement toward the axis (their Eq. 3, smudged, read as (y/(z₀ − z_p)) S_v), which is 1.54 times garisenda's constant-volume field with Mair's width at the surface and 2.08 times at z₀/2. M3's spec decides which horizontal movement a pullout check paired with their method uses (`docs/work/m2b-subsurface.md`, decision 4).
+- **Joint pullout, from M2 (b)** (2026-11-04, `docs/work/m2b-subsurface.md`, decision 4). Bracegirdle et al. (1996) take joint pullout as the maximum horizontal movement, with movement toward the axis (their Eq. 3, smudged, read as (y/(z₀ − z_p)) S_v). That is i/(0.325 (z₀ − z)) times garisenda's constant-volume field with Mair's width: 1.54 at the surface, 2.08 at z₀/2, and 1 + 1.08 z₀/D at the crown (about 4.6 for z₀ = 20 m, D = 6 m).
+  - **Preferred direction, not yet decided** (discussed 2026-11-04): pullout from the pipe's own movement, as the difference in along-pipe displacement between neighboring joints, from garisenda's exact field and a pipe length the user gives. It isn't tied to either horizontal field. Taking the maximum horizontal movement as pullout is an upper bound (all the stretch in the tension zone beyond ±i in one joint, u(i) − u(∞) = u_max). That reading is Claude's, not checked against Bracegirdle et al.'s text.
+  - **To resolve in M3's spec:**
+    - What the spreadsheet being replaced does (pullout as max horizontal movement? movement toward the axis?), since reviewers will compare against it.
+    - Whether Bracegirdle et al.'s pullout limits were calibrated with movement toward the axis. If so, using them with garisenda's smaller field is unconservative against their method as published, and the spec says how that's handled.
+    - The pipe length, a required judgment (TODO #5).
+    - A clean copy of Bracegirdle et al. (1996) (the proceedings volume, later CIRIA guidance, or the authors) to read Eq. 3 with certainty. Only if it confirms Eq. 3, offer movement toward the axis as a named horizontal movement method, required with no default (SPEC §2.3). Until then it isn't offered.
+    - Whether max horizontal movement is also reported as Bracegirdle's bound, beside the joint-to-joint value.
 
 ### 5. Pipe length presets · You and Claude · SPEC §4, §7
 - Find citable nominal laying lengths by pipe type and diameter (manufacturer catalogs, AWWA or similar standards) for an opt-in preset. Old cast iron mains are the hard case: record what the source says about era and range.
