@@ -8,7 +8,12 @@ import numpy.typing as npt
 
 from garisenda._inputs import InputRecord, judgments, record
 from garisenda.sources._movement import Flag, MethodRecord, Movement
-from garisenda.sources._segment import directions, read_segment
+from garisenda.sources._segment import (
+    check_outside_bore,
+    directions,
+    read_points,
+    read_segment,
+)
 from garisenda.sources._tunnel import IdealizedTunnel
 
 SURFACE_TOLERANCE = 1e-3
@@ -231,50 +236,12 @@ class TransverseSurfaceTrough:
             the points), a point is above the ground surface, or a point is
             inside the bore.
         """
-        coordinates = [
-            np.atleast_1d(
-                np.asarray(
-                    record(
-                        name,
-                        value,
-                        kind="geometry",
-                        unit="m",
-                        plain_number="read as SI",
-                    )[0],
-                    dtype=np.float64,
-                )
-            )
-            for name, value in (("x", x), ("y", y), ("depth", depth))
-        ]
-        if len({array.shape for array in coordinates}) != 1:
-            raise ValueError(
-                "x, y and depth must have the same length; got shapes "
-                f"{', '.join(str(array.shape) for array in coordinates)}."
-            )
-        x_m, y_m, depth_m = (array.ravel() for array in coordinates)
-        missing = ~(np.isfinite(x_m) & np.isfinite(y_m) & np.isfinite(depth_m))
-        if missing.any():
-            raise ValueError(
-                "Every point needs finite x, y and depth; these points don't: "
-                f"{np.flatnonzero(missing).tolist()}."
-            )
-        above = depth_m < -self.surface_tolerance
-        if above.any():
-            raise ValueError(
-                "Points above the ground surface (negative depth) can't be "
-                f"evaluated: {np.flatnonzero(above).tolist()}."
-            )
-
-        tunnel = self.tunnel
-        _, offset = tunnel.station_offset(x=x_m, y=y_m)
+        x_m, y_m, depth_m = read_points(
+            x, y, depth, surface_tolerance=self.surface_tolerance
+        )
+        _, offset = self.tunnel.station_offset(x=x_m, y=y_m)
         o = np.asarray(offset, dtype=np.float64)
-        inside = np.hypot(o, depth_m - tunnel.axis_depth) < tunnel.diameter / 2
-        if inside.any():
-            raise ValueError(
-                f"Points inside the bore can't be evaluated: "
-                f"{np.flatnonzero(inside).tolist()}."
-            )
-
+        check_outside_bore(self.tunnel, o, depth_m)
         return self._movement(o, depth_m)
 
     def critical_distances(
