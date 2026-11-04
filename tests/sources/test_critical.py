@@ -169,24 +169,25 @@ SUPERPOSITIONS = {
 START, END = np.array([-30.0, 50.0, 0.0]), np.array([60.0, 50.0, 0.0])
 
 
-def eight_functions(source, distance):
+def eight_functions(source, distance, start=START, end=END):
     """d/ds, d2/ds2 of along, vertical, lateral and d3/ds3 of vertical, lateral.
 
     Returned with each function's order, and the scales of decision 9.
     """
-    length = float(np.linalg.norm(END - START))
-    a = (END - START) / length
+    start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    length = float(np.linalg.norm(end - start))
+    a = (end - start) / length
     lateral = np.array([a[1], -a[0], 0.0]) / math.hypot(a[0], a[1])
     vertical = np.cross(lateral, a)
     e = np.stack([a, vertical, lateral])
-    points = START + distance[:, None] * a
+    points = start + distance[:, None] * a
     m = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
     orders = [
         np.einsum("ei,nij,j->ne", e, m.gradient, a),
         np.einsum("ei,nijk,j,k->ne", e, m.hessian, a, a),
         np.einsum("ei,nijkl,j,k,l->ne", e, m.third_derivative, a, a, a),
     ]
-    feature = source.feature_length(start=START, end=END)
+    feature = source.feature_length(start=start, end=end)
     displacement = np.max(np.linalg.norm(m.displacement, axis=1))
     scales = [
         max(np.max(np.abs(order)), displacement / feature**n)
@@ -234,15 +235,49 @@ def test_case_b_profile_marks_the_peaks_critical():
         assert values["critical"].iloc[index]
 
 
-@pytest.mark.parametrize("case", sorted(SUPERPOSITIONS))
+def subsurface(width):
+    return gs.sources.transverse_trough(
+        tunnel_at(), volume_loss=1 * u.percent, trough_width=width
+    )
+
+
+def mair():
+    return subsurface(gs.sources.mair_trough_width())
+
+
+def linear():
+    return subsurface(gs.sources.linear_trough_width(trough_width_parameter=0.5))
+
+
+# M2 (b), AC 7: segments that change depth, for the trough at depth. Over
+# north (azimuth 0, axis depth 20 m, crown 17 m): from 2 m to 12 m deep;
+# crossing the crown beside the bore (its nearest point, the end, is 5.4 m
+# from the axis); and at 45 degrees in plan, descending.
+SLOPED = {
+    "2 to 12 m": ((-30.0, 50.0, 2.0), (30.0, 50.0, 12.0)),
+    "crossing the crown": ((-30.0, 50.0, 12.0), (-5.0, 50.0, 22.0)),
+    "45 degrees, descending": ((-20.0, 30.0, 1.0), (20.0, 70.0, 15.0)),
+}
+CASES = {
+    **{case: (make, START, END) for case, make in SUPERPOSITIONS.items()},
+    **{
+        f"{name}, {segment}": (make, *SLOPED[segment])
+        for name, make in (("Mair", mair), ("linear", linear))
+        for segment in SLOPED
+    },
+}
+
+
+@pytest.mark.parametrize("case", sorted(CASES))
 def test_nothing_missed_against_dense_sampling(case):
-    source = SUPERPOSITIONS[case]()
-    distances = source.critical_distances(start=START, end=END)
-    length = float(np.linalg.norm(END - START))
-    feature = source.feature_length(start=START, end=END)
+    make, start, end = CASES[case]
+    source = make()
+    distances = source.critical_distances(start=start, end=end)
+    length = float(np.linalg.norm(np.subtract(end, start)))
+    feature = source.feature_length(start=start, end=end)
     h = length / math.ceil(length / (feature / 8))
     dense = np.linspace(0.0, length, round(length / (h / 20)) + 1)
-    values, scales = eight_functions(source, dense)
+    values, scales = eight_functions(source, dense, start, end)
     band = 1e-10 * scales
     sign = np.sign(values)
     changes = (sign[:-1] != sign[1:]) & ~(
@@ -254,5 +289,20 @@ def test_nothing_missed_against_dense_sampling(case):
         between = (distances >= dense[k] - 1e-9) & (distances <= dense[k + 1] + 1e-9)
         assert between.any(), f"a sign change at {dense[k]:.6g} m is missed"
     # And each returned distance is a zero of one of the eight functions.
-    at, _ = eight_functions(source, distances)
+    at, _ = eight_functions(source, distances, start, end)
     assert np.all(np.min(np.abs(at) / scales, axis=1) < 1e-9)
+
+
+@pytest.mark.parametrize(
+    ("make", "end_depth", "width"),
+    [(mair, 12.0, 6.1), (linear, 12.0, 4.0), (mair, 19.0, 4.475), (linear, 19.0, 1.5)],
+)
+def test_feature_length_of_case_e(make, end_depth, width):
+    source = make()
+    start, end = (-30.0, 50.0, 2.0), (30.0, 50.0, end_depth)
+    assert source.feature_length(start=start, end=end) == pytest.approx(
+        width, rel=1e-12
+    )
+    assert source.feature_length(start=end, end=start) == pytest.approx(
+        width, rel=1e-12
+    )

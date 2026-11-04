@@ -1,5 +1,7 @@
 """Physics the trough at depth must obey, over many inputs (M2 (b), SPEC §11)."""
 
+import math
+
 import numpy as np
 from hypothesis import given
 from hypothesis import strategies as st
@@ -155,3 +157,57 @@ def test_linear_at_the_surface_is_m1(tunnel, k, volume_loss, station, offset):
         np.testing.assert_allclose(
             mine_part, theirs_part, rtol=1e-12, atol=1e-12 * scale
         )
+
+
+# AC 6: critical distances on level segments are the analytic set at i(z)
+
+ROOTS = (0.0, 1.0, math.sqrt(3))
+# 0.74196378 and 2.3344142 in the spec, exactly: the zeros of r^4 - 6 r^2 + 3.
+OBLIQUE_ROOTS = (math.sqrt(3 - math.sqrt(6)), math.sqrt(3 + math.sqrt(6)))
+
+
+@st.composite
+def level_segments(draw):
+    source = draw(troughs())
+    tunnel = source.tunnel
+    depth = draw(st.floats(0.0, 1.0)) * source.crown_depth
+    i = source.width_at(depth)
+    station = draw(st.floats(-1e3, 1e3))
+    offset = draw(st.floats(-4.0, 4.0)) * i
+    # As M2 (a)'s test: perpendicular, or 0.01 to 89 degrees from it.
+    angle = math.radians(
+        draw(st.one_of(st.just(0.0), st.floats(0.01, 89.0)))
+        * draw(st.sampled_from([-1, 1]))
+    )
+    length = draw(st.floats(1.0, 20.0)) * i
+    t = np.array(tunnel.tangent)
+    n = np.array(tunnel.normal)
+    p0 = np.array([tunnel.reference_x, tunnel.reference_y])
+    begin = p0 + (station - tunnel.reference_station) * t + offset * n
+    finish = begin + length * (math.cos(angle) * n + math.sin(angle) * t)
+    return source, (*begin, depth), (*finish, depth), length, angle, i
+
+
+def interior(distances, length):
+    # A zero at an end is found or not depending on rounding.
+    distances = np.asarray(distances)
+    return distances[(distances > 1e-6) & (distances < length - 1e-6)]
+
+
+@given(level_segments())
+def test_level_segments_give_the_analytic_distances(segment):
+    source, start, end, length, angle, i = segment
+    roots = ROOTS + (OBLIQUE_ROOTS if angle != 0.0 else ())
+    targets = np.array(sorted({sign * root for root in roots for sign in (-1, 1)}))
+    _, offsets = source.tunnel.station_offset(
+        x=np.array([start[0], end[0]]), y=np.array([start[1], end[1]])
+    )
+    o_start, o_end = (float(value) for value in offsets)
+    expected = np.sort(length * (targets * i - o_start) / (o_end - o_start))
+    expected = expected[(expected >= 0) & (expected <= length)]
+    np.testing.assert_allclose(
+        interior(source.critical_distances(start=start, end=end), length),
+        interior(expected, length),
+        rtol=0,
+        atol=1e-8,
+    )

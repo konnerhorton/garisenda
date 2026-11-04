@@ -8,8 +8,9 @@ import numpy as np
 import numpy.typing as npt
 
 from garisenda._inputs import InputRecord, judgments, record, record_method
+from garisenda.sources._critical import find_critical_distances
 from garisenda.sources._movement import Flag, MethodRecord, Movement
-from garisenda.sources._segment import check_outside_bore, read_points
+from garisenda.sources._segment import check_outside_bore, read_points, read_segment
 from garisenda.sources._trough_width import LINEAR_NAME, TroughWidth
 from garisenda.sources._tunnel import IdealizedTunnel
 
@@ -331,12 +332,62 @@ class TransverseTrough:
     def critical_distances(
         self, *, start: object, end: object
     ) -> npt.NDArray[np.float64]:
-        """Return where the trough's quantities peak or change sign on a segment."""
-        raise NotImplementedError("Added in M2 (b), plan step 5.")
+        """Return where the trough's quantities peak or change sign on a segment.
+
+        Found by root-finding on the exact derivatives along the segment
+        (`find_critical_distances`), sampled at 1/8 of the feature length and
+        refined to 1e-9 m. On a level segment the result is the analytic set
+        at that depth's i: offsets 0, +-i and +-sqrt(3) i, and on a segment
+        that isn't perpendicular to the tunnel also +-0.74196378 i and
+        +-2.3344142 i (the zeros of r^4 - 6 r^2 + 3). On a segment that
+        changes depth, i varies along it and there is no closed form, hence
+        the root-finding for both.
+
+        What this can miss, as for a superposition: two zeros of one function
+        closer together than the sampling interval, which a lone trough never
+        has. Where a segment crosses the crown, the depth derivatives drop to
+        zero (the values below are the crown's), so a function can jump there;
+        if it jumps across zero, the crossing is returned as a critical
+        distance, though it isn't a zero.
+
+        Parameters
+        ----------
+        start, end : array of three lengths
+            The segment's ends as (x, y, depth), in m if plain numbers.
+
+        Returns
+        -------
+        numpy.ndarray
+            The distances from `start` in m, sorted, within [0, L].
+
+        Raises
+        ------
+        ValueError
+            If the segment is bad or vertical, or a sample can't be evaluated
+            (inside the bore or above the surface), naming its distance along
+            the segment.
+        """
+        return find_critical_distances(
+            self,
+            start=start,
+            end=end,
+            sampling=CRITICAL_DISTANCE_SAMPLING,
+            tolerance=CRITICAL_DISTANCE_TOLERANCE,
+        )
 
     def feature_length(self, *, start: object, end: object) -> float:
-        """Return the least trough width i on a segment, in m."""
-        raise NotImplementedError("Added in M2 (b), plan step 5.")
+        """Return the least trough width i on a segment, in m.
+
+        i decreases with depth, so it is i at the segment's deeper end, with
+        depth capped at the crown.
+
+        Raises
+        ------
+        ValueError
+            If an end isn't three finite values, or the segment has zero length.
+        """
+        start_m, end_m, _ = read_segment(start, end)
+        return float(self.width_at(max(float(start_m[2]), float(end_m[2]))))
 
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         crown = self.crown_depth
