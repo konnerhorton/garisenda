@@ -22,12 +22,13 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 ### 2. Transverse trough sources · Claude (You to supply the papers) · SPEC §2.1, M1
 - **To verify:** O'Reilly & New (1982) for trough width (the cohesive and granular linear fits); Peck (1969) for the Gaussian form; the relation between maximum settlement, volume loss and trough width; horizontal movement at the surface.
 - **Golden values:** a worked example from one of these, or a hand calculation written out in M1's spec.
+- **In hand since M2 (b)** (2026-11-04): Taylor (1995), Eqs. 1–4 and 6, pp. 124–125, and Mair & Taylor (1997), Eqs. 9–10, p. 2362, restate the surface trough and horizontal movement toward the axis (see `docs/reference/sources.md`). They are reviews, so the originals (Peck 1969, O'Reilly & New 1982) still need reading unless the authors' own restatement applies (SPEC §2.1).
 - **Used unverified in M1 (a)** (decided 2026-11-02): the Gaussian form, the volume relation and horizontal movement toward the axis, cited with 🔬 and no equation numbers; golden values are hand calculations. Verifying them adds the equation numbers, the validity ranges for k, volume loss and cover, and replaces M1 (a)'s "no range checked" assumption.
 
 ### 3. Subsurface movements · You and Claude · SPEC §13 Q2, M2
-- **To verify:** Mair et al. (1993) for trough width below the surface in clay, with its stated validity limit; Taylor (1995) for horizontal movements below the surface; New & Bowers (1994).
-- **For M2 (b)** (decided 2026-11-03, M2 (a)'s intent): the papers will be supplied; Mair et al. (1993) for clay, plus i = k (z₀ − z) from a given k as the user's own choice. To confirm against the paper: whether i(z) is linear in depth, which keeps the derivatives with respect to depth short.
-- **Open:** a granular-specific method (SPEC §13 Q2), and the validity limits (including the depth limit Mair et al. state for their method).
+- **Decided in M2 (b)** (2026-11-04): Mair et al. (1993)'s clay method, cited from Mair & Taylor (1997), Taylor (1995) and Bracegirdle et al. (1996), and i = k (z₀ − z) from a given k; the crown limit (SPEC §2.5). See `docs/work/m2b-subsurface.md`.
+- **To read:** Mair, Taylor & Bracegirdle (1993), *Géotechnique* 43(2), 315–320, the original of the clay method; check its equation and whether it states a validity limit other than the crown. If it does, it governs.
+- **Open:** a granular-specific method (SPEC §13 Q2); New & Bowers (1994) for movements close to the tunnel, below the crown, where M2 (b) flags points.
 
 ### 4. Utility check definitions · You (supply) and Claude (verify) · SPEC §7, M3
 - **To verify:** how axial strain, bending strain, radius of curvature, joint pullout and joint rotation are defined from movements, in Bracegirdle et al. (1996) or its successor guidance. Verify against the primary source, not a summary of it.

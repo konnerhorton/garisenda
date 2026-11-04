@@ -6,6 +6,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
 - `docs/work/<id>.md`: intent, spec and plan for each unit of work (the spec-driven-development skill). Files for merged units are history.
 - `docs/drafts/`: notes for later work, including `scope-discussion.md`. Not decisions unless marked "decided".
+- `docs/reference/sources.md`: the bibliography, each source with its key and the date it was verified (SPEC §2.2).
 - `docs/TODO.md`: research items and pending decisions, referenced as "TODO #n".
 - `docs/site/`: the published docs site (Zensical); each page's example is a script in `docs/site/examples/`. The rest of `docs/` is internal.
 
