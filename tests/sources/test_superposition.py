@@ -226,6 +226,24 @@ def test_overlapping_parallel_bores_raise():
     twins(6.0)  # touching
 
 
+@pytest.mark.parametrize("azimuth", [0.0, 17.3, 45.0, 90.0, 133.7, 251.9, 315.0])
+@pytest.mark.parametrize("diameter", [2.0, 3.25, 6.0, 11.7])
+def test_touching_bores_built_with_parallel_never_raise(azimuth, diameter):
+    # The offset is recovered from the twin's coordinates, so it can come out
+    # a rounding error under D; touching bores are still allowed.
+    first = gs.sources.IdealizedTunnel(
+        reference_point=(123.4, -56.7),
+        azimuth=azimuth * u.degree,
+        diameter=diameter,
+        axis_depth=20.0,
+    )
+    for side in (-1, 1):
+        twin = first.parallel(
+            offset=side * diameter, diameter=diameter, axis_depth=20.0
+        )
+        gs.superpose(first=trough(first), twin=trough(twin))
+
+
 def crossing(axis_depth):
     east = gs.sources.IdealizedTunnel(
         reference_point=(0, 50),

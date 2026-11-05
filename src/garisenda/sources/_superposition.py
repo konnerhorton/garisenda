@@ -27,6 +27,13 @@ GROUND_TOLERANCE = 1e-6
 PARALLEL_TOLERANCE = 1e-9
 """|sin| of the angle between two tunnels within which they are parallel."""
 
+OVERLAP_TOLERANCE = 1e-6
+"""Length in m by which two bores may overlap and still count as touching.
+
+The offset between parallel axes is found from their coordinates, so bores
+built touching can come out a rounding error closer than (D1 + D2) / 2.
+"""
+
 SOURCE_ATTRIBUTES = (
     "evaluate",
     "critical_distances",
@@ -369,7 +376,7 @@ def _check_overlap(sources: Mapping[str, Source]) -> None:
             distance = depth
             between = "where their plans cross"
         clear = (first.diameter + second.diameter) / 2
-        if distance < clear:
+        if distance < clear - OVERLAP_TOLERANCE:
             raise ValueError(
                 f"The bores of {first_name} and {second_name} overlap: their "
                 f"axes are {distance:.6g} m apart {between}, less than "
