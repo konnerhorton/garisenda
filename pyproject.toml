@@ -1,6 +1,6 @@
 [project]
 name = "garisenda"
-version = "0.0.1"
+version = "0.1.0"
 description = "Ground movements from tunneling and their effect on utilities and buildings, traceable, with figures for every result"
 readme = "README.md"
 requires-python = ">=3.12"
