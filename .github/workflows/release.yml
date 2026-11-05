@@ -61,9 +61,10 @@ jobs:
           python-version: ${{ matrix.python }}
       # Without the source tree, the tests can only import the installed wheel.
       - run: rm -rf src
+      # The test dependencies from the dev group; keep them in step with it.
       - run: >-
           uv run --isolated --no-project
-          --with dist/*.whl --with pytest
+          --with dist/*.whl --with pytest --with hypothesis
           pytest
 
   publish-pypi:
