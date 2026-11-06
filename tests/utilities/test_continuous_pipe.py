@@ -1,5 +1,6 @@
 """Tests for gs.check_continuous_pipe against the M3 (a) spec's acceptance criteria."""
 
+import json
 import math
 
 import numpy as np
@@ -7,6 +8,7 @@ import pandas as pd
 import pytest
 
 import garisenda as gs
+from garisenda.utilities._continuous_pipe import governing_value
 
 u = gs.units
 REL = 5e-3  # hand calculations (spec, cases A and C): 0.5 %, SPEC §2.4
@@ -473,3 +475,267 @@ def test_result_parts(case_a):
     assert any("follows the ground" in text for text in case_a.assumptions)
     assert any("circular" in text for text in case_a.assumptions)
     assert case_a.validity == "within"
+
+
+# AC 3: case B, discrete, from the spec's formulas (exact: 1e-9 relative)
+
+EXACT = 1e-9
+AREA = math.pi * 6.0**2 / 4
+S_MAX_EXACT = 0.01 * AREA / (math.sqrt(2 * math.pi) * WIDTH)
+
+
+def settlement(o):
+    return S_MAX_EXACT * math.exp(-(o**2) / (2 * WIDTH**2))
+
+
+def horizontal(o):
+    # Toward the axis, along the pipe (linear width method): -(o / (z0 - z)) S.
+    return -(o / DEPTH_BELOW_AXIS) * settlement(o)
+
+
+def discrete_by_hand(o, h):
+    strain = (horizontal(o + h / 2) - horizontal(o - h / 2)) / h
+    # The settlement is positive down, as the profile's vertical is.
+    curvature = (settlement(o + h) - 2 * settlement(o) + settlement(o - h)) / h**2
+    bending = RADIUS * abs(curvature)
+    return {
+        "discrete_axial_strain": strain,
+        "discrete_vertical_curvature": curvature,
+        "discrete_tensile_strain": max(strain, 0) + bending,
+        "discrete_compressive_strain": min(strain, 0) - bending,
+    }
+
+
+@pytest.fixture(scope="module", params=[1.0, 9.0])
+def case_b(request):
+    return request.param, check(case_a_pipe(), interval=request.param)
+
+
+def test_case_b_at_the_center_and_root3_i(case_b):
+    h, result = case_b
+    for distance in (40.0, 40 + ROOT3_I, 40 - ROOT3_I):
+        row = row_at(result, distance)
+        expected = discrete_by_hand(row["distance"] - 40.0, h)
+        for column, value in expected.items():
+            assert row[column] == pytest.approx(value, rel=EXACT), column
+        assert row["discrete_lateral_curvature"] == 0
+
+
+def test_case_b_center_ratios(case_b):
+    # kappa ratio (1 - e^-a) / a, a = h^2 / 2i^2; axial ratio e^-b, b = h^2 / 8i^2.
+    h, result = case_b
+    row = row_at(result, 40.0)
+    a, b = h**2 / (2 * WIDTH**2), h**2 / (8 * WIDTH**2)
+    ratio = row["discrete_vertical_curvature"] / row["vertical_curvature"]
+    assert ratio == pytest.approx((1 - math.exp(-a)) / a, rel=EXACT)
+    assert row["discrete_axial_strain"] / row["axial_strain"] == pytest.approx(
+        math.exp(-b), rel=EXACT
+    )
+
+
+@pytest.mark.parametrize(
+    ("h", "column", "distance", "value"),
+    [
+        (1.0, "discrete_vertical_curvature", 40.0, -1.54254e-4),
+        (1.0, "discrete_axial_strain", 40.0, -695.21e-6),
+        (1.0, "discrete_compressive_strain", 40.0, -718.35e-6),
+        (1.0, "discrete_vertical_curvature", 40 + ROOT3_I, 6.88370e-5),
+        (1.0, "discrete_axial_strain", 40 + ROOT3_I, 310.25e-6),
+        (1.0, "discrete_tensile_strain", 40 + ROOT3_I, 320.57e-6),
+        (9.0, "discrete_vertical_curvature", 40.0, -1.21763e-4),
+        (9.0, "discrete_axial_strain", 40.0, -614.47e-6),
+        (9.0, "discrete_compressive_strain", 40.0, -632.73e-6),
+        (9.0, "discrete_vertical_curvature", 40 + ROOT3_I, 5.30152e-5),
+        (9.0, "discrete_axial_strain", 40 + ROOT3_I, 272.88e-6),
+        (9.0, "discrete_tensile_strain", 40 + ROOT3_I, 280.83e-6),
+    ],
+)
+def test_case_b_table(h, column, distance, value):
+    # The spec's table, to its five or six figures.
+    result = check(case_a_pipe(), interval=h)
+    assert row_at(result, distance)[column] == pytest.approx(value, rel=5e-5)
+
+
+def test_case_b_governing():
+    checks = check(case_a_pipe(), interval=1.0).checks
+    assert (checks["governed_by"] == "analytical").all()
+    assert (checks["discrete"].notna()).all()
+    coarse = check_row(check(case_a_pipe(), interval=9.0), "compressive_strain")
+    assert coarse["discrete_distance"] == pytest.approx(40.0)
+    assert coarse["difference"] == pytest.approx(86.77e-6, rel=REL)
+    assert coarse["difference"] == coarse["discrete"] - coarse["analytical"]
+
+
+# AC 6: discrete converges on analytical, and is never the larger per plane
+
+PAIRS = [
+    "axial_strain",
+    "vertical_curvature",
+    "lateral_curvature",
+    "resultant_curvature",
+    "bending_strain",
+    "tensile_strain",
+    "compressive_strain",
+]
+
+
+def test_discrete_converges_on_analytical():
+    result = check(case_c_pipe(), interval=0.01)
+    values = result.values
+    for column in PAIRS:
+        discrete = values[f"discrete_{column}"]
+        has = discrete.notna()
+        assert has.sum() > 0
+        scale = values[column].abs().max()
+        error = (discrete[has] - values[column][has]).abs().max()
+        assert error <= 1e-4 * scale, column
+
+
+@pytest.mark.parametrize("pipe", [case_a_pipe, case_c_pipe])
+@pytest.mark.parametrize("h", [1.0, 9.0])
+def test_discrete_peak_per_plane_is_no_larger(pipe, h):
+    values = check(pipe(), interval=h).values
+    for column in ("axial_strain", "vertical_curvature", "lateral_curvature"):
+        analytical = values[column]
+        discrete = values[f"discrete_{column}"].dropna()
+        tolerance = 1e-12 * analytical.abs().max()
+        assert discrete.max() <= max(analytical.max(), 0) + tolerance
+        assert discrete.min() >= min(analytical.min(), 0) - tolerance
+
+
+# AC 7: the ends
+
+
+def test_stations_near_the_ends_have_no_discrete_values():
+    h = 3.0
+    result = check(case_a_pipe(), spacing=0.5, interval=h)
+    values = result.values
+    distance = values["distance"]
+    length = distance.iloc[-1]
+    no_axial = (distance < h / 2 - 1e-6) | (distance > length - h / 2 + 1e-6)
+    no_curvature = (distance < h - 1e-6) | (distance > length - h + 1e-6)
+    assert (values["discrete_axial_strain"].isna() == no_axial).all()
+    for column in (
+        "discrete_vertical_curvature",
+        "discrete_lateral_curvature",
+        "discrete_resultant_curvature",
+        "discrete_bending_strain",
+        "discrete_tensile_strain",
+        "discrete_compressive_strain",
+        "discrete_radius_of_curvature",
+    ):
+        assert (values[column].isna() == no_curvature).all(), column
+    flags = [flag for flag in result.warnings if "discrete" in flag.reason]
+    assert len(flags) == 1
+    assert flags[0].verdict == "within"
+    assert flags[0].points == tuple(np.flatnonzero(no_curvature | no_axial))
+    assert "h/2 = 1.5 m" in flags[0].reason
+    assert "h = 3 m" in flags[0].reason
+    profile = gs.movement_profile(case_a_pipe(), trough(), spacing=0.5)
+    assert result.validity == profile.validity
+
+
+def test_a_pipe_shorter_than_two_intervals():
+    result = check(case_a_pipe(), interval=50.0)
+    values = result.values
+    assert values["discrete_resultant_curvature"].isna().all()
+    assert values["discrete_axial_strain"].notna().any()
+    flag = next(flag for flag in result.warnings if "discrete" in flag.reason)
+    assert "shorter than 2h = 100 m" in flag.reason
+    checks = result.checks.set_index("check")
+    for name in ("bending", "tensile_strain", "compressive_strain"):
+        assert checks.loc[name, "governed_by"] == "analytical"
+        assert math.isnan(checks.loc[name, "discrete"])
+        assert math.isnan(checks.loc[name, "difference"])
+        assert checks.loc[name, "value"] == checks.loc[name, "analytical"]
+
+
+# AC 9: the worse governs
+
+
+@pytest.mark.parametrize(
+    ("analytical", "discrete", "smallest", "expected"),
+    [
+        (3.0e-4, 2.9e-4, False, "analytical"),  # tension, discrete smaller
+        (3.0e-4, 3.1e-4, False, "discrete"),  # tension, discrete larger
+        (-7.0e-4, -6.0e-4, False, "analytical"),  # compression
+        (-7.0e-4, -8.0e-4, False, "discrete"),
+        (6000.0, 6500.0, True, "analytical"),  # radius: the smaller governs
+        (6000.0, 5500.0, True, "discrete"),
+        (3.0e-4, 3.0e-4 * (1 + 1e-10), False, "analytical"),  # a tie
+        (6000.0, 6000.0 * (1 - 1e-10), True, "analytical"),
+        (3.0e-4, math.nan, False, "analytical"),  # no discrete value
+        (math.nan, 3.0e-4, False, "discrete"),
+    ],
+)
+def test_governing_value(analytical, discrete, smallest, expected):
+    value, distance, governed_by, difference = governing_value(
+        analytical, 1.0, discrete, 2.0, smallest=smallest
+    )
+    assert governed_by == expected
+    chosen = (analytical, 1.0) if expected == "analytical" else (discrete, 2.0)
+    assert (value, distance) == chosen
+    if math.isnan(analytical) or math.isnan(discrete):
+        assert math.isnan(difference)
+    else:
+        assert difference == discrete - analytical
+
+
+# AC 13: the result's shape
+
+
+def test_to_dict_is_json_ready(case_a):
+    data = json.loads(json.dumps(case_a.to_dict(), allow_nan=False))
+    assert data["units"]["discrete_resultant_curvature"] == "1/m"
+    assert [row["check"] for row in data["checks"]] == list(case_a.checks["check"])
+    assert data["values"]["discrete_axial_strain"][0] is None
+
+
+@pytest.fixture(scope="module")
+def parallel():
+    # Parallel to the tunnel: the field doesn't change along it, so its
+    # curvature is exactly zero and its radius infinite everywhere.
+    pipe = gs.utilities.Utility(
+        utility_id="P", vertices=[(5.0, -20.0, 2.0), (5.0, 20.0, 2.0)], diameter=0.3
+    )
+    return check(pipe)
+
+
+def test_infinite_radii_are_none_in_to_dict(parallel):
+    values = parallel.values
+    assert np.isinf(values["radius_of_curvature"]).all()
+    data = json.loads(json.dumps(parallel.to_dict(), allow_nan=False))
+    assert all(radius is None for radius in data["values"]["radius_of_curvature"])
+
+
+def test_a_straight_pipe_passes_with_nothing_to_report(parallel):
+    for row in parallel.checks.itertuples():
+        assert math.isnan(row.value)
+        assert row.passes
+
+
+def test_to_frame_has_the_new_columns(case_a):
+    frame = case_a.to_frame()
+    units = frame.attrs["units"]
+    for column in [*UNIT_OF, *(f"discrete_{name}" for name in UNIT_OF)]:
+        assert column in frame
+    for name, unit in UNIT_OF.items():
+        assert units[name] == unit
+        assert units[f"discrete_{name}"] == unit
+
+
+UNIT_OF = {
+    "axial_strain": "dimensionless",
+    "resultant_curvature": "1/m",
+    "bending_strain": "dimensionless",
+    "tensile_strain": "dimensionless",
+    "compressive_strain": "dimensionless",
+    "radius_of_curvature": "m",
+}
+
+
+def test_summary_lists_the_six_checks(case_a):
+    text = repr(case_a)
+    for name in case_a.checks["check"]:
+        assert f"  {name}: " in text
+    assert "tensile_strain: 0.00032108 at 24.41 m (analytical)" in text

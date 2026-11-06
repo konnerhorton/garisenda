@@ -8,6 +8,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import garisenda as gs
+from garisenda.profile._movement_profile import profile_rows
+from garisenda.utilities._continuous_pipe import _with_strains
 
 u = gs.units
 
@@ -64,8 +66,9 @@ def test_reversing_the_pipe(angle, start, end):
         assert behind["passes"] == ahead["passes"]
         if math.isnan(ahead["value"]):
             continue
-        # The governing distance is L - d, or a tied extreme there of equal
-        # value (ties go to the smallest distance either way).
+        # The governing distance is L - d, or a tie: ties go to the smallest
+        # distance either way, so a station near a flat peak can take it in
+        # one direction and the peak's row in the other.
         mirrored = length - behind["governing_distance"]
         column = {
             "axial_tension": "axial_strain",
@@ -73,9 +76,18 @@ def test_reversing_the_pipe(angle, start, end):
             "bending": "bending_strain",
             "radius_of_curvature": "radius_of_curvature",
         }.get(ahead["check"], ahead["check"])
-        distance = forward.values["distance"].to_numpy()
-        nearest = int(np.argmin(np.abs(distance - mirrored)))
-        assert distance[nearest] == pytest.approx(mirrored, abs=1e-6)
-        assert forward.values[column].iloc[nearest] == pytest.approx(
+        assert value_at(forward, column, mirrored) == pytest.approx(
             ahead["value"], rel=1e-9
         )
+
+
+def value_at(result, column, distance):
+    """An analytical column at a distance: its row's, or computed there."""
+    values = result.values
+    nearest = int(np.argmin(np.abs(values["distance"].to_numpy() - distance)))
+    if abs(values["distance"].iloc[nearest] - distance) < 1e-6:
+        return values[column].iloc[nearest]
+    rows, _, _ = profile_rows(
+        result.asset, result.source, np.array([distance]), np.array([False])
+    )
+    return _with_strains(rows, result.asset.diameter / 2)[column].iloc[0]

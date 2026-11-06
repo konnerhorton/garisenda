@@ -16,7 +16,7 @@ from garisenda.profile._movement_profile import (
     profile_rows,
 )
 from garisenda.sources._critical import _derivatives, find_zeros
-from garisenda.sources._movement import MethodRecord, Source
+from garisenda.sources._movement import Flag, MethodRecord, Source, worst
 from garisenda.sources._segment import directions
 from garisenda.sources._transverse_trough import (
     CRITICAL_DISTANCE_SAMPLING,
@@ -44,6 +44,12 @@ METHOD = MethodRecord(
         "compressive strain: eps_c = min(eps_a, 0) - r |kappa|",
         "radius of curvature: R = 1 / |kappa|, infinite where |kappa| = 0",
         "peaks: zeros of d|kappa|^2/ds, d eps_t/ds and d eps_c/ds along the pipe",
+        "discrete axial strain: eps_a,d(s) = (u_a(s + h/2) - u_a(s - h/2)) / h",
+        "discrete curvature in each plane: kappa_d(s) = (w(s + h) - 2 w(s) + "
+        "w(s - h)) / h^2",
+        "discrete resultant, bending, combined strains and radius: as above, "
+        "from eps_a,d and kappa_d",
+        "governing: the worse of the analytical and discrete extremes, per check",
     ),
     "Mechanics, derived in the M3 (a) spec; the approach after Bracegirdle et "
     "al. (1996), pp. 660, 663.",
@@ -116,6 +122,17 @@ UNITS = {
     "radius_of_curvature": "m",
 }
 
+DISCRETE_UNITS = {
+    "discrete_axial_strain": "dimensionless",
+    "discrete_vertical_curvature": "1/m",
+    "discrete_lateral_curvature": "1/m",
+    "discrete_resultant_curvature": "1/m",
+    "discrete_bending_strain": "dimensionless",
+    "discrete_tensile_strain": "dimensionless",
+    "discrete_compressive_strain": "dimensionless",
+    "discrete_radius_of_curvature": "m",
+}
+
 
 @judgments(
     interval="it is the span over which practice computes strain from sampled "
@@ -179,6 +196,25 @@ def check_continuous_pipe(
     derivatives as the source's critical distances are (sampled at 1/8 of its
     feature length, refined to 1e-9 m). They are marked ``critical``.
 
+    Each value is also computed discretely, as practice does from movements
+    sampled at an interval h, at every row s, from the source evaluated on the
+    pipe's line:
+
+    - axial strain: eps_a,d(s) = (u_a(s + h/2) - u_a(s - h/2)) / h;
+    - curvature in each plane, the second difference:
+      kappa_d(s) = (w(s + h) - 2 w(s) + w(s - h)) / h^2, which is the
+      curvature of the circle through the three displaced points with the
+      same small-slope approximation as the analytical curvature;
+    - the resultant, bending, combined strains and radius from these, as
+      above.
+
+    The discrete values are averages of the analytical ones over the span, so
+    in each plane the discrete peak is never the larger. Each check is
+    governed by the worse of its analytical and discrete extremes, and both
+    are reported with their difference, which shows when the interval is too
+    coarse. A row with a sample beyond an end (by more than 1 um) has no
+    discrete value; the pipe is not assumed to continue past its ends.
+
     Parameters
     ----------
     profile : Result
@@ -218,7 +254,12 @@ def check_continuous_pipe(
         - ``resultant_curvature`` (1/m) and ``bending_strain``
           (dimensionless);
         - ``tensile_strain``, ``compressive_strain`` (dimensionless);
-        - ``radius_of_curvature`` (m), infinite where the pipe is straight.
+        - ``radius_of_curvature`` (m), infinite where the pipe is straight;
+        - ``discrete_axial_strain``, ``discrete_vertical_curvature``,
+          ``discrete_lateral_curvature``, ``discrete_resultant_curvature``,
+          ``discrete_bending_strain``, ``discrete_tensile_strain``,
+          ``discrete_compressive_strain``, ``discrete_radius_of_curvature``:
+          the discrete values, in the same units, NaN where a row has none.
 
         ``checks`` has one row per check, in this order, each checked against
         its limit:
@@ -233,13 +274,19 @@ def check_continuous_pipe(
           compressive limit;
         - ``radius_of_curvature``: the smallest R, against the radius limit.
 
+        Each check's ``analytical`` and ``discrete`` values are the extremes
+        of its two columns, with their distances; ``value`` is the worse (the
+        larger in size, or the smaller radius), ``governed_by`` says which
+        (``"analytical"`` on a tie within 1e-9 or with no discrete value),
+        and ``difference`` is discrete - analytical, in the check's unit.
         Utilization is |value| / limit, or limit / R for the radius, and
         ``passes`` is utilization <= 1. A check with no limit has ``limit``
         and ``utilization`` NaN and ``passes`` NA. If no row has a value of
         the check's sign, its value and distance are NaN and it passes. Equal
         extremes, within 1e-9, go to the smallest distance. The method,
         assumptions and inputs are the profile's with this check's added;
-        validity and warnings are the recomputed profile's.
+        validity and warnings are the recomputed profile's, plus a
+        ``"within"`` flag naming the rows with no discrete value and why.
 
     Raises
     ------
@@ -247,8 +294,9 @@ def check_continuous_pipe(
         If a judgment is missing, `profile` isn't a movement profile, or a
         strain limit is a plain number.
     ValueError
-        If `interaction` isn't ``"greenfield"``, or the interval or a limit
-        isn't positive.
+        If `interaction` isn't ``"greenfield"``, the interval or a limit isn't
+        positive, or the source can't evaluate a point (naming the utility
+        and the distances).
 
     Notes
     -----
@@ -289,10 +337,21 @@ def check_continuous_pipe(
     )
     values, flags, validity = profile_rows(utility, source, distance, is_critical)
     values = _with_strains(values, radius)
+    values = _with_discrete(values, utility, source, interval_m, radius)
+    ends = _ends_flag(values, interval_m)
+    flags = (*flags, ends)
+    validity = worst([validity, ends.verdict])
     checks = _checks(values, limits)
 
     unlimited = [name for name in LIMITS if math.isnan(limits[name])]
-    assumptions = list(ASSUMPTIONS)
+    assumptions = [
+        *ASSUMPTIONS,
+        f"Discrete strain is computed over an interval h = {interval_m:g} m, "
+        "centered on each station: axial strain from the movements at s +- h/2, "
+        "curvature in each plane from s - h, s and s + h (the second "
+        "difference), with the same small-slope approximation as the "
+        "analytical values. Stations closer to an end than that have none.",
+    ]
     if unlimited:
         assumptions.append(
             f"No limit was given for {', '.join(unlimited)}: those checks are "
@@ -490,6 +549,98 @@ def _with_strains(values: pd.DataFrame, radius: float) -> pd.DataFrame:
     return result
 
 
+def _with_discrete(
+    values: pd.DataFrame,
+    utility: Utility,
+    source: Source,
+    interval: float,
+    radius: float,
+) -> pd.DataFrame:
+    """Add the discrete strains of Mechanics 6 (decisions 5 and 6).
+
+    The source is evaluated on the pipe's line at s +- h/2 and s +- h for
+    every row s, in one call. Samples beyond an end by more than 1 um give
+    NaN; those within 1 um are taken at the end. The source's flags and
+    verdicts at the samples are dropped: they lie within h of a station,
+    whose verdict stands.
+    """
+    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
+    length = float(np.linalg.norm(end - start))
+    a, v, lat = directions(start, end)
+    station = values["distance"].to_numpy(dtype=np.float64)
+    offsets = np.array([-interval / 2, interval / 2, -interval, interval])
+    samples = station[None, :] + offsets[:, None]
+    beyond = (samples < -MERGE_TOLERANCE) | (samples > length + MERGE_TOLERANCE)
+    inside = np.clip(samples[~beyond], 0.0, length)
+    points = start + inside[:, None] * a
+    try:
+        movement = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
+    except ValueError as error:
+        raise ValueError(
+            f"Utility {utility.utility_id!r}, sampling for discrete strain at an "
+            f"interval of {interval:g} m: {_with_distances(str(error), inside)}"
+        ) from error
+    components = np.full((3, *samples.shape), np.nan)
+    for index, direction in enumerate((a, v, lat)):
+        components[index][~beyond] = movement.displacement @ direction
+    along, vertical, lateral = components
+    with np.errstate(invalid="ignore"):
+        strain = (along[1] - along[0]) / interval
+
+        def second_difference(column: str, sampled: FloatArray) -> FloatArray:
+            middle = values[column].to_numpy(dtype=np.float64)
+            result: FloatArray = (sampled[3] - 2 * middle + sampled[2]) / interval**2
+            return result
+
+        kappa_v = second_difference("vertical", vertical)
+        kappa_l = second_difference("lateral", lateral)
+        curvature = np.hypot(kappa_v, kappa_l)
+        bending = radius * curvature
+        with np.errstate(divide="ignore"):
+            radius_of_curvature = np.where(curvature > 0, 1 / curvature, np.inf)
+        radius_of_curvature[np.isnan(curvature)] = np.nan
+        columns = {
+            "discrete_axial_strain": strain,
+            "discrete_vertical_curvature": kappa_v,
+            "discrete_lateral_curvature": kappa_l,
+            "discrete_resultant_curvature": curvature,
+            "discrete_bending_strain": bending,
+            "discrete_tensile_strain": np.maximum(strain, 0.0) + bending,
+            "discrete_compressive_strain": np.minimum(strain, 0.0) - bending,
+            "discrete_radius_of_curvature": radius_of_curvature,
+        }
+    units = dict(values.attrs["units"])
+    result = values.assign(**columns)
+    result.attrs["units"] = units | DISCRETE_UNITS
+    return result
+
+
+def _ends_flag(values: pd.DataFrame, interval: float) -> Flag:
+    """Flag the stations with no discrete axial strain or curvature (decision 6)."""
+    missing = (
+        values["discrete_axial_strain"].isna()
+        | values["discrete_resultant_curvature"].isna()
+    )
+    length = float(values["distance"].iloc[-1])
+    reason = (
+        "No discrete value where a sample would fall beyond the pipe's end: "
+        f"axial strain within h/2 = {interval / 2:g} m of an end, curvature "
+        f"(and so discrete bending, combined strain and radius) within "
+        f"h = {interval:g} m. The analytical values cover these stations."
+    )
+    if length < 2 * interval:
+        reason += (
+            f" The pipe, {length:g} m long, is shorter than 2h = {2 * interval:g} m, "
+            "so no station has a discrete curvature."
+        )
+    return Flag(
+        "within",
+        reason,
+        f"discrete samples within the pipe (interval h = {interval:g} m)",
+        tuple(int(index) for index in np.flatnonzero(missing.to_numpy())),
+    )
+
+
 def _checks(values: pd.DataFrame, limits: dict[str, float]) -> pd.DataFrame:
     """Return the checks table (decisions 4 and 9)."""
     distance = values["distance"].to_numpy(dtype=np.float64)
@@ -498,7 +649,16 @@ def _checks(values: pd.DataFrame, limits: dict[str, float]) -> pd.DataFrame:
         analytical, analytical_distance = extreme(
             values[column].to_numpy(dtype=np.float64), distance, sign
         )
-        value, governing_distance = analytical, analytical_distance
+        discrete, discrete_distance = extreme(
+            values[f"discrete_{column}"].to_numpy(dtype=np.float64), distance, sign
+        )
+        value, governing_distance, governed_by, difference = governing_value(
+            analytical,
+            analytical_distance,
+            discrete,
+            discrete_distance,
+            smallest=sign == 0,
+        )
         limit = limits[limit_name]
         utilization, passes = _utilization(value, limit, smallest=sign == 0)
         rows.append(
@@ -510,16 +670,54 @@ def _checks(values: pd.DataFrame, limits: dict[str, float]) -> pd.DataFrame:
                 "utilization": utilization,
                 "governing_distance": governing_distance,
                 "passes": passes,
-                "governed_by": "analytical",
+                "governed_by": governed_by,
                 "analytical": analytical,
                 "analytical_distance": analytical_distance,
-                "discrete": math.nan,
-                "discrete_distance": math.nan,
-                "difference": math.nan,
+                "discrete": discrete,
+                "discrete_distance": discrete_distance,
+                "difference": difference,
             }
         )
     table = pd.DataFrame(rows, columns=list(CHECK_COLUMNS))
     return table.astype(CHECK_TYPES)
+
+
+def governing_value(
+    analytical: float,
+    analytical_distance: float,
+    discrete: float,
+    discrete_distance: float,
+    *,
+    smallest: bool,
+) -> tuple[float, float, str, float]:
+    """Return the worse of a check's two values (decision 9).
+
+    The worse is the larger in size, or the smaller for a radius
+    (`smallest`). On a tie, within 1e-9, and where the discrete value is NaN
+    (no station has one), the analytical value governs; where only the
+    analytical value is NaN, the discrete one does.
+
+    Returns
+    -------
+    value, distance : float
+        The governing value and where it is.
+    governed_by : {"analytical", "discrete"}
+        Which governed.
+    difference : float
+        discrete - analytical, signed as the values are; NaN if either is.
+    """
+    difference = discrete - analytical
+    if math.isnan(discrete):
+        return analytical, analytical_distance, "analytical", difference
+    if math.isnan(analytical):
+        return discrete, discrete_distance, "discrete", difference
+    if smallest:
+        worse = discrete < analytical * (1 - TIE)
+    else:
+        worse = abs(discrete) > abs(analytical) * (1 + TIE)
+    if worse:
+        return discrete, discrete_distance, "discrete", difference
+    return analytical, analytical_distance, "analytical", difference
 
 
 def extreme(values: FloatArray, distance: FloatArray, sign: int) -> tuple[float, float]:
