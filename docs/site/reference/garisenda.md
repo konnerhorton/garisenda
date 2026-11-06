@@ -12,6 +12,8 @@ import garisenda as gs
 
 ::: garisenda.check_continuous_pipe
 
+::: garisenda.check_jointed_pipe
+
 ::: garisenda.superpose
 
 ::: garisenda.Result

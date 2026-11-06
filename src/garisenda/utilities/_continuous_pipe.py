@@ -11,6 +11,7 @@ import pandas as pd
 
 from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
 from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
+from garisenda._units import PlainNumber
 from garisenda.profile._movement_profile import (
     MERGE_TOLERANCE,
     _with_distances,
@@ -458,8 +459,18 @@ def _barrel(
     return values, (*flags, ends), worst([validity, ends.verdict]), checks
 
 
-def _read_limit(name: str, value: object) -> tuple[float, InputRecord]:
-    """Return a limit in SI (NaN for none) and its input record."""
+def _read_limit(
+    name: str,
+    value: object,
+    *,
+    unit: str | None = None,
+    plain_number: PlainNumber | None = None,
+) -> tuple[float, InputRecord]:
+    """Return a limit in SI (NaN for none) and its input record.
+
+    The unit is m, a plain number read as SI, for the radius limit, and
+    dimensionless, a plain number refused, for a strain limit, unless given.
+    """
     source = None
     unwrapped = value.value if isinstance(value, Sourced) else value
     if unwrapped is None:
@@ -471,8 +482,8 @@ def _read_limit(name: str, value: object) -> tuple[float, InputRecord]:
         name,
         value,
         kind="design judgment",
-        unit="m" if is_radius else "dimensionless",
-        plain_number="read as SI" if is_radius else "refuse",
+        unit=unit or ("m" if is_radius else "dimensionless"),
+        plain_number=plain_number or ("read as SI" if is_radius else "refuse"),
     )
     limit = float(magnitude)
     if not (math.isfinite(limit) and limit >= 0):

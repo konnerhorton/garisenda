@@ -10,6 +10,7 @@ from garisenda._units import units
 from garisenda.profile import movement_profile
 from garisenda.sources._superposition import superpose
 from garisenda.utilities._continuous_pipe import check_continuous_pipe
+from garisenda.utilities._jointed_pipe import check_jointed_pipe
 
 __version__ = version("garisenda")
 
@@ -18,6 +19,7 @@ __all__ = [
     "Sourced",
     "__version__",
     "check_continuous_pipe",
+    "check_jointed_pipe",
     "movement_profile",
     "plot",
     "presets",
