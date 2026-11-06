@@ -227,8 +227,8 @@ def check_continuous_pipe(
         The soil-structure interaction. A design judgment with no default;
         Phase 1 takes only ``"greenfield"``, the pipe follows the ground.
     tensile_strain_limit, compressive_strain_limit : strain or None
-        The largest tensile and compressive strains allowed, as positive
-        magnitudes. Pint quantities only (``0.1 * gs.units.percent``,
+        The largest tensile and compressive strains allowed, as magnitudes
+        (zero allows none). Pint quantities only (``0.1 * gs.units.percent``,
         ``gs.units.Quantity(1000, "µε")``); a plain number is refused. Design
         judgments with no default; ``None`` means no limit.
     bending_strain_limit : strain or None
@@ -281,8 +281,10 @@ def check_continuous_pipe(
         and ``difference`` is discrete - analytical, in the check's unit.
         Utilization is |value| / limit, or limit / R for the radius, and
         ``passes`` is utilization <= 1. A check with no limit has ``limit``
-        and ``utilization`` NaN and ``passes`` NA. If no row has a value of
-        the check's sign, its value and distance are NaN and it passes. Equal
+        and ``utilization`` NaN and ``passes`` NA. A zero limit allows
+        nothing: a nonzero value has utilization infinity and fails. If no
+        row has a value of the check's sign, its value and distance are NaN
+        and it passes. Equal
         extremes, within 1e-9, go to the smallest distance. The method,
         assumptions and inputs are the profile's with this check's added;
         validity and warnings are the recomputed profile's, plus a
@@ -294,9 +296,9 @@ def check_continuous_pipe(
         If a judgment is missing, `profile` isn't a movement profile, or a
         strain limit is a plain number.
     ValueError
-        If `interaction` isn't ``"greenfield"``, the interval or a limit isn't
-        positive, or the source can't evaluate a point (naming the utility
-        and the distances).
+        If `interaction` isn't ``"greenfield"``, the interval isn't positive,
+        a limit is negative, or the source can't evaluate a point (naming the
+        utility and the distances).
 
     Notes
     -----
@@ -427,8 +429,10 @@ def _read_limit(name: str, value: object) -> tuple[float, InputRecord]:
         plain_number="read as SI" if is_radius else "refuse",
     )
     limit = float(magnitude)
-    if not (math.isfinite(limit) and limit > 0):
-        raise ValueError(f"{name} must be positive, or None for no limit, not {limit}.")
+    if not (math.isfinite(limit) and limit >= 0):
+        raise ValueError(
+            f"{name} must be zero or positive, or None for no limit, not {limit}."
+        )
     return limit, entry
 
 
@@ -745,10 +749,21 @@ def extreme(values: FloatArray, distance: FloatArray, sign: int) -> tuple[float,
 
 
 def _utilization(value: float, limit: float, *, smallest: bool) -> tuple[float, Any]:
-    """Return a check's utilization and whether it passes (decision 4)."""
+    """Return a check's utilization and whether it passes (decision 4).
+
+    Utilization is |value| / limit, or limit / value for a radius
+    (`smallest`). A zero limit allows nothing (M3 (b), decision 11): a nonzero
+    value has utilization infinity and fails, a zero value has 0 and passes,
+    and a zero radius limit gives 0 and passes.
+    """
     if math.isnan(limit):
         return math.nan, pd.NA
     if math.isnan(value):
         return math.nan, True
-    utilization = limit / value if smallest else abs(value) / limit
+    if smallest:
+        utilization = limit / value
+    elif limit == 0:
+        utilization = math.inf if value != 0 else 0.0
+    else:
+        utilization = abs(value) / limit
     return utilization, bool(utilization <= 1)

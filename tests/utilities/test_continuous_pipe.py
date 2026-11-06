@@ -415,11 +415,36 @@ def test_interval_must_be_positive(profile, value):
 
 
 @pytest.mark.parametrize("name", list(limits()))
-@pytest.mark.parametrize("size", [0.0, -1.0])
-def test_limits_must_be_positive(profile, name, size):
+@pytest.mark.parametrize("size", [-1.0, math.inf])
+def test_limits_must_be_zero_or_positive(profile, name, size):
     unit = u.m if name == "radius_of_curvature_limit" else u.dimensionless
-    with pytest.raises(ValueError, match=f"{name} must be positive"):
+    with pytest.raises(ValueError, match=f"{name} must be zero or positive"):
         gs.check_continuous_pipe(profile, **arguments(**{name: size * unit}))
+
+
+def test_a_zero_limit_allows_nothing():
+    # M3 (b), decision 11: infinity and fail for a nonzero value; a zero
+    # radius limit gives 0 and passes.
+    result = check(
+        case_a_pipe(),
+        tensile_strain_limit=0 * u.dimensionless,
+        compressive_strain_limit=0 * u.dimensionless,
+        bending_strain_limit=0 * u.dimensionless,
+        radius_of_curvature_limit=0 * u.m,
+    )
+    checks = result.checks.set_index("check")
+    for name in ("axial_tension", "axial_compression", "bending", "tensile_strain"):
+        assert checks.loc[name, "utilization"] == math.inf
+        assert not checks.loc[name, "passes"]
+    assert checks.loc["radius_of_curvature", "utilization"] == 0
+    assert checks.loc["radius_of_curvature", "passes"]
+
+
+def test_a_zero_limit_passes_a_zero_value():
+    from garisenda.utilities._continuous_pipe import _utilization
+
+    assert _utilization(0.0, 0.0, smallest=False) == (0.0, True)
+    assert _utilization(1e-9, 0.0, smallest=False) == (math.inf, False)
 
 
 def test_every_judgment_is_recorded(profile):
