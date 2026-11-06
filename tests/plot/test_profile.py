@@ -287,3 +287,136 @@ def test_a_check_leaves_no_global_state(checked):
     before = dict(mpl.rcParams)
     gs.plot.profile(checked)
     assert dict(mpl.rcParams) == before
+
+
+# M3 (b), spec decision 17, AC 15: a jointed-pipe check in eight panels
+
+DEGREES = 180.0 / np.pi
+
+JOINT_LINES = [
+    (6, "joint_vertical_rotation", DEGREES),
+    (6, "joint_lateral_rotation", DEGREES),
+    (6, "joint_rotation", DEGREES),
+    (7, "joint_opening", 1e3),
+    (7, "joint_outer_opening", 1e3),
+]
+
+
+def test_a_jointed_check_draws_eight_panels(jointed):
+    fig, axs = gs.plot.profile(jointed)
+    assert len(axs) == 8
+    assert all(ax.figure is fig for ax in axs)
+    assert axs[6].get_ylabel() == "Joint rotation (deg)"
+    assert axs[7].get_ylabel() == "Joint opening (mm)"
+    assert axs[7].get_xlabel() == "Distance along utility (m)"
+    assert fig.get_suptitle().startswith("Jointed pipe check along A")
+    assert "4 m pipe length" in fig.get_suptitle()
+
+
+@pytest.mark.parametrize(("panel", "column", "factor"), JOINT_LINES)
+def test_a_jointed_check_draws_each_joint_column(jointed, panel, column, factor):
+    _, axs = gs.plot.profile(jointed)
+    drawn = line(axs[panel], column)
+    expected = jointed.values[column].to_numpy(dtype=float) * factor
+    np.testing.assert_allclose(drawn.get_ydata(), expected, rtol=1e-12)
+    # no rotation within L of an end, no opening within L/2 (spec decision 10)
+    assert np.isnan(drawn.get_ydata()[0])
+    assert not [
+        item
+        for item in axs[panel].get_lines()
+        if item.get_gid() == f"discrete_{column}"
+    ]
+
+
+def test_the_outer_opening_is_dashed(jointed):
+    _, axs = gs.plot.profile(jointed)
+    axis = line(axs[7], "joint_opening")
+    outer = line(axs[7], "joint_outer_opening")
+    assert axis.get_linestyle() == "-"
+    assert outer.get_linestyle() != "-"
+
+
+def test_a_jointed_check_keeps_the_barrel_panels(jointed):
+    _, axs = gs.plot.profile(jointed)
+    drawn = line(axs[3], "discrete_vertical_curvature")
+    expected = jointed.values["discrete_vertical_curvature"].to_numpy(dtype=float)
+    np.testing.assert_allclose(drawn.get_ydata(), expected * 1e3, rtol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("panel", "name", "level"),
+    [
+        (6, "joint_rotation_limit", 1.5),  # degrees, as given
+        (7, "joint_pullout_limit", 15.0),  # mm
+        (3, "radius_of_curvature_limit", 0.2),  # the barrel's, 1/(5000 m)
+    ],
+)
+def test_a_jointed_check_draws_its_joint_limits(jointed, panel, name, level):
+    _, axs = gs.plot.profile(jointed)
+    drawn = [item for item in axs[panel].get_lines() if item.get_gid() == name]
+    assert max(item.get_ydata()[0] for item in drawn) == pytest.approx(level, rel=1e-9)
+    assert [text for text in axs[panel].texts if text.get_gid() == name]
+
+
+@pytest.mark.parametrize(
+    ("panel", "check", "factor"),
+    [(6, "joint_rotation", DEGREES), (7, "joint_pullout", 1e3)],
+)
+def test_a_jointed_check_marks_the_governing_joints(jointed, panel, check, factor):
+    _, axs = gs.plot.profile(jointed)
+    row = jointed.checks.set_index("check").loc[check]
+    mark = line(axs[panel], f"check:{check}")
+    assert mark.get_xdata()[0] == pytest.approx(row["governing_distance"], rel=1e-12)
+    assert mark.get_ydata()[0] == pytest.approx(row["value"] * factor, rel=1e-12)
+    (text,) = [item for item in axs[panel].texts if item.get_gid() == f"check:{check}"]
+    assert f"u = {row['utilization']:.2f}" in text.get_text()
+
+
+def test_the_closure_is_marked(jointed):
+    # case J-A: closure -2.71722 mm at 40 m (spec, Hand calculations)
+    _, axs = gs.plot.profile(jointed)
+    mark = line(axs[7], "closure")
+    assert mark.get_xdata()[0] == pytest.approx(40.0, abs=1e-6)
+    assert mark.get_ydata()[0] == pytest.approx(-2.71722, rel=2e-5)
+    (text,) = [item for item in axs[7].texts if item.get_gid() == "closure"]
+    assert "not checked" in text.get_text()
+    assert not [
+        item for ax in axs[:7] for item in ax.get_lines() if item.get_gid() == "closure"
+    ]
+
+
+def test_a_joint_limit_of_none_draws_no_line(make_jointed):
+    result = make_jointed(joint_rotation_limit=None, joint_pullout_limit=None)
+    _, axs = gs.plot.profile(result)
+    for panel, limit, note in [
+        (6, "joint_rotation_limit", "no rotation limit"),
+        (7, "joint_pullout_limit", "no pullout limit"),
+    ]:
+        assert not [i for i in axs[panel].get_lines() if i.get_gid() == limit]
+        (text,) = [i for i in axs[panel].texts if i.get_gid() == "no_limit"]
+        assert text.get_text() == note
+
+
+def test_the_rotation_axis_follows_display_units(jointed):
+    _, axs = gs.plot.profile(jointed, display_units={"angle": "radian"})
+    assert axs[6].get_ylabel() == "Joint rotation (rad)"
+    np.testing.assert_allclose(
+        line(axs[6], "joint_rotation").get_ydata(),
+        jointed.values["joint_rotation"],
+        rtol=1e-12,
+    )
+
+
+def test_a_jointed_check_needs_eight_axes(jointed):
+    _, given = plt.subplots(6, 1)
+    with pytest.raises(ValueError, match="8 matplotlib Axes"):
+        gs.plot.profile(jointed, axs=given)
+    _, given = plt.subplots(8, 1, sharex=True)
+    _, returned = gs.plot.profile(jointed, axs=given)
+    assert list(returned) == list(given)
+
+
+def test_a_jointed_check_leaves_no_global_state(jointed):
+    before = dict(mpl.rcParams)
+    gs.plot.profile(jointed)
+    assert dict(mpl.rcParams) == before

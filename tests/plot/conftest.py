@@ -101,3 +101,50 @@ def make_check():
 @pytest.fixture
 def checked():
     return pipe_check()
+
+
+def jointed_check(**limits):
+    """Case J-A of the M3 (b) spec: case A's pipe in 4 m lengths."""
+    tunnel_ = tunnel()
+    source = gs.sources.transverse_trough(
+        tunnel_,
+        volume_loss=1 * u.percent,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel_,
+        utility_id="A",
+        station=0,
+        start_offset=-40,
+        end_offset=40,
+        depth=2.0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    strain = u.Quantity(1000, "µε")
+    given = {
+        "joint_rotation_limit": 1.5 * u.degree,
+        "joint_pullout_limit": 15 * u.mm,
+        "tensile_strain_limit": strain,
+        "compressive_strain_limit": strain,
+        "bending_strain_limit": u.Quantity(50, "µε"),
+        "radius_of_curvature_limit": 5000 * u.m,
+    }
+    given.update(limits)
+    return gs.check_jointed_pipe(
+        gs.movement_profile(utility, source, spacing=1.0),
+        pipe_lengths={("spun_grey_iron", 0.3 * u.m): 4 * u.m},
+        pipe_type="spun_grey_iron",
+        interaction="greenfield",
+        **given,
+    )
+
+
+@pytest.fixture
+def make_jointed():
+    return jointed_check
+
+
+@pytest.fixture
+def jointed():
+    return jointed_check()

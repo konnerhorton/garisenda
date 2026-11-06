@@ -30,8 +30,8 @@ def test_a_subset_is_overridden():
 # AC 10
 
 
-def test_unknown_kind_raises_listing_the_four():
-    kinds = "'length', 'displacement', 'strain', 'curvature'"
+def test_unknown_kind_raises_listing_the_five():
+    kinds = "'length', 'displacement', 'strain', 'curvature', 'angle'"
     with pytest.raises(ValueError, match=rf"'stress'.*{kinds}"):
         resolve({"stress": "kPa"})
 
@@ -51,3 +51,12 @@ def test_style_leaves_no_global_state():
     with style():
         assert mpl.rcParams["font.size"] == 9
     assert dict(mpl.rcParams) == before
+
+
+# M3 (b), spec decision 17: angles display in degrees
+
+
+def test_angle_defaults_to_degrees():
+    display = resolve(None)
+    assert display.factor("angle") == pytest.approx(180.0 / 3.141592653589793)
+    assert resolve({"angle": "radian"}).factor("angle") == 1.0

@@ -22,7 +22,10 @@ SHADE = {"marginal": "#f6d58e", "outside": "#f2a7a0"}
 """The fill of stations that aren't within, by verdict."""
 
 CHECK_ANALYSIS = "continuous_pipe_check"
-"""The analysis drawn in six panels; any other result gets four."""
+"""The analysis drawn in six panels."""
+
+JOINTED_ANALYSIS = "jointed_pipe_check"
+"""The analysis drawn in eight panels; any other result gets four."""
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,8 @@ class Panel:
 
     `governing` names the `Result.governing` columns marked on it, `limits`
     its limit lines and `checks` the checks whose governing value it marks.
+    `dashed` names lines drawn dashed, and `closure` a column whose most
+    negative value is marked as a closure, which isn't checked.
     """
 
     lines: tuple[tuple[str, str, str], ...]
@@ -50,6 +55,8 @@ class Panel:
     governing: tuple[str, ...] = ()
     limits: tuple[Limit, ...] = ()
     checks: tuple[str, ...] = ()
+    dashed: tuple[str, ...] = ()
+    closure: str | None = None
 
 
 SETTLEMENT = Panel(
@@ -146,6 +153,39 @@ CHECK_PANELS = (
 )
 """The six panels of a continuous-pipe check (M3 (a) spec, decision 13)."""
 
+JOINTED_PANELS = (
+    *CHECK_PANELS,
+    Panel(
+        (
+            ("joint_vertical_rotation", "Vertical", "C0"),
+            ("joint_lateral_rotation", "Lateral", "C1"),
+            ("joint_rotation", "Resultant", "C2"),
+        ),
+        "angle",
+        "Joint rotation",
+        "hogging +, sagging -; resultant +",
+        limits=(Limit("joint_rotation_limit", "joint_rotation", 1, "rotation limit"),),
+        checks=("joint_rotation",),
+    ),
+    Panel(
+        (
+            ("joint_opening", "At the axis", "C0"),
+            ("joint_outer_opening", "Outer", "C1"),
+        ),
+        "displacement",
+        "Joint opening",
+        "opens +, closes -",
+        limits=(Limit("joint_pullout_limit", "joint_pullout", 1, "pullout limit"),),
+        checks=("joint_pullout",),
+        dashed=("joint_outer_opening",),
+        closure="joint_opening",
+    ),
+)
+"""The eight panels of a jointed-pipe check (M3 (b) spec, decision 17)."""
+
+PANELS = {CHECK_ANALYSIS: CHECK_PANELS, JOINTED_ANALYSIS: JOINTED_PANELS}
+"""The panels of each check's analysis."""
+
 DISCRETE_COLUMN = {
     "axial_strain": "discrete_axial_strain",
     "vertical_curvature": "discrete_vertical_curvature",
@@ -169,7 +209,7 @@ def profile(
     axs: Sequence[Axes] | None = None,
     display_units: Mapping[str, object] | None = None,
 ) -> tuple[Figure, list[Axes]]:
-    """Draw a profile along its utility: four or six panels, distance shared.
+    """Draw a profile along its utility: four, six or eight panels.
 
     A movement profile is drawn in four panels, top to bottom, against
     distance along the utility:
@@ -205,7 +245,19 @@ def profile(
     curvature, 1/R, on the curvature panel, since an infinite radius can't be
     drawn.
 
-    On both, critical stations are ticked along the bottom of every panel.
+    A jointed-pipe check (from `garisenda.check_jointed_pipe`) is drawn in
+    eight panels: the six above, with the discrete values at the pipe length,
+    then
+
+    7. joint rotation: vertical, lateral and the resultant, in degrees, with
+       the rotation limit;
+    8. joint opening at the axis, and the outer opening (dashed), with the
+       pullout limit; the largest closure is marked, and isn't checked.
+
+    Joint values exist only at a pipe length's spacing, so they have no
+    analytical twin; they are solid lines with gaps near the ends.
+
+    On every figure, critical stations are ticked along the bottom of every panel.
     Stations that aren't ``"within"`` are shaded on every panel by verdict, and
     each flag's reason is printed under the figure with its distance range, so
     nothing flagged goes unmarked (SPEC §10). For a utility built from station
@@ -217,14 +269,16 @@ def profile(
     ----------
     result : Result
         A movement profile, from `garisenda.movement_profile`, or a check,
-        from `garisenda.check_continuous_pipe`.
-    axs : sequence of four (or six, for a check) matplotlib Axes, optional
-        Panels to draw into, top to bottom, as `matplotlib.pyplot.subplots`
+        from `garisenda.check_continuous_pipe` or
+        `garisenda.check_jointed_pipe`.
+    axs : sequence of matplotlib Axes, optional
+        Four, or six for a continuous-pipe check, or eight for a jointed one.
+        The panels to draw into, top to bottom, as `matplotlib.pyplot.subplots`
         returns them; no figure is created. Otherwise a new figure is made.
     display_units : mapping, optional
         Units per kind of quantity, any of ``length`` (default m),
-        ``displacement`` (mm), ``strain`` (microstrain) and ``curvature``
-        (1/km), such as ``{"displacement": "m"}``.
+        ``displacement`` (mm), ``strain`` (microstrain), ``curvature``
+        (1/km) and ``angle`` (degree), such as ``{"displacement": "m"}``.
 
     Returns
     -------
@@ -235,7 +289,7 @@ def profile(
     Raises
     ------
     ValueError
-        If `axs` isn't four Axes (six for a check), the result has no
+        If `axs` isn't four Axes (six or eight for a check), the result has no
         ``distance`` column, or `display_units` names an unknown kind.
     pint.DimensionalityError
         If a display unit doesn't fit its kind.
@@ -247,7 +301,7 @@ def profile(
             "The profile figure draws against distance along the asset, but the "
             "result's values have no distance column."
         )
-    specs = CHECK_PANELS if result.analysis == CHECK_ANALYSIS else PROFILE_PANELS
+    specs = PANELS.get(result.analysis, PROFILE_PANELS)
     with style():
         fig, panels = _panels(axs, specs)
         length = display.factor("length")
@@ -263,6 +317,7 @@ def profile(
             _critical_ticks(ax, values, distance)
             _mark_governing(ax, spec, result, display)
             _mark_checks(ax, spec, result, display)
+            _mark_closure(ax, spec, values, distance, display)
         panels[0].invert_yaxis()
         panels[-1].set_xlabel(display.label("Distance along utility", "length"))
         _offset_axis(panels[0], values, length, display)
@@ -272,17 +327,22 @@ def profile(
 
 
 def _title(result: Result, display: DisplayUnits) -> str:
-    if result.analysis != CHECK_ANALYSIS:
+    if result.analysis not in PANELS:
         return f"Movement profile along {result.subject}"
+    jointed = result.analysis == JOINTED_ANALYSIS
+    name = "pipe_length" if jointed else "interval"
     interval = next(
-        (entry.value for entry in result.inputs if entry.name == "interval"), None
+        (entry.value for entry in result.inputs if entry.name == name), None
     )
     span = ""
     if interval is not None and not isinstance(interval, str):
         shown = interval.m_as("m") * display.factor("length")
         span = f" at {shown:.3g} {display.symbol('length')}"
+        if jointed:
+            span += " pipe length"
+    kind = "Jointed" if jointed else "Continuous"
     return (
-        f"Continuous pipe check along {result.subject}\n"
+        f"{kind} pipe check along {result.subject}\n"
         f"analytical solid, discrete dashed{span}"
     )
 
@@ -307,6 +367,7 @@ def _draw_lines(
             linewidth=1.2,
             label=label,
             gid=column,
+            linestyle=DASHED if column in spec.dashed else "-",
         )
         discrete = DISCRETE_COLUMN.get(column)
         if discrete is None or discrete not in values:
@@ -356,7 +417,7 @@ def _draw_limits(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -
             if limit.label and limit.label not in missing:
                 missing.append(limit.label)
             continue
-        radius = row["unit"] == "m"
+        radius = limit.check == "radius_of_curvature"
         level = limit.sign * (1.0 / given if radius else given)
         shown = level * display.factor(spec.kind)
         ax.axhline(shown, color="0.45", linewidth=0.7, linestyle="-", gid=limit.name)
@@ -401,7 +462,7 @@ def _panels(
             count,
             1,
             sharex=True,
-            figsize=(7.0, 9.0 if count == 4 else 12.5),
+            figsize=(7.0, {4: 9.0, 6: 12.5}.get(count, 16.0)),
             layout="constrained",
         )
         return fig, list(created)
@@ -529,7 +590,7 @@ def _mark_checks(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -
             continue
         utilization = float(row["utilization"])
         used = "no limit" if math.isnan(utilization) else f"u = {utilization:.2f}"
-        if row["unit"] == "m":
+        if check == "radius_of_curvature":
             # A radius is drawn at its curvature, 1/R, positive as the resultant.
             shown = display.factor(spec.kind) / value
             text = f"R = {value * length:.4g} {display.symbol('length')}, {used}"
@@ -537,6 +598,32 @@ def _mark_checks(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -
             shown = value * display.factor(spec.kind)
             text = f"{shown:.3g} {display.symbol(spec.kind)}, {used}"
         _mark(ax, where * length, shown, text, f"check:{check}", inverted=False)
+
+
+def _mark_closure(
+    ax: Axes,
+    spec: Panel,
+    values: pd.DataFrame,
+    distance: FloatArray,
+    display: DisplayUnits,
+) -> None:
+    """Mark the most negative value of the panel's closure column, if any."""
+    if spec.closure is None or spec.closure not in values:
+        return
+    column = values[spec.closure].to_numpy(dtype=np.float64)
+    if not np.any(column < 0.0):
+        return
+    # The first of any tie, so the smaller distance, as the checks report.
+    index = int(np.nanargmin(column))
+    shown = column[index] * display.factor(spec.kind)
+    _mark(
+        ax,
+        float(distance[index]),
+        shown,
+        f"closure {shown:.3g} {display.symbol(spec.kind)}, not checked",
+        "closure",
+        inverted=False,
+    )
 
 
 def _offset_axis(

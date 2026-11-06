@@ -12,6 +12,7 @@ DEFAULTS: dict[str, str] = {
     "displacement": "mm",
     "strain": "microstrain",
     "curvature": "1/km",
+    "angle": "degree",
 }
 """The display unit of each kind of quantity, unless the caller changes it."""
 
@@ -20,6 +21,7 @@ SI: dict[str, str] = {
     "displacement": "m",
     "strain": "dimensionless",
     "curvature": "1/m",
+    "angle": "radian",
 }
 """The unit each kind is held in, in a result's values."""
 
@@ -32,7 +34,7 @@ class DisplayUnits:
     ----------
     units : dict of str to pint.Unit
         The display unit of each kind: ``length``, ``displacement``,
-        ``strain`` and ``curvature``.
+        ``strain``, ``curvature`` and ``angle``.
     """
 
     units: dict[str, pint.Unit]
@@ -57,13 +59,13 @@ def resolve(display_units: Mapping[str, object] | None) -> DisplayUnits:
     Parameters
     ----------
     display_units : mapping of str to str or pint.Unit, or None
-        Units for any of ``length``, ``displacement``, ``strain`` and
-        ``curvature``, such as ``{"displacement": "m"}``.
+        Units for any of ``length``, ``displacement``, ``strain``,
+        ``curvature`` and ``angle``, such as ``{"displacement": "m"}``.
 
     Raises
     ------
     ValueError
-        For a kind that isn't one of the four.
+        For a kind that isn't one of the five.
     pint.DimensionalityError
         For a unit that doesn't convert to its kind's SI unit.
     """
