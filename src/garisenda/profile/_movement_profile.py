@@ -9,7 +9,7 @@ import pandas as pd
 
 from garisenda._inputs import judgments, record
 from garisenda._result import Result, empty_checks
-from garisenda.sources._movement import MethodRecord, Source, worst
+from garisenda.sources._movement import Flag, MethodRecord, Source, Verdict, worst
 from garisenda.sources._segment import directions
 from garisenda.utilities._utility import Utility
 
@@ -154,7 +154,7 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
     length = float(np.linalg.norm(end - start))
     try:
-        along_direction, vertical_direction, lateral_direction = directions(start, end)
+        directions(start, end)
     except ValueError as error:
         raise ValueError(
             f"{where} is vertical, so it has no lateral direction; a profile "
@@ -173,14 +173,45 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     except ValueError as error:
         raise ValueError(f"{where}: {error}") from error
     distance, is_critical = _stations(length, spacing_m, critical)
+    values, flags, validity = profile_rows(utility, source, distance, is_critical)
+    return Result(
+        analysis="movement_profile",
+        subject=utility.utility_id,
+        values=values,
+        checks=empty_checks(),
+        method=(*source.method, METHOD),
+        assumptions=(*source.assumptions, *utility.assumptions, GREENFIELD),
+        inputs=(*source.inputs, *utility.inputs, spacing_record, merge_record),
+        validity=validity,
+        warnings=flags,
+        source=source,
+        asset=utility,
+    )
 
-    points = start + distance[:, None] * along_direction
+
+def profile_rows(
+    utility: Utility,
+    source: Source,
+    distance: FloatArray,
+    is_critical: npt.NDArray[np.bool_],
+) -> tuple[pd.DataFrame, tuple[Flag, ...], Verdict]:
+    """Return a profile's rows at the given distances along a utility.
+
+    The columns are `movement_profile`'s, with units in ``attrs["units"]``;
+    the flags are the source's, with points as row positions, and the
+    validity is the worst verdict over the rows and flags. The utility must
+    not be vertical. If the source can't evaluate a point, its `ValueError`
+    is raised again naming the utility and the points' distances.
+    """
+    where = f"Utility {utility.utility_id!r}"
+    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
+    a, v, lat = directions(start, end)
+    points = start + distance[:, None] * a
     try:
         movement = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
     except ValueError as error:
         raise ValueError(f"{where}: {_with_distances(str(error), distance)}") from error
 
-    a, v, lat = along_direction, vertical_direction, lateral_direction
     gradient, hessian = movement.gradient, movement.hessian
 
     def first(e: FloatArray) -> FloatArray:
@@ -221,18 +252,30 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
 
     flags = movement.flags
     validity = worst([*movement.verdict.tolist(), *(flag.verdict for flag in flags)])
-    return Result(
-        analysis="movement_profile",
-        subject=utility.utility_id,
-        values=values,
-        checks=empty_checks(),
-        method=(*source.method, METHOD),
-        assumptions=(*source.assumptions, *utility.assumptions, GREENFIELD),
-        inputs=(*source.inputs, *utility.inputs, spacing_record, merge_record),
-        validity=validity,
-        warnings=flags,
-        source=source,
-        asset=utility,
+    return values, flags, validity
+
+
+def merge_stations(
+    distance: FloatArray, is_critical: npt.NDArray[np.bool_]
+) -> tuple[FloatArray, npt.NDArray[np.bool_]]:
+    """Sort distances and merge those within 1 um, keeping the critical one."""
+    candidates = sorted(
+        zip(
+            np.asarray(distance, dtype=np.float64).tolist(),
+            is_critical.tolist(),
+            strict=True,
+        )
+    )
+    kept: list[tuple[float, bool]] = []
+    for station, critical in candidates:
+        if kept and station - kept[-1][0] < MERGE_TOLERANCE:
+            if critical and not kept[-1][1]:
+                kept[-1] = (station, True)
+            continue
+        kept.append((station, critical))
+    return (
+        np.array([station for station, _ in kept], dtype=np.float64),
+        np.array([critical for _, critical in kept], dtype=bool),
     )
 
 
@@ -242,20 +285,10 @@ def _stations(
     """Return the stations' distances and which are critical, merged at 1 um."""
     grid = spacing * np.arange(math.ceil(length / spacing))
     grid = np.append(grid[grid < length], length)
-    candidates = sorted(
-        [(float(s), True) for s in np.clip(critical, 0.0, length)]
-        + [(float(s), False) for s in grid]
-    )
-    kept: list[tuple[float, bool]] = []
-    for distance, is_critical in candidates:
-        if kept and distance - kept[-1][0] < MERGE_TOLERANCE:
-            if is_critical and not kept[-1][1]:
-                kept[-1] = (distance, True)
-            continue
-        kept.append((distance, is_critical))
-    return (
-        np.array([distance for distance, _ in kept]),
-        np.array([flag for _, flag in kept], dtype=bool),
+    clipped = np.clip(critical, 0.0, length)
+    return merge_stations(
+        np.concatenate([clipped, grid]),
+        np.concatenate([np.ones(clipped.size, bool), np.zeros(grid.size, bool)]),
     )
 
 
