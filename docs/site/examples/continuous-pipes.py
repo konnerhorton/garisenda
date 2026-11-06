@@ -61,6 +61,8 @@ coarse = gs.check_continuous_pipe(
     bending_strain_limit=min(tensile, compressive),
     radius_of_curvature_limit=2000 * u.m,
 )
+fig, axs = gs.plot.profile(coarse)
+fig.savefig("continuous-pipes-coarse.png", dpi=100)
 row = coarse.checks.set_index("check").loc["compressive_strain"]
 print(
     f"At a 9 m interval: compressive strain {row['analytical'] * 1e6:.1f} µε "

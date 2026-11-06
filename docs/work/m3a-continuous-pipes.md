@@ -321,6 +321,7 @@ A refactor with no change in behavior. The check finds the zeros of d|κ|²/ds, 
 ### 8. `M3 (a): write the continuous pipes guide` (Sonnet)
 - New `docs/site/guides/continuous-pipes.md` and `docs/site/examples/continuous-pipes.py`: case A's crossing checked at a 1 m interval with illustrative limits stated as the example's own (no material named), `bending_strain_limit=min(...)` shown, the six-panel figure, reading the checks table and the analytical/discrete difference, what the check assumes (circular, outermost fiber, pipe follows the ground), and the perpendicular bound with its limits (spec, "The perpendicular bound").
 - `zensical.toml` nav; `docs/site/figures/profile.md` shows the check figure.
+- Added in step 9, after looking at the figure: the example also draws the check at a 9 m interval (`continuous-pipes-coarse.png`), since at 1 m the dashed discrete lines lie under the solid ones.
 - Tests: `tests/docs/test_site.py` picks up the example; the docs build passes with `--strict` and no `griffe:` warnings (AC 16).
 
 ### 9. `M3 (a): check figures and close out` (Opus)

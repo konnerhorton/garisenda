@@ -43,7 +43,9 @@ Each value is computed two ways, and the worse governs:
 
 The interval is a judgment, with no default: a short one exaggerates small differences in movement, a long one smooths the peaks. The examples use 1 m. It is independent of the profile's `spacing`, which only sets where values are reported.
 
-For a smooth trough the discrete value is an average of the analytical one over its span, so it is the smaller and the analytical value usually governs. `difference` (discrete − analytical) shows how much the interval smooths: at 1 m it is a fraction of a percent here; at 9 m, the trough's width parameter i, the discrete compressive strain is 12 % short. If your spreadsheet's values are well below the analytical ones, its interval is too coarse for the trough.
+For a smooth trough the discrete value is an average of the analytical one over its span, so it is the smaller and the analytical value usually governs. `difference` (discrete − analytical) shows how much the interval smooths: at 1 m it is a fraction of a percent here; at 9 m, the trough's width parameter i, the discrete compressive strain is 12 % short. If your spreadsheet's values are well below the analytical ones, its interval is too coarse for the trough. At 9 m the dashed discrete lines part from the solid analytical ones:
+
+![The same check at a 9 m interval, where the discrete values fall short of the analytical ones](../img/generated/continuous-pipes-coarse.png)
 
 The check also adds stations at the peaks of the resultant curvature and the combined strains, found from the field's derivatives, so the reported peak is the true one whatever the spacing. They are ticked in red along the bottom of each panel.
 

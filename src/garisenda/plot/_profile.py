@@ -326,7 +326,16 @@ def _draw_lines(
         handles.append(Line2D([], [], color="0.3", linewidth=1.0, linestyle=DASHED))
         labels.append("Discrete")
     if len(handles) > 1:
-        ax.legend(handles, labels, loc="lower left", ncols=min(len(handles), 4))
+        # Above the panel, left, clear of the lines and the limits' labels.
+        ax.legend(
+            handles,
+            labels,
+            loc="lower left",
+            bbox_to_anchor=(0.0, 1.0),
+            ncols=len(handles),
+            fontsize=7,
+            borderaxespad=0.1,
+        )
 
 
 def _check_row(result: Result, check: str) -> Any:
@@ -355,7 +364,7 @@ def _draw_limits(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -
             continue
         value = given * display.factor("length") if radius else shown
         unit = display.symbol("length" if radius else spec.kind)
-        text = f"R = {value:.4g} {unit}" if radius else f"{value:.3g} {unit}"
+        text = f"R = {value:.4g} {unit}" if radius else f"{value:.4g} {unit}"
         ax.annotate(
             f"{limit.label}: {text}",
             (1.0, shown),
