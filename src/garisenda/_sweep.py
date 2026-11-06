@@ -99,10 +99,17 @@ def sweep(
           run's input record (1 % appears as 0.01);
         - for each row of `Result.governing`, ``<name>`` (signed, as in the
           result's values) and ``<name>_distance`` (m);
+        - for each row of `Result.checks` (a utility check's result),
+          ``<check>`` (its governing value, in the check's unit),
+          ``<check>_distance`` (m), ``<check>_utilization`` (NaN where the
+          check has no limit) and ``<check>_passes`` (pandas ``boolean``,
+          ``NA`` where the check has no limit); a result with no checks adds
+          none;
         - ``validity``: the result's verdict;
         - ``warnings``: how many flags it has;
         - ``error``: None, or ``"<ExceptionType>: <message>"`` for a run that
-          raised, whose values are NaN and validity None (SPEC §10).
+          raised, whose values are NaN, ``passes`` ``NA`` and validity None
+          (SPEC §10).
 
         ``attrs`` holds ``units`` (per column), ``run`` (the function's
         qualified name), ``mode``, ``vary`` (the names) and ``fixed_inputs``:
@@ -371,6 +378,16 @@ def _table(
                     units[str(item.name)] = str(item.unit)
                     units[f"{item.name}_distance"] = "m"
 
+    check_names: list[str] = []
+    for outcome in runs:
+        if outcome.result is not None:
+            for check in outcome.result.checks.itertuples(index=False):
+                if check.check not in check_names:
+                    check_names.append(str(check.check))
+                    units[str(check.check)] = str(check.unit)
+                    units[f"{check.check}_distance"] = "m"
+                    units[f"{check.check}_utilization"] = "dimensionless"
+
     rows = []
     for number, outcome in enumerate(runs):
         row: dict[str, Any] = {"run": number}
@@ -388,6 +405,22 @@ def _table(
             else:
                 row[name] = math.nan
                 row[f"{name}_distance"] = math.nan
+        checks = (
+            outcome.result.checks.set_index("check")
+            if outcome.result is not None
+            else None
+        )
+        for name in check_names:
+            if checks is not None and name in checks.index:
+                row[name] = float(checks.loc[name, "value"])
+                row[f"{name}_distance"] = float(checks.loc[name, "governing_distance"])
+                row[f"{name}_utilization"] = float(checks.loc[name, "utilization"])
+                row[f"{name}_passes"] = checks.loc[name, "passes"]
+            else:
+                row[name] = math.nan
+                row[f"{name}_distance"] = math.nan
+                row[f"{name}_utilization"] = math.nan
+                row[f"{name}_passes"] = pd.NA
         if outcome.result is not None:
             row["validity"] = outcome.result.validity
             row["warnings"] = len(outcome.result.warnings)
@@ -402,8 +435,17 @@ def _table(
     columns = ["run", *names]
     for name in governing_names:
         columns += [name, f"{name}_distance"]
+    for name in check_names:
+        columns += [
+            name,
+            f"{name}_distance",
+            f"{name}_utilization",
+            f"{name}_passes",
+        ]
     columns += ["validity", "warnings", "error"]
     table = pd.DataFrame(rows, columns=columns)
+    for name in check_names:
+        table[f"{name}_passes"] = table[f"{name}_passes"].astype("boolean")
     table.attrs = {
         "units": units,
         "run": getattr(run, "__qualname__", repr(run)),
