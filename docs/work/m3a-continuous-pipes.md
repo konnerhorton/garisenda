@@ -253,3 +253,83 @@ The hand calculations' arithmetic was done by Claude (2026-11-06) from the formu
 14. **Sweep:** a `gs.sweep` row over volume loss equals a direct call with the same inputs, including each check's value, utilization and pass/fail (SPEC §11).
 15. **Figure:** a check result draws six panels, found by `gid`, with the analytical and discrete lines, each limit line, and each governing marker; a limit given as `None` draws no line; a movement profile still draws four panels; `rcParams` are unchanged. Checked by eye at close-out.
 16. **Docs:** the API reference has `check_continuous_pipe`, with Mechanics 1–6 in its docstring and the source; the guide page's example runs in the docs build.
+
+## Plan
+
+Nine build commits, each with lint, format, mypy strict and pytest green. Opus does 1–5, Sonnet does 6–8 and Opus does 9 (figures by eye, then close-out), so a new session starts before 6 and before 9. Two items not in the spec are marked 🟡.
+
+### 1. `M3 (a): compute a profile's rows at any distances` (Opus)
+A refactor with no change in behavior. The check needs the profile's columns at its own peaks (spec decision 7), computed by the same code.
+- `src/garisenda/profile/_movement_profile.py`:
+  - `profile_rows(utility, source, distance, is_critical) -> (values, flags, validity)`, taken from the body of `movement_profile`: evaluate at the distances, resolve, build the DataFrame with units, re-raise a source's error naming the utility and distances.
+  - `merge_stations(distance, is_critical) -> (distance, is_critical)`, taken from `_stations`: sort, merge within 1 µm, keep the critical one. `_stations` builds the grid and calls it.
+  - `movement_profile` calls both.
+- Tests: the existing suite passes unchanged.
+
+### 2. `M3 (a): find zeros of any functions along a segment` (Opus)
+A refactor with no change in behavior. The check finds the zeros of d|κ|²/ds, dε_t/ds and dε_c/ds with the same sampling, bracketing and bisection as `find_critical_distances`.
+- `src/garisenda/sources/_critical.py`: `find_zeros(functions, *, length, step, tolerance, scales) -> ndarray`, where `functions(distance) -> (N, F)` array and `scales` sets each function's 1e-10 negligible band; the bracketing, exact zeros, vectorized bisection, clipping and merging move into it. `find_critical_distances` builds its eight functions and their order scales and calls it.
+- Tests: the existing suite passes unchanged; `tests/sources/test_critical.py` adds a direct test of `find_zeros` on sin(s) and on a function with an exact zero at a sample.
+
+### 3. `M3 (a): grow the checks table and its summary` (Opus)
+- `src/garisenda/_result.py`:
+  - `CHECK_COLUMNS` becomes spec decision 11's thirteen columns; `empty_checks()` gives them with dtypes (float, `passes` pandas `boolean`, strings `object`).
+  - `__repr__`: one line per check, "`<check>`: `<value> <unit>` at `<d>` m (`<governed_by>`), utilization `<u>` against `<limit>`", or "no limit" where `limit` is NaN, or "none" where `value` is NaN. Replaces the "checks: n, m failing" line, which can't read `NA`.
+  - `_plain` maps `pd.NA` to None.
+- Tests in `tests/test_result.py`: a movement profile's empty checks table has the thirteen columns (AC 13, that part); a hand-built checks table with a NaN limit and `NA` passes round-trips through `to_dict()` and `json.dumps`, and prints in the summary.
+
+### 4. `M3 (a): add gs.check_continuous_pipe, analytical` (Opus)
+- New `src/garisenda/utilities/_continuous_pipe.py`:
+  - `check_continuous_pipe(profile, *, interval, interaction, tensile_strain_limit, compressive_strain_limit, bending_strain_limit, radius_of_curvature_limit)` with `@judgments` for all six (a limit given as `None` is present, so it passes the decorator). The docstring is the reference entry: Mechanics 1–6, each input and output with units, the assumptions and the source (AC 16, that part).
+  - Reading the inputs (decisions 1–3): `TypeError` unless `profile` is a `Result` with `analysis == "movement_profile"` and its `source` and `asset` kept. `interval` through `record` (m, read as SI), positive and finite. `interaction` checked to be `"greenfield"`, recorded as `InputRecord("interaction", "greenfield", "design judgment", "name", source)`. Strain limits through `record(unit="dimensionless", plain_number="refuse")`, the radius limit in m; each positive, or `None` recorded with value and given-as `"none"`.
+  - Analytical columns (decision 11) from the profile's columns and r = `utility.diameter / 2`: Mechanics 1–5.
+  - Peaks (decision 7): `find_zeros` on the utility's segment, with `step` and `tolerance` from `CRITICAL_DISTANCE_SAMPLING` and `CRITICAL_DISTANCE_TOLERANCE` and the source's `feature_length`, over three functions built from the source's gradient, Hessian and third derivative along a: d|κ|²/ds = 2(κ_v κ_v′ + κ_l κ_l′); dε_t/ds = H(ε_a) ε_a′ + r d|κ|/ds; dε_c/ds = (1 − H(ε_a)) ε_a′ − r d|κ|/ds, with d|κ|/ds = (κ_v κ_v′ + κ_l κ_l′)/|κ| and 0 where |κ| = 0. The kinks where ε_a or |κ| crosses zero bracket like zeros; a row there is harmless. The new distances join the profile's through `merge_stations` (marked critical), and every row is recomputed by `profile_rows`, so the flags' points are renumbered by construction and the profile's rows are unchanged.
+  - The checks table (decisions 4, 9): each check's analytical extreme, ties within 1e-9 to the smallest distance (as `Result.governing`); utilization and `passes` as decision 4, NaN and `NA` with no limit. In this commit `discrete` is NaN and `governed_by` `"analytical"`.
+  - `method`, `assumptions` (decision 12) and `inputs` appended to the profile's.
+- `src/garisenda/__init__.py` exports `check_continuous_pipe`.
+- Tests in new `tests/utilities/test_continuous_pipe.py`, with cases A and C as fixtures:
+  - AC 1: case A's values at 40 m and 40 ± 15.5885 m, the six governing analytical values and distances, to 0.5 %; lateral curvature and lateral bending strain exactly zero.
+  - AC 2: Eqs. 7–9 at 0.5 %.
+  - AC 4: case C at the crossing and at 49.44366 m (a station: a peak of κ_l), to 0.5 %, and half of case A at the crossing.
+  - AC 5: case C and the `twins_below_the_surface` fixture: the governing |κ|, ε_t and ε_c are at least, and within 1e-9 relative of, the maxima of an independent evaluation every 1 mm (the source's `evaluate` contracted by hand in the test, Mechanics 2–4), and their rows are `critical`.
+  - AC 8: utilization and `passes` with limits that pass and fail; radius as limit/R; each limit `None` in turn; the bending check reads only `bending_strain_limit`.
+  - AC 10, AC 11: every missing judgment, a plain-number strain limit, `interaction="slip"`, zero and negative interval and limits, a non-profile; every input record.
+  - AC 12, analytical part: case C reversed (vertices swapped) in `tests/utilities/test_continuous_pipe_properties.py`, with hypothesis over angle and offset range: values and utilizations unchanged, distances L − d.
+
+### 5. `M3 (a): add discrete strain and let the worse govern` (Opus)
+- `src/garisenda/utilities/_continuous_pipe.py`:
+  - Discrete sampling (decision 5): for each row, the points s ± h/2 and s ± h on the pipe's line, all in one `evaluate` call, displacements resolved into a, v, l; Mechanics 6 gives the discrete columns, NaN where a sample is beyond an end by more than 1 µm (decision 6). The source's flags and verdicts at the samples are dropped.
+  - 🟡 Not in the spec: if `evaluate` raises at a sample, the `ValueError` is re-raised naming the utility and the samples' distances, as the profile does. It can't happen for a profile that evaluated, since samples lie between its stations, but it's never silent.
+  - The ends flag (decision 6): one `within` flag naming the stations with no discrete axial strain or curvature and why, its reason stating h and h/2; and the same when L < 2h.
+  - `governing_value(analytical, analytical_distance, discrete, discrete_distance, *, smallest)`: decision 9's rule, a private function so AC 9 tests it directly. The table fills `discrete`, `discrete_distance`, `difference` and `governed_by`.
+  - The method record, the interval assumption and the docstring gain the discrete definitions.
+- Tests in `tests/utilities/test_continuous_pipe.py`:
+  - AC 3: case B's table at h = 1 and 9 m, to 1e-9 relative; `governed_by` all `"analytical"` at 1 m; the compressive difference at 9 m is +86.77 µε to 0.5 %.
+  - AC 6: case C at h = 0.01 m within 1e-4 of each column's largest size; cases A and C at 1 and 9 m, each per-plane discrete peak no larger than the analytical one.
+  - AC 7: the NaN stations and the one flag; validity unchanged; a pipe shorter than 2h.
+  - AC 9: `governing_value` for tension, compression and radius, a tie, a larger discrete value and a NaN discrete value.
+  - AC 12, the discrete part, and AC 13: `to_dict()` through `json.dumps` with infinite radii as None, `to_frame()` units, the summary's six check lines.
+
+### 6. `M3 (a): report checks in gs.sweep` (Sonnet)
+- `src/garisenda/_sweep.py`: for a result with checks, each row gains `<check>`, `<check>_distance`, `<check>_utilization` and `<check>_passes` (🟡 naming not in the spec, following `<name>_distance`), with units in `attrs`; a failed run's are NaN and `NA`. The docstring says so.
+- Tests in `tests/test_sweep.py` (AC 14): a sweep over volume loss of a run that builds case A's check equals direct calls, value, utilization and passes included; a sweep of movement profiles has no check columns.
+
+### 7. `M3 (a): draw a check result in six panels` (Sonnet)
+- `src/garisenda/plot/_profile.py`, following spec decision 13: panel sets chosen by `result.analysis`; six panels for a check result (settlement, horizontal movement, axial strain, curvature, bending strain, combined strain), four otherwise. Discrete lines dashed in the analytical line's color, `gid` `discrete_<column>`, with gaps at NaN. Limit lines thin, labeled with their value, `gid` the limit's name (curvature: ±1/radius limit). Each check's governing value marked with its value and utilization, `gid` `check:<check>`; the profile's settlement marker kept, its strain and curvature markers replaced by the checks'. A panel with a `None` limit notes "no limit". `axs=` checks for six Axes with a check result. The docstring describes both figures.
+- Tests in `tests/plot/test_profile.py` (AC 15, the automated part): six panels by `gid`, every analytical and discrete line, each limit line and each `check:` marker; a `None` limit draws no line and its note; a movement profile still draws four; `axs` of the wrong count raises; `rcParams` unchanged.
+
+### 8. `M3 (a): write the continuous pipes guide` (Sonnet)
+- New `docs/site/guides/continuous-pipes.md` and `docs/site/examples/continuous-pipes.py`: case A's crossing checked at a 1 m interval with illustrative limits stated as the example's own (no material named), `bending_strain_limit=min(...)` shown, the six-panel figure, reading the checks table and the analytical/discrete difference, what the check assumes (circular, outermost fiber, pipe follows the ground), and the perpendicular bound with its limits (spec, "The perpendicular bound").
+- `zensical.toml` nav; `docs/site/reference/garisenda.md` gains `::: garisenda.check_continuous_pipe`; `docs/site/figures/profile.md` shows the check figure.
+- Tests: `tests/docs/test_site.py` picks up the example; the docs build passes with `--strict` and no `griffe:` warnings (AC 16).
+
+### 9. `M3 (a): check figures and close out` (Opus)
+- Check the figures in `docs/site/img/generated/` by eye against spec decision 13 (the rest of AC 15), and fix anything found.
+- Run every check: the CI line, Python 3.13 and 3.14, the `lowest-direct` floors then `git checkout uv.lock`.
+- 🟡 The spreadsheet comparison (M3's done-when) waits for M3 (b), when the spreadsheet's jointed checks are there too; M3 (a) can be compared locally now if you want it earlier.
+- Close-out:
+  - SPEC §1.3 gains "utilities are circular" and "strain is at the outermost fiber"; §12.4 marks M3 (a) done with its date;
+  - `docs/TODO.md` #4 and #10 updated for what was built;
+  - `CLAUDE.md`'s status and "Next" sentence point to M3 (b); any recurring mistake goes into its conventions;
+  - every new public calculation has a complete docstring with its source;
+  - report each of the 16 ACs as met or not, with its evidence.
