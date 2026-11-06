@@ -1,6 +1,8 @@
 """Strain checks for a continuous pipe (M3 (a) spec)."""
 
 import math
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -16,7 +18,7 @@ from garisenda.profile._movement_profile import (
     profile_rows,
 )
 from garisenda.sources._critical import _derivatives, find_zeros
-from garisenda.sources._movement import Flag, MethodRecord, Source, worst
+from garisenda.sources._movement import Flag, MethodRecord, Source, Verdict, worst
 from garisenda.sources._segment import directions
 from garisenda.sources._transverse_trough import (
     CRITICAL_DISTANCE_SAMPLING,
@@ -69,12 +71,6 @@ ASSUMPTIONS = (
     "reduce the tensile strain, nor tension the compressive strain.",
 )
 
-LIMITS = (
-    "tensile_strain_limit",
-    "compressive_strain_limit",
-    "bending_strain_limit",
-    "radius_of_curvature_limit",
-)
 
 # Each check: its name, the column it reads, the extreme (+1 the largest
 # positive, -1 the most negative, 0 the smallest), its limit and its unit.
@@ -319,46 +315,21 @@ def check_continuous_pipe(
     if not (math.isfinite(interval_m) and interval_m > 0):
         raise ValueError(f"interval must be positive, not {interval_m} m.")
     interaction_record = _read_interaction(interaction)
-    limits: dict[str, float] = {}
-    limit_records: list[InputRecord] = []
-    for name, value in (
-        ("tensile_strain_limit", tensile_strain_limit),
-        ("compressive_strain_limit", compressive_strain_limit),
-        ("bending_strain_limit", bending_strain_limit),
-        ("radius_of_curvature_limit", radius_of_curvature_limit),
-    ):
-        limits[name], entry = _read_limit(name, value)
-        limit_records.append(entry)
-
-    radius = utility.diameter / 2
-    peaks = _peaks(utility, source, radius)
-    distance, is_critical = _add_stations(
-        profile.values["distance"].to_numpy(dtype=np.float64),
-        profile.values["critical"].to_numpy(dtype=bool),
-        peaks,
+    limits, limit_records = _read_limits(
+        tensile_strain_limit=tensile_strain_limit,
+        compressive_strain_limit=compressive_strain_limit,
+        bending_strain_limit=bending_strain_limit,
+        radius_of_curvature_limit=radius_of_curvature_limit,
     )
-    values, flags, validity = profile_rows(utility, source, distance, is_critical)
-    values = _with_strains(values, radius)
-    values = _with_discrete(values, utility, source, interval_m, radius)
-    ends = _ends_flag(values, interval_m)
-    flags = (*flags, ends)
-    validity = worst([validity, ends.verdict])
-    checks = _checks(values, limits)
+    values, flags, validity, checks = _barrel(
+        profile, utility, source, interval_m, limits
+    )
 
-    unlimited = [name for name in LIMITS if math.isnan(limits[name])]
     assumptions = [
         *ASSUMPTIONS,
-        f"Discrete strain is computed over an interval h = {interval_m:g} m, "
-        "centered on each station: axial strain from the movements at s +- h/2, "
-        "curvature in each plane from s - h, s and s + h (the second "
-        "difference), with the same small-slope approximation as the "
-        "analytical values. Stations closer to an end than that have none.",
+        _interval_assumption(interval_m, f"an interval h = {interval_m:g} m"),
+        *_unlimited_assumption(limits),
     ]
-    if unlimited:
-        assumptions.append(
-            f"No limit was given for {', '.join(unlimited)}: those checks are "
-            "reported without a utilization."
-        )
     return Result(
         analysis="continuous_pipe_check",
         subject=utility.utility_id,
@@ -379,7 +350,9 @@ def check_continuous_pipe(
     )
 
 
-def _read_profile(profile: object) -> tuple[Utility, Source]:
+def _read_profile(
+    profile: object, check: str = "check_continuous_pipe"
+) -> tuple[Utility, Source]:
     """Return a movement profile's utility and source, or raise `TypeError`."""
     if not (
         isinstance(profile, Result)
@@ -393,7 +366,7 @@ def _read_profile(profile: object) -> tuple[Utility, Source]:
             else type(profile).__name__
         )
         raise TypeError(
-            "check_continuous_pipe needs a movement profile, the Result of "
+            f"{check} needs a movement profile, the Result of "
             f"gs.movement_profile(utility, source, spacing=...), not {what}."
         )
     return profile.asset, profile.source
@@ -410,6 +383,71 @@ def _read_interaction(interaction: object) -> InputRecord:
             "assesses the pipe as following the ground (SPEC §1.3)."
         )
     return InputRecord("interaction", "greenfield", "design judgment", "name", source)
+
+
+def _read_limits(**given: object) -> tuple[dict[str, float], list[InputRecord]]:
+    """Return the strain and radius limits in SI (NaN for none) and their records."""
+    limits: dict[str, float] = {}
+    records: list[InputRecord] = []
+    for name, value in given.items():
+        limits[name], entry = _read_limit(name, value)
+        records.append(entry)
+    return limits, records
+
+
+def _interval_assumption(interval: float, what: str) -> str:
+    """Return the assumption sentence for discrete strain over `what`."""
+    return (
+        f"Discrete strain is computed over {what}, "
+        "centered on each station: axial strain from the movements at s +- h/2, "
+        "curvature in each plane from s - h, s and s + h (the second "
+        "difference), with the same small-slope approximation as the "
+        "analytical values. Stations closer to an end than that have none."
+    )
+
+
+def _unlimited_assumption(limits: dict[str, float]) -> list[str]:
+    """Return the assumption naming the checks with no limit, if any."""
+    unlimited = [name for name, limit in limits.items() if math.isnan(limit)]
+    if not unlimited:
+        return []
+    return [
+        f"No limit was given for {', '.join(unlimited)}: those checks are "
+        "reported without a utilization."
+    ]
+
+
+def _barrel(
+    profile: Result,
+    utility: Utility,
+    source: Source,
+    interval: float,
+    limits: dict[str, float],
+    *,
+    extra_peaks: FloatArray | None = None,
+    ends_reason: str = "",
+) -> tuple[pd.DataFrame, tuple[Flag, ...], Verdict, pd.DataFrame]:
+    """Return the barrel's values, flags, validity and six checks at `interval`.
+
+    The rows are the profile's stations, the peaks of decision 7 and
+    `extra_peaks`, all marked critical. `ends_reason` is added to the ends
+    flag's reason.
+    """
+    radius = utility.diameter / 2
+    peaks = _peaks(utility, source, radius)
+    if extra_peaks is not None:
+        peaks = np.concatenate([peaks, extra_peaks])
+    distance, is_critical = _add_stations(
+        profile.values["distance"].to_numpy(dtype=np.float64),
+        profile.values["critical"].to_numpy(dtype=bool),
+        peaks,
+    )
+    values, flags, validity = profile_rows(utility, source, distance, is_critical)
+    values = _with_strains(values, radius)
+    values = _with_discrete(values, utility, source, interval, radius)
+    ends = _ends_flag(values, interval, ends_reason)
+    checks = _checks(values, limits)
+    return values, (*flags, ends), worst([validity, ends.verdict]), checks
 
 
 def _read_limit(name: str, value: object) -> tuple[float, InputRecord]:
@@ -436,8 +474,22 @@ def _read_limit(name: str, value: object) -> tuple[float, InputRecord]:
     return limit, entry
 
 
-def _peaks(utility: Utility, source: Source, radius: float) -> FloatArray:
-    """Return where |kappa|, eps_t and eps_c peak along the utility (decision 7)."""
+@dataclass(frozen=True)
+class Along:
+    """A straight utility's line, with the source's derivatives along it.
+
+    `derivatives(distance)` returns ``_derivatives``'s (N, order, direction)
+    array (direction along, vertical, lateral) and the (N, 3) displacements,
+    at the given distances along the utility.
+    """
+
+    length: float
+    feature: float
+    derivatives: Callable[[FloatArray], tuple[FloatArray, FloatArray]]
+
+
+def along_line(utility: Utility, source: Source) -> Along:
+    """Return the utility's line and the source's derivatives along it."""
     start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
     length = float(np.linalg.norm(end - start))
     a, v, lat = directions(start, end)
@@ -455,6 +507,14 @@ def _peaks(utility: Utility, source: Source, radius: float) -> FloatArray:
                 f"{where}: {_with_distances(str(error), distance)}"
             ) from error
         return _derivatives(movement, a, v, lat), movement.displacement
+
+    return Along(length, feature, derivatives)
+
+
+def _peaks(utility: Utility, source: Source, radius: float) -> FloatArray:
+    """Return where |kappa|, eps_t and eps_c peak along the utility (decision 7)."""
+    line = along_line(utility, source)
+    length, feature, derivatives = line.length, line.feature, line.derivatives
 
     def functions(distance: FloatArray) -> FloatArray:
         return _peak_functions(derivatives(distance)[0], radius)
@@ -619,7 +679,7 @@ def _with_discrete(
     return result
 
 
-def _ends_flag(values: pd.DataFrame, interval: float) -> Flag:
+def _ends_flag(values: pd.DataFrame, interval: float, extra: str = "") -> Flag:
     """Flag the stations with no discrete axial strain or curvature (decision 6)."""
     missing = (
         values["discrete_axial_strain"].isna()
@@ -637,6 +697,8 @@ def _ends_flag(values: pd.DataFrame, interval: float) -> Flag:
             f" The pipe, {length:g} m long, is shorter than 2h = {2 * interval:g} m, "
             "so no station has a discrete curvature."
         )
+    if extra:
+        reason += f" {extra}"
     return Flag(
         "within",
         reason,
@@ -748,15 +810,19 @@ def extreme(values: FloatArray, distance: FloatArray, sign: int) -> tuple[float,
     return float(values[index]), float(distance[index])
 
 
-def _utilization(value: float, limit: float, *, smallest: bool) -> tuple[float, Any]:
+def _utilization(
+    value: float, limit: float, *, smallest: bool, determined: bool = True
+) -> tuple[float, Any]:
     """Return a check's utilization and whether it passes (decision 4).
 
     Utilization is |value| / limit, or limit / value for a radius
     (`smallest`). A zero limit allows nothing (M3 (b), decision 11): a nonzero
     value has utilization infinity and fails, a zero value has 0 and passes,
-    and a zero radius limit gives 0 and passes.
+    and a zero radius limit gives 0 and passes. A check that couldn't be
+    determined (no position along the pipe has a value; M3 (b), decision 10)
+    has NaN and NA even with a limit: not determined is never a pass.
     """
-    if math.isnan(limit):
+    if math.isnan(limit) or not determined:
         return math.nan, pd.NA
     if math.isnan(value):
         return math.nan, True
