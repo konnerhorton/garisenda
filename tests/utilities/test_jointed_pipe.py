@@ -504,3 +504,296 @@ def test_every_judgment_is_recorded(profile):
         "joint_rotation",
         "joint_pullout",
     ]
+
+
+# AC 1 and AC 3: the governing joints
+
+
+def test_case_ja_governing(case_ja):
+    rotation = check_row(case_ja, "joint_rotation")
+    vertical, _, _ = closed_form(40.0, 4.0)
+    assert rotation["value"] == pytest.approx(-vertical, rel=EXACT)
+    assert rotation["governing_distance"] == pytest.approx(40.0, abs=DISTANCE)
+    pullout = check_row(case_ja, "joint_pullout")
+    assert pullout["value"] == pytest.approx(1.21274e-3, rel=PRINTED)
+    # The tie with 55.7179 m goes to the smaller distance.
+    assert pullout["governing_distance"] == pytest.approx(24.2821, abs=1e-4)
+    at = pullout["governing_distance"]
+    assert pullout["value"] == pytest.approx(closed_form(at, 4.0)[2], rel=EXACT)
+    assert closed_form(80 - at, 4.0)[2] == pytest.approx(pullout["value"], rel=EXACT)
+    values = case_ja.values
+    distance = values["distance"].to_numpy()
+    closure = values["joint_opening"].min()
+    assert closure == pytest.approx(closed_form(40.0, 4.0)[2], rel=EXACT)
+    assert closure == pytest.approx(-2.71722e-3, rel=PRINTED)
+    hogging = int(np.nanargmax(values["joint_vertical_rotation"].to_numpy()))
+    assert values["joint_vertical_rotation"].iloc[hogging] == pytest.approx(
+        2.63061e-4, rel=PRINTED
+    )
+    assert min(distance[hogging], 80 - distance[hogging]) == pytest.approx(
+        24.1537, abs=1e-4
+    )
+
+
+def test_case_jb_governing(case_jb):
+    rotation = check_row(case_jb, "joint_rotation")
+    assert rotation["value"] == pytest.approx(1.09587e-3, rel=PRINTED)
+    assert rotation["governing_distance"] == pytest.approx(40.0, abs=DISTANCE)
+    pullout = check_row(case_jb, "joint_pullout")
+    assert pullout["value"] == pytest.approx(2.47619e-3, rel=PRINTED)
+    assert pullout["governing_distance"] == pytest.approx(23.7327, abs=1e-4)
+
+
+def test_case_jc_governing(case_jc):
+    rotation = check_row(case_jc, "joint_rotation")
+    vertical, _, _ = closed_form(40.0, 4.0, OBLIQUE)
+    assert rotation["value"] == pytest.approx(-vertical, rel=EXACT)
+    assert rotation["value"] == pytest.approx(3.01944e-4, rel=PRINTED)
+    assert rotation["governing_distance"] == pytest.approx(40.0, abs=DISTANCE)
+    pullout = check_row(case_jc, "joint_pullout")
+    at = pullout["governing_distance"]
+    assert pullout["value"] == pytest.approx(0.613843e-3, rel=PRINTED)
+    assert at == pytest.approx(17.8635, abs=1e-4)
+    assert pullout["value"] == pytest.approx(
+        closed_form(at, 4.0, OBLIQUE)[2], rel=EXACT
+    )
+    # The resultant's other local maxima, off the crossing.
+    rotation_column = case_jc.values.set_index("distance")["joint_rotation"]
+    for distance in (17.773, 62.227):
+        nearby = rotation_column[abs(rotation_column.index - distance) < 0.01]
+        assert nearby.max() == pytest.approx(1.3475e-4, rel=1e-4)
+
+
+# AC 5: the worst joint is found
+
+
+def dense_worst(result, length):
+    """The largest theta and Delta, from the source every 1 mm, refined to 1 um."""
+    utility, source = result.asset, result.source
+    start, end = (np.asarray(vertex, dtype=float) for vertex in utility.vertices)
+    pipe = float(np.linalg.norm(end - start))
+    along = (end - start) / pipe
+    vertical = np.array([0.0, 0.0, 1.0])
+    lateral = np.cross(vertical, along)
+
+    def displacement(distance, direction):
+        points = start + distance[:, None] * along
+        movement = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
+        return movement.displacement @ direction
+
+    def rotation(s):
+        parts = [
+            (
+                displacement(s + length, d)
+                - 2 * displacement(s, d)
+                + displacement(s - length, d)
+            )
+            / length
+            for d in (vertical, lateral)
+        ]
+        return np.hypot(*parts)
+
+    def opening(s):
+        return displacement(s + length / 2, along) - displacement(s - length / 2, along)
+
+    worst = {}
+    for name, function, low, high in (
+        ("joint_rotation", rotation, length, pipe - length),
+        ("joint_pullout", opening, length / 2, pipe - length / 2),
+    ):
+        grid = np.arange(low, high, 1e-3)
+        grid = np.append(grid, high)
+        sampled = function(grid)
+        peaks = [0, len(grid) - 1] + [
+            i
+            for i in range(1, len(grid) - 1)
+            if sampled[i] >= sampled[i - 1] and sampled[i] >= sampled[i + 1]
+        ]
+        best = -np.inf
+        for i in sorted(peaks, key=lambda i: -sampled[i])[:8]:
+            fine = np.clip(np.arange(grid[i] - 1e-3, grid[i] + 1e-3, 1e-6), low, high)
+            best = max(best, float(np.max(function(fine))))
+        worst[name] = best
+    return worst
+
+
+@pytest.mark.parametrize(
+    ("which", "length"),
+    [("case_ja", 4.0), ("case_jc", 4.0), ("twins", 4.0), ("twins", 9.0)],
+)
+def test_the_worst_joint_is_found(which, length, request, twins_below_the_surface):
+    if which == "twins":
+        table = {("spun_grey_iron", 0.3): length}
+        result = gs.check_jointed_pipe(
+            twins_below_the_surface, **arguments(pipe_lengths=table)
+        )
+    else:
+        result = request.getfixturevalue(which)
+    worst = dense_worst(result, length)
+    for name, dense in worst.items():
+        row = check_row(result, name)
+        assert row["value"] >= dense * (1 - 1e-12)
+        assert row["value"] <= dense * (1 + EXACT)
+        distance = result.values["distance"].to_numpy()
+        index = int(np.argmin(np.abs(distance - row["governing_distance"])))
+        assert result.values["critical"].iloc[index]
+
+
+# AC 6: a peak at the range's edge
+
+
+def test_a_peak_at_the_end_of_the_range():
+    # The pipe stops 2 m short of the center, where theta still rises.
+    result = check(perpendicular_pipe(-40.0, -2.0), 4.0)
+    rotation = check_row(result, "joint_rotation")
+    assert rotation["governing_distance"] == pytest.approx(38.0 - 4.0, abs=DISTANCE)
+    vertical, _, _ = closed_form(34.0, 4.0)
+    assert rotation["value"] == pytest.approx(abs(vertical), rel=EXACT)
+    interior = result.values[result.values["distance"] < 34.0 - 1e-6]
+    assert interior["joint_rotation"].max() < rotation["value"]
+
+
+# AC 7: the ends and short pipes
+
+
+def test_no_joint_within_reach_of_an_end(case_ja):
+    values = case_ja.values
+    distance = values["distance"].to_numpy()
+    near = (distance < 4.0 - 1e-6) | (distance > 80.0 - 4.0 + 1e-6)
+    assert values["joint_rotation"][near].isna().all()
+    assert values["joint_rotation"][~near].notna().all()
+    half = (distance < 2.0 - 1e-6) | (distance > 80.0 - 2.0 + 1e-6)
+    assert values["joint_opening"][half].isna().all()
+    assert values["joint_opening"][~half].notna().all()
+    (flag,) = [flag for flag in case_ja.warnings if flag.verdict == "within"]
+    assert "no joint rotation within L = 4 m" in flag.reason
+    assert "no joint opening within L/2 = 2 m" in flag.reason
+    assert set(flag.points) == set(np.flatnonzero(near | half))
+
+
+def test_a_pipe_shorter_than_2l_has_no_rotation():
+    result = check(
+        perpendicular_pipe(-3.0, 3.0),
+        4.0,
+        joint_rotation_limit=1 * u.degree,
+        joint_pullout_limit=10 * u.mm,
+    )
+    rotation = check_row(result, "joint_rotation")
+    assert math.isnan(rotation["value"])
+    assert math.isnan(rotation["utilization"])
+    assert rotation["passes"] is pd.NA
+    pullout = check_row(result, "joint_pullout")
+    assert pullout["passes"] is not pd.NA
+    (flag,) = [flag for flag in result.warnings if flag.verdict == "within"]
+    assert "shorter than 2L = 8 m" in flag.reason
+    assert "joint_rotation: not determined" in repr(result)
+
+
+def test_a_pipe_shorter_than_l_has_no_joint():
+    result = check(
+        perpendicular_pipe(-1.5, 1.5),
+        4.0,
+        joint_rotation_limit=1 * u.degree,
+        joint_pullout_limit=10 * u.mm,
+    )
+    for name in ("joint_rotation", "joint_pullout"):
+        row = check_row(result, name)
+        assert math.isnan(row["value"])
+        assert row["passes"] is pd.NA
+    (flag,) = [flag for flag in result.warnings if flag.verdict == "within"]
+    assert "shorter than L" in flag.reason
+
+
+def test_positions_with_none_opening_pass():
+    # 10 m over the center: every joint closes.
+    result = check(
+        perpendicular_pipe(-5.0, 5.0),
+        4.0,
+        joint_pullout_limit=10 * u.mm,
+    )
+    pullout = check_row(result, "joint_pullout")
+    assert math.isnan(pullout["value"])
+    assert pullout["passes"]
+
+
+# AC 11: a preset's caveats join the assumptions once
+
+
+def test_the_pullout_caveat_appears_once():
+    joints = gs.presets.cast_iron_joint_limits(joint="lead_yarn_water_main")
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    result = check(
+        perpendicular_pipe(),
+        4.0,
+        joint_rotation_limit=joints.rotation,
+        joint_pullout_limit=joints.pullout,
+        tensile_strain_limit=strains.tensile,
+        compressive_strain_limit=strains.compressive,
+    )
+    pullout_caveat = next(c for c in joints.pullout.caveats if "shortcut" in c)
+    assert result.assumptions.count(pullout_caveat) == 1
+    for caveat in (*joints.rotation.caveats, *strains.tensile.caveats):
+        assert result.assumptions.count(caveat) == 1
+    entry = next(e for e in result.inputs if e.name == "joint_pullout_limit")
+    assert entry.source == joints.pullout.source
+    rotation = check_row(result, "joint_rotation")
+    assert rotation["limit"] == pytest.approx(math.radians(1.5))
+
+
+def test_no_preset_adds_no_caveat(case_ja):
+    assert not any("Attewell" in text for text in case_ja.assumptions)
+
+
+# AC 13: the result's shape
+
+
+def test_to_dict_is_json(case_ja):
+    import json
+
+    data = json.loads(json.dumps(case_ja.to_dict(), allow_nan=False))
+    assert data["analysis"] == "jointed_pipe_check"
+    assert [row["check"] for row in data["checks"]][-2:] == [
+        "joint_rotation",
+        "joint_pullout",
+    ]
+
+
+def test_to_frame_has_the_joint_columns(case_ja):
+    units = case_ja.to_frame().attrs["units"]
+    assert units["joint_vertical_rotation"] == "rad"
+    assert units["joint_lateral_rotation"] == "rad"
+    assert units["joint_rotation"] == "rad"
+    assert units["joint_opening"] == "m"
+    assert units["joint_outer_opening"] == "m"
+
+
+def test_the_summary_lists_eight_checks_joints_first(case_ja):
+    text = repr(case_ja)
+    lines = text.splitlines()
+    joints = lines.index("  joints:")
+    barrel = lines.index("  barrel:")
+    assert joints < barrel
+    assert lines[joints + 1].startswith("    joint_rotation: ")
+    assert lines[joints + 2].startswith("    joint_pullout: ")
+    names = [line.split(":")[0].strip() for line in lines[barrel + 1 : barrel + 7]]
+    assert names == [
+        "axial_tension",
+        "axial_compression",
+        "bending",
+        "tensile_strain",
+        "compressive_strain",
+        "radius_of_curvature",
+    ]
+
+
+def test_the_assumptions_name_the_idealizations(case_ja):
+    text = " ".join(case_ja.assumptions)
+    assert "the pipe length L = 4 m" in text
+    assert "rigid pipes of length L" in text
+    assert "p. 663" in text
+    assert "closure" in text
+    names = [method.name for method in case_ja.method]
+    assert names[-2:] == [
+        "Strain checks for a continuous pipe",
+        "Joint rotation and opening for a jointed pipe",
+    ]

@@ -499,12 +499,14 @@ class Along:
 
     `derivatives(distance)` returns ``_derivatives``'s (N, order, direction)
     array (direction along, vertical, lateral) and the (N, 3) displacements,
-    at the given distances along the utility.
+    at the given distances along the utility. `directions` are the unit
+    vectors along, vertical and lateral, to project the displacements onto.
     """
 
     length: float
     feature: float
     derivatives: Callable[[FloatArray], tuple[FloatArray, FloatArray]]
+    directions: tuple[FloatArray, FloatArray, FloatArray]
 
 
 def along_line(utility: Utility, source: Source) -> Along:
@@ -527,7 +529,7 @@ def along_line(utility: Utility, source: Source) -> Along:
             ) from error
         return _derivatives(movement, a, v, lat), movement.displacement
 
-    return Along(length, feature, derivatives)
+    return Along(length, feature, derivatives, (a, v, lat))
 
 
 def _peaks(utility: Utility, source: Source, radius: float) -> FloatArray:

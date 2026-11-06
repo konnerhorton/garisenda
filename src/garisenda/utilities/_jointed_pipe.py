@@ -11,7 +11,12 @@ from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, r
 from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
 from garisenda._units import units
 from garisenda.profile._movement_profile import MERGE_TOLERANCE
-from garisenda.sources._movement import MethodRecord
+from garisenda.sources._critical import find_zeros
+from garisenda.sources._movement import MethodRecord, Source
+from garisenda.sources._transverse_trough import (
+    CRITICAL_DISTANCE_SAMPLING,
+    CRITICAL_DISTANCE_TOLERANCE,
+)
 from garisenda.utilities._continuous_pipe import (
     ASSUMPTIONS as BARREL_ASSUMPTIONS,
 )
@@ -28,6 +33,7 @@ from garisenda.utilities._continuous_pipe import (
     _read_profile,
     _unlimited_assumption,
     _utilization,
+    along_line,
     extreme,
 )
 from garisenda.utilities._utility import Utility
@@ -271,6 +277,7 @@ def check_jointed_pipe(
         source,
         length,
         limits,
+        extra_peaks=_joint_peaks(utility, source, length),
         ends_reason=_ends_reason(pipe, length),
     )
     values = _with_joints(values, length, utility.diameter / 2)
@@ -425,6 +432,84 @@ def _pipe_length(
         "outside diameter, and nothing is taken from the nearest diameter "
         "(SPEC §7)."
     )
+
+
+def _joint_peaks(utility: Utility, source: Source, length: float) -> FloatArray:
+    """Return where theta and Delta peak, and the feasible ranges' ends (decision 7).
+
+    The zeros of d(theta^2)/ds over s in [L, l - L] and of dDelta/ds over
+    [L/2, l - L/2], found by `find_zeros` on the source's exact derivatives
+    at the shifted points, with the sampling and tolerance of the source's
+    critical distances. The ends of each range are added too, since a peak
+    can sit where the function is still rising.
+    """
+    line = along_line(utility, source)
+    pipe, feature = line.length, line.feature
+    _, vertical, lateral = line.directions
+    step = CRITICAL_DISTANCE_SAMPLING * feature
+    tolerance = CRITICAL_DISTANCE_TOLERANCE
+
+    def shifted(distance: FloatArray, offsets: tuple[float, ...]) -> list[Any]:
+        """Return the derivatives and displacements at each offset of `distance`."""
+        points = np.concatenate([distance + offset for offset in offsets])
+        derivatives, displacement = line.derivatives(np.clip(points, 0.0, pipe))
+        n = distance.size
+        return [
+            (derivatives[k * n : (k + 1) * n], displacement[k * n : (k + 1) * n])
+            for k in range(len(offsets))
+        ]
+
+    def rotation_gradient(t: FloatArray) -> FloatArray:
+        """theta_v theta_v' + theta_l theta_l' at s = L + t, shape (N, 1)."""
+        (d0, u0), (d1, u1), (d2, u2) = shifted(length + t, (-length, 0.0, length))
+        total = np.zeros(t.size)
+        for index, direction in ((1, vertical), (2, lateral)):
+            theta = (u2 @ direction - 2 * (u1 @ direction) + u0 @ direction) / length
+            gradient = (
+                d2[:, 0, index] - 2 * d1[:, 0, index] + d0[:, 0, index]
+            ) / length
+            total = total + theta * gradient
+        result: FloatArray = total[:, None]
+        return result
+
+    def opening_gradient(t: FloatArray) -> FloatArray:
+        """dDelta/ds = eps_a(s + L/2) - eps_a(s - L/2) at s = L/2 + t."""
+        (d0, _), (d1, _) = shifted(length / 2 + t, (-length / 2, length / 2))
+        result: FloatArray = (d1[:, 0, 0] - d0[:, 0, 0])[:, None]
+        return result
+
+    # Each function's scale, as the continuous check sets it: the largest
+    # sampled value, or what the largest displacement U gives with the
+    # feature length f, whichever is larger. A joint's rotation is about
+    # U min(L / f^2, 1 / L) and its opening U min(L / f, 1).
+    found: list[FloatArray] = []
+    rotation_size = min(length / feature**2, 1 / length)
+    opening_size = min(length / feature, 1.0)
+    for start, span, function, size in (
+        (length, pipe - 2 * length, rotation_gradient, rotation_size),
+        (length / 2, pipe - length, opening_gradient, opening_size),
+    ):
+        if span < -MERGE_TOLERANCE:
+            continue
+        span = max(span, 0.0)
+        found.append(np.array([start, start + span]))
+        if span <= tolerance:
+            continue
+        samples = np.linspace(0.0, span, max(math.ceil(span / step), 1) + 1)
+        sampled = function(samples)
+        largest = float(
+            np.max(np.linalg.norm(line.derivatives(samples + start)[1], axis=1))
+        )
+        scale = largest * size
+        floor = scale**2 / feature if function is rotation_gradient else scale / feature
+        scales = np.maximum(np.max(np.abs(sampled), axis=0), [floor])
+        zeros = find_zeros(
+            function, length=span, step=step, tolerance=tolerance, scales=scales
+        )
+        found.append(start + zeros)
+    if not found:
+        return np.empty(0)
+    return np.concatenate(found)
 
 
 def _ends_reason(pipe: float, length: float) -> str:

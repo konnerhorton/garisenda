@@ -300,8 +300,20 @@ class Result:
                 )
                 parts.append(f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}")
             lines.append(f"  {label}: {'; '.join(parts)}")
-        for check in self.checks.itertuples(index=False):
-            lines.append(f"  {check.check}: {_check_text(check)}")
+        checks = list(self.checks.itertuples(index=False))
+        joints = [check for check in checks if check.check.startswith("joint_")]
+        if joints:
+            groups = [
+                ("joints", joints),
+                ("barrel", [check for check in checks if check not in joints]),
+            ]
+            for heading, group in groups:
+                lines.append(f"  {heading}:")
+                lines.extend(
+                    f"    {check.check}: {_check_text(check)}" for check in group
+                )
+        else:
+            lines.extend(f"  {check.check}: {_check_text(check)}" for check in checks)
         for flag in self.warnings:
             lines.append(f"  {flag.verdict}: {flag_text(flag)}")
             if distance is not None and flag.points:
@@ -364,7 +376,11 @@ def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
 def _check_text(check: Any) -> str:
     """Return a check's line of the summary, after its name."""
     if not math.isfinite(check.value):
-        return "none"
+        return (
+            "not determined"
+            if check.passes is pd.NA and math.isfinite(check.limit)
+            else "none"
+        )
     unit = _unit(check.unit)
     text = f"{check.value:.5g}{unit}"
     if math.isfinite(check.governing_distance):
