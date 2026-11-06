@@ -264,3 +264,59 @@ def test_views_take_a_method_record():
     pd.testing.assert_frame_equal(with_method.to_frame(), result().to_frame())
     assert repr(with_method) == repr(result())
     assert with_method == result(inputs=(*result().inputs, method_record()))
+
+
+# M3 (a) AC 13: the checks table
+
+
+def test_empty_checks_has_every_column():
+    checks = empty_checks()
+    assert tuple(checks.columns) == CHECK_COLUMNS
+    assert len(CHECK_COLUMNS) == 13
+    assert str(checks["passes"].dtype) == "boolean"
+    assert str(checks["value"].dtype) == "float64"
+
+
+def checks_table():
+    nan = float("nan")
+    table = pd.DataFrame(
+        {
+            "check": ["tensile_strain", "radius_of_curvature", "axial_tension"],
+            "value": [3.2e-4, 6462.9, nan],
+            "unit": ["dimensionless", "m", "dimensionless"],
+            "limit": [1e-3, nan, 1e-3],
+            "utilization": [0.32, nan, nan],
+            "governing_distance": [24.41, 40.0, nan],
+            "passes": pd.array([True, pd.NA, True], dtype="boolean"),
+            "governed_by": ["analytical", "analytical", "analytical"],
+            "analytical": [3.2e-4, 6462.9, nan],
+            "analytical_distance": [24.41, 40.0, nan],
+            "discrete": [3.1e-4, float("inf"), nan],
+            "discrete_distance": [24.41, 40.0, nan],
+            "difference": [-1e-5, float("inf"), nan],
+        }
+    )
+    return table[list(CHECK_COLUMNS)]
+
+
+def test_checks_with_no_limit_round_trip_to_json():
+    data = json.loads(
+        json.dumps(result(checks=checks_table()).to_dict(), allow_nan=False)
+    )
+    radius = data["checks"][1]
+    assert radius["check"] == "radius_of_curvature"
+    assert radius["limit"] is None
+    assert radius["utilization"] is None
+    assert radius["passes"] is None
+    assert radius["discrete"] is None
+    assert data["checks"][0]["passes"] is True
+
+
+def test_summary_lists_each_check():
+    text = repr(result(checks=checks_table()))
+    assert (
+        "tensile_strain: 0.00032 at 24.41 m (analytical), "
+        "utilization 0.32 against 0.001" in text
+    )
+    assert "radius_of_curvature: 6462.9 m at 40 m (analytical), no limit" in text
+    assert "axial_tension: none" in text
