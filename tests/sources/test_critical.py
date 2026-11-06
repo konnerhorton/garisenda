@@ -8,7 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import garisenda as gs
-from garisenda.sources._critical import find_critical_distances
+from garisenda.sources._critical import find_critical_distances, find_zeros
 
 u = gs.units
 SAMPLING = 1 / 8
@@ -306,3 +306,39 @@ def test_feature_length_of_case_e(make, end_depth, width):
     assert source.feature_length(start=end, end=start) == pytest.approx(
         width, rel=1e-12
     )
+
+
+def test_find_zeros_of_sine_and_cosine():
+    def functions(distance):
+        return np.stack([np.sin(distance), np.cos(distance)], axis=1)
+
+    zeros = find_zeros(
+        functions,
+        length=10.0,
+        step=0.7,
+        tolerance=1e-9,
+        scales=np.array([1.0, 1.0]),
+    )
+    expected = math.pi * np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+    np.testing.assert_allclose(zeros, expected, atol=1e-9)
+
+
+def test_find_zeros_keeps_an_exact_zero_at_a_sample_once():
+    # Samples at 0, 1, 2, 3, 4: the zero at 2 is a sample, bracketed twice.
+    def functions(distance):
+        return (distance - 2.0)[:, None]
+
+    zeros = find_zeros(
+        functions, length=4.0, step=1.0, tolerance=1e-9, scales=np.array([1.0])
+    )
+    np.testing.assert_array_equal(zeros, [2.0])
+
+
+def test_find_zeros_ignores_negligible_values():
+    def functions(distance):
+        return (1e-12 * np.sin(distance))[:, None]
+
+    zeros = find_zeros(
+        functions, length=10.0, step=0.5, tolerance=1e-9, scales=np.array([1.0])
+    )
+    assert zeros.size == 0
