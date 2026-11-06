@@ -39,4 +39,4 @@ Distance along a utility runs from its first vertex, which for a built utility i
 
 ## Units
 
-Results are in SI: lengths and movements in m, strains dimensionless, curvatures in 1/m, with each column's unit in `result.values.attrs["units"]`. Figures show movements in mm, strains in microstrain and curvatures in 1/km, unless `display_units=` says otherwise; every axis label gives its unit.
+Results are in SI: lengths and movements in m, strains dimensionless, curvatures in 1/m, with each column's unit in `result.values.attrs["units"]`. Figures show movements in mm, strains in microstrain, curvatures in 1/km and angles in degrees, unless `display_units=` says otherwise; every axis label gives its unit.
