@@ -2,7 +2,7 @@
 
 from importlib.metadata import version
 
-from garisenda import plot, sources, utilities
+from garisenda import plot, presets, sources, utilities
 from garisenda._inputs import Sourced
 from garisenda._result import Result
 from garisenda._sweep import sweep
@@ -20,6 +20,7 @@ __all__ = [
     "check_continuous_pipe",
     "movement_profile",
     "plot",
+    "presets",
     "sources",
     "superpose",
     "sweep",

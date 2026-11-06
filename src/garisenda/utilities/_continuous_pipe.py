@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-from garisenda._inputs import InputRecord, Sourced, judgments, record
+from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
 from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
 from garisenda.profile._movement_profile import (
     MERGE_TOLERANCE,
@@ -329,6 +329,14 @@ def check_continuous_pipe(
         *ASSUMPTIONS,
         _interval_assumption(interval_m, f"an interval h = {interval_m:g} m"),
         *_unlimited_assumption(limits),
+        *preset_caveats(
+            interval,
+            interaction,
+            tensile_strain_limit,
+            compressive_strain_limit,
+            bending_strain_limit,
+            radius_of_curvature_limit,
+        ),
     ]
     return Result(
         analysis="continuous_pipe_check",

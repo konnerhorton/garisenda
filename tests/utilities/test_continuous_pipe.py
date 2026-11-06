@@ -764,3 +764,30 @@ def test_summary_lists_the_six_checks(case_a):
     for name in case_a.checks["check"]:
         assert f"  {name}: " in text
     assert "tensile_strain: 0.00032108 at 24.41 m (analytical)" in text
+
+
+# M3 (b), decision 13: a preset's caveats join the assumptions
+
+
+def test_a_strain_preset_adds_its_caveat_once():
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    result = check(
+        case_a_pipe(),
+        tensile_strain_limit=strains.tensile,
+        compressive_strain_limit=strains.compressive,
+        bending_strain_limit=strains.tensile,
+    )
+    (caveat,) = strains.tensile.caveats
+    assert result.assumptions.count(caveat) == 1
+    entry = next(e for e in result.inputs if e.name == "tensile_strain_limit")
+    assert entry.source == strains.tensile.source
+
+
+def test_a_call_with_no_preset_adds_no_caveat(case_a):
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    assert strains.tensile.caveats[0] not in case_a.assumptions
+    profile_assumptions = gs.movement_profile(
+        case_a_pipe(), trough(), spacing=1.0
+    ).assumptions
+    added = case_a.assumptions[len(profile_assumptions) :]
+    assert not any("Bracegirdle" in text for text in added)
