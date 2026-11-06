@@ -57,3 +57,47 @@ def case_d():
         utility_id="G-2", vertices=[(-20, -20, 0), (20, 20, 0)], diameter=0.2
     )
     return gs.movement_profile(utility, trough(), spacing=5.0)
+
+
+def pipe_check(**limits):
+    """Case A of the M3 (a) spec, checked at a 1 m interval."""
+    tunnel_ = tunnel()
+    source = gs.sources.transverse_trough(
+        tunnel_,
+        volume_loss=1 * u.percent,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel_,
+        utility_id="A",
+        station=0,
+        start_offset=-40,
+        end_offset=40,
+        depth=2.0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    strain = u.Quantity(1000, "µε")
+    given = {
+        "tensile_strain_limit": strain,
+        "compressive_strain_limit": strain,
+        "bending_strain_limit": u.Quantity(50, "µε"),
+        "radius_of_curvature_limit": 5000 * u.m,
+    }
+    given.update(limits)
+    return gs.check_continuous_pipe(
+        gs.movement_profile(utility, source, spacing=1.0),
+        interval=1 * u.m,
+        interaction="greenfield",
+        **given,
+    )
+
+
+@pytest.fixture
+def make_check():
+    return pipe_check
+
+
+@pytest.fixture
+def checked():
+    return pipe_check()

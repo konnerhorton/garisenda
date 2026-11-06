@@ -2,6 +2,7 @@ import math
 from dataclasses import dataclass, replace
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import garisenda as gs
@@ -471,3 +472,99 @@ def test_a_sweep_that_switches_method_raises():
         r"Mair et al\. \(1993\), clay in run 1",
     ):
         gs.sweep(run, vary={"volume_loss": [1, 2] * u.percent})
+
+
+# M3 (a), AC 14: a sweep of a utility check reports each check
+
+
+def pipe_check(volume_loss=1 * u.percent, depth=2.0, radius_limit=1000 * u.m):
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    trough = gs.sources.transverse_trough(
+        tunnel,
+        volume_loss=volume_loss,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="A",
+        station=0,
+        start_offset=-40,
+        end_offset=40,
+        depth=depth,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    profile = gs.movement_profile(utility, trough, spacing=1.0)
+    limit = u.Quantity(500, "µε")
+    return gs.check_continuous_pipe(
+        profile,
+        interval=1 * u.m,
+        interaction="greenfield",
+        tensile_strain_limit=limit,
+        compressive_strain_limit=limit,
+        bending_strain_limit=limit,
+        radius_of_curvature_limit=radius_limit,
+    )
+
+
+CHECKS = [
+    "axial_tension",
+    "axial_compression",
+    "bending",
+    "tensile_strain",
+    "compressive_strain",
+    "radius_of_curvature",
+]
+
+
+def test_a_check_sweep_row_equals_a_direct_call():
+    volume_losses = [0.5, 1.0, 1.5] * u.percent
+    table = gs.sweep(pipe_check, vary={"volume_loss": volume_losses})
+    for name in CHECKS:
+        for suffix in ("", "_distance", "_utilization", "_passes"):
+            assert f"{name}{suffix}" in table.columns
+    assert list(table.columns[-3:]) == ["validity", "warnings", "error"]
+    for (_, row), volume_loss in zip(table.iterrows(), volume_losses, strict=True):
+        direct = pipe_check(volume_loss=volume_loss)
+        for item in direct.governing().itertuples():
+            assert row[item.name] == item.value
+        for check in direct.checks.itertuples():
+            assert row[check.check] == check.value
+            assert row[f"{check.check}_distance"] == check.governing_distance
+            assert row[f"{check.check}_utilization"] == check.utilization
+            assert row[f"{check.check}_passes"] == check.passes
+    # Compressive strain at 1 % is -719.50 µε (spec, case A), which fails a
+    # 500 µε limit; at 0.5 % it is half, and passes.
+    assert table["compressive_strain_passes"].tolist() == [True, False, False]
+    units = table.attrs["units"]
+    assert units["tensile_strain"] == "dimensionless"
+    assert units["radius_of_curvature"] == "m"
+    assert units["radius_of_curvature_distance"] == "m"
+    assert units["bending_utilization"] == "dimensionless"
+    assert str(table["bending_passes"].dtype) == "boolean"
+
+
+def test_a_check_with_no_limit_and_a_failed_run_in_a_sweep():
+    def run(depth):
+        return pipe_check(depth=depth, radius_limit=None)
+
+    table = gs.sweep(run, vary={"depth": [2.0, 20.0]})
+    first, failed = table.iloc[0], table.iloc[1]
+    assert first["radius_of_curvature"] > 0
+    assert np.isnan(first["radius_of_curvature_utilization"])
+    assert first["radius_of_curvature_passes"] is pd.NA
+    assert first["bending_passes"]
+    assert failed["error"].startswith("ValueError")
+    for name in CHECKS:
+        assert np.isnan(failed[name])
+        assert np.isnan(failed[f"{name}_utilization"])
+        assert failed[f"{name}_passes"] is pd.NA
+
+
+def test_a_sweep_of_profiles_has_no_check_columns():
+    table = gs.sweep(crossing, vary={"volume_loss": [1, 2] * u.percent})
+    for name in CHECKS:
+        assert name not in table.columns
+        assert f"{name}_passes" not in table.columns

@@ -1,6 +1,8 @@
 """The profile figure: movement, strain and curvature along a utility (SPEC §9)."""
 
+import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -9,35 +11,154 @@ import numpy.typing as npt
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 from garisenda._result import Result, flag_text
 from garisenda.plot._display import DisplayUnits, resolve
 from garisenda.plot._style import style
 
-PANELS = 4
 SHADE = {"marginal": "#f6d58e", "outside": "#f2a7a0"}
 """The fill of stations that aren't within, by verdict."""
 
-# Each panel's lines: the column, its legend label and its color.
-LINES: tuple[tuple[tuple[str, str, str], ...], ...] = (
+CHECK_ANALYSIS = "continuous_pipe_check"
+"""The analysis drawn in six panels; any other result gets four."""
+
+
+@dataclass(frozen=True)
+class Limit:
+    """A limit line: its name (and gid), the check it is read from, its sign."""
+
+    name: str
+    check: str
+    sign: int
+    label: str
+
+
+@dataclass(frozen=True)
+class Panel:
+    """One panel: its lines (column, label, color), kind, title and convention.
+
+    `governing` names the `Result.governing` columns marked on it, `limits`
+    its limit lines and `checks` the checks whose governing value it marks.
+    """
+
+    lines: tuple[tuple[str, str, str], ...]
+    kind: str
+    title: str
+    convention: str
+    governing: tuple[str, ...] = ()
+    limits: tuple[Limit, ...] = ()
+    checks: tuple[str, ...] = ()
+
+
+SETTLEMENT = Panel(
     (("vertical", "Settlement", "C0"),),
+    "displacement",
+    "Settlement",
+    "down +",
+    governing=("vertical",),
+)
+HORIZONTAL = Panel(
     (("along", "Along", "C0"), ("lateral", "Lateral", "C1")),
-    (("along_strain", "Strain along", "C0"),),
-    (
-        ("vertical_curvature", "Vertical", "C0"),
-        ("lateral_curvature", "Lateral", "C1"),
+    "displacement",
+    "Horizontal movement",
+    "along: right +; lateral: right looking along +",
+)
+RADIUS_LIMIT = "radius_of_curvature_limit"
+TENSILE_LIMIT = Limit("tensile_strain_limit", "tensile_strain", 1, "tensile limit")
+COMPRESSIVE_LIMIT = Limit(
+    "compressive_strain_limit", "compressive_strain", -1, "compressive limit"
+)
+
+PROFILE_PANELS = (
+    SETTLEMENT,
+    HORIZONTAL,
+    Panel(
+        (("along_strain", "Strain along", "C0"),),
+        "strain",
+        "Strain along",
+        "tension +",
+        governing=("along_strain",),
+    ),
+    Panel(
+        (
+            ("vertical_curvature", "Vertical", "C0"),
+            ("lateral_curvature", "Lateral", "C1"),
+        ),
+        "curvature",
+        "Curvature",
+        "hogging +, sagging -",
+        governing=("vertical_curvature",),
     ),
 )
-KINDS = ("displacement", "displacement", "strain", "curvature")
-TITLES = ("Settlement", "Horizontal movement", "Strain along", "Curvature")
-CONVENTIONS = (
-    "down +",
-    "along: right +; lateral: right looking along +",
-    "tension +",
-    "hogging +, sagging -",
+"""The four panels of a movement profile."""
+
+CHECK_PANELS = (
+    SETTLEMENT,
+    HORIZONTAL,
+    Panel(
+        (("axial_strain", "Axial", "C0"),),
+        "strain",
+        "Axial strain",
+        "tension +",
+        limits=(TENSILE_LIMIT, COMPRESSIVE_LIMIT),
+        checks=("axial_tension", "axial_compression"),
+    ),
+    Panel(
+        (
+            ("vertical_curvature", "Vertical", "C0"),
+            ("lateral_curvature", "Lateral", "C1"),
+            ("resultant_curvature", "Resultant", "C2"),
+        ),
+        "curvature",
+        "Curvature",
+        "hogging +, sagging -; resultant +",
+        limits=(
+            Limit(RADIUS_LIMIT, "radius_of_curvature", 1, "radius limit"),
+            Limit(RADIUS_LIMIT, "radius_of_curvature", -1, ""),
+        ),
+        checks=("radius_of_curvature",),
+    ),
+    Panel(
+        (
+            ("vertical_bending_strain", "Vertical", "C0"),
+            ("lateral_bending_strain", "Lateral", "C1"),
+            ("bending_strain", "Resultant", "C2"),
+        ),
+        "strain",
+        "Bending strain",
+        "outermost fiber; resultant +",
+        limits=(Limit("bending_strain_limit", "bending", 1, "bending limit"),),
+        checks=("bending",),
+    ),
+    Panel(
+        (
+            ("tensile_strain", "Tensile", "C3"),
+            ("compressive_strain", "Compressive", "C0"),
+        ),
+        "strain",
+        "Combined strain",
+        "tension +",
+        limits=(TENSILE_LIMIT, COMPRESSIVE_LIMIT),
+        checks=("tensile_strain", "compressive_strain"),
+    ),
 )
-GOVERNING_PANEL = {"vertical": 0, "along_strain": 2, "vertical_curvature": 3}
+"""The six panels of a continuous-pipe check (M3 (a) spec, decision 13)."""
+
+DISCRETE_COLUMN = {
+    "axial_strain": "discrete_axial_strain",
+    "vertical_curvature": "discrete_vertical_curvature",
+    "lateral_curvature": "discrete_lateral_curvature",
+    "resultant_curvature": "discrete_resultant_curvature",
+    "bending_strain": "discrete_bending_strain",
+    "tensile_strain": "discrete_tensile_strain",
+    "compressive_strain": "discrete_compressive_strain",
+}
+"""The discrete column drawn dashed beside each analytical one, in a check."""
+
+DASHED = (0, (4, 2))
+"""The dash pattern of discrete lines."""
 
 FloatArray = npt.NDArray[np.float64]
 
@@ -48,9 +169,10 @@ def profile(
     axs: Sequence[Axes] | None = None,
     display_units: Mapping[str, object] | None = None,
 ) -> tuple[Figure, list[Axes]]:
-    """Draw a movement profile along its utility: four panels, distance shared.
+    """Draw a profile along its utility: four or six panels, distance shared.
 
-    The panels, top to bottom, against distance along the utility:
+    A movement profile is drawn in four panels, top to bottom, against
+    distance along the utility:
 
     1. settlement (``vertical``), its axis pointing down, so the trough hangs
        as it does in the ground;
@@ -61,7 +183,29 @@ def profile(
        and ``lateral_curvature``.
 
     Each governing value (`Result.governing`) is marked with a point and its
-    value. Critical stations are ticked along the bottom of every panel.
+    value.
+
+    A continuous-pipe check (from `garisenda.check_continuous_pipe`) is drawn
+    in six panels:
+
+    1. settlement, as above, with its largest value marked;
+    2. horizontal movement, as above;
+    3. axial strain, with the tensile limit (+) and the compressive limit (-);
+    4. curvature: vertical, lateral and the resultant, with the radius limit
+       drawn as +-1/R;
+    5. bending strain at the outermost fiber: vertical, lateral and the
+       resultant, with the bending limit;
+    6. combined strain, tensile and compressive, with their limits.
+
+    Analytical values are solid lines; discrete ones are dashed in the same
+    color, with gaps at stations that have none. Limits are thin gray lines
+    labeled with their value, and a check given no limit draws no line and
+    says so on its panel. Each check's governing value (`Result.checks`) is
+    marked with its value and utilization; the radius is marked at its
+    curvature, 1/R, on the curvature panel, since an infinite radius can't be
+    drawn.
+
+    On both, critical stations are ticked along the bottom of every panel.
     Stations that aren't ``"within"`` are shaded on every panel by verdict, and
     each flag's reason is printed under the figure with its distance range, so
     nothing flagged goes unmarked (SPEC §10). For a utility built from station
@@ -72,8 +216,9 @@ def profile(
     Parameters
     ----------
     result : Result
-        A movement profile, from `garisenda.movement_profile`.
-    axs : sequence of four matplotlib Axes, optional
+        A movement profile, from `garisenda.movement_profile`, or a check,
+        from `garisenda.check_continuous_pipe`.
+    axs : sequence of four (or six, for a check) matplotlib Axes, optional
         Panels to draw into, top to bottom, as `matplotlib.pyplot.subplots`
         returns them; no figure is created. Otherwise a new figure is made.
     display_units : mapping, optional
@@ -85,13 +230,13 @@ def profile(
     -------
     fig : matplotlib.figure.Figure
     axs : list of matplotlib.axes.Axes
-        The four panels, top to bottom.
+        The panels, top to bottom.
 
     Raises
     ------
     ValueError
-        If `axs` isn't four Axes, the result has no ``distance`` column, or
-        `display_units` names an unknown kind.
+        If `axs` isn't four Axes (six for a check), the result has no
+        ``distance`` column, or `display_units` names an unknown kind.
     pint.DimensionalityError
         If a display unit doesn't fit its kind.
     """
@@ -102,51 +247,170 @@ def profile(
             "The profile figure draws against distance along the asset, but the "
             "result's values have no distance column."
         )
+    specs = CHECK_PANELS if result.analysis == CHECK_ANALYSIS else PROFILE_PANELS
     with style():
-        fig, panels = _panels(axs)
+        fig, panels = _panels(axs, specs)
         length = display.factor("length")
         distance = values["distance"].to_numpy(dtype=np.float64) * length
-        for index, ax in enumerate(panels):
-            factor = display.factor(KINDS[index])
-            for column, label, color in LINES[index]:
-                if column in values:
-                    ax.plot(
-                        distance,
-                        values[column].to_numpy(dtype=np.float64) * factor,
-                        color=color,
-                        linewidth=1.2,
-                        label=label,
-                        gid=column,
-                    )
+        for spec, ax in zip(specs, panels, strict=True):
+            _draw_lines(ax, spec, values, distance, display)
             ax.axhline(0.0, color="0.4", linewidth=0.6, zorder=1)
-            ax.set_ylabel(display.label(TITLES[index], KINDS[index]))
-            ax.set_title(CONVENTIONS[index], loc="right", fontsize=7, color="0.35")
+            ax.set_ylabel(display.label(spec.title, spec.kind))
+            ax.set_title(spec.convention, loc="right", fontsize=7, color="0.35")
             ax.margins(y=0.18)
-            if len(LINES[index]) > 1:
-                ax.legend(loc="lower left", ncols=2)
+            _draw_limits(ax, spec, result, display)
             _shade(ax, values, distance)
             _critical_ticks(ax, values, distance)
+            _mark_governing(ax, spec, result, display)
+            _mark_checks(ax, spec, result, display)
         panels[0].invert_yaxis()
         panels[-1].set_xlabel(display.label("Distance along utility", "length"))
-        _mark_governing(panels, result, display)
         _offset_axis(panels[0], values, length, display)
         flag_notes(panels[-1], result, distance, display)
-        fig.suptitle(f"Movement profile along {result.subject}", fontsize=10)
+        fig.suptitle(_title(result, display), fontsize=10)
     return fig, panels
 
 
-def _panels(axs: Sequence[Axes] | None) -> tuple[Figure, list[Axes]]:
+def _title(result: Result, display: DisplayUnits) -> str:
+    if result.analysis != CHECK_ANALYSIS:
+        return f"Movement profile along {result.subject}"
+    interval = next(
+        (entry.value for entry in result.inputs if entry.name == "interval"), None
+    )
+    span = ""
+    if interval is not None and not isinstance(interval, str):
+        shown = interval.m_as("m") * display.factor("length")
+        span = f" at {shown:.3g} {display.symbol('length')}"
+    return (
+        f"Continuous pipe check along {result.subject}\n"
+        f"analytical solid, discrete dashed{span}"
+    )
+
+
+def _draw_lines(
+    ax: Axes,
+    spec: Panel,
+    values: pd.DataFrame,
+    distance: FloatArray,
+    display: DisplayUnits,
+) -> None:
+    """Draw a panel's analytical lines, and their discrete ones dashed."""
+    factor = display.factor(spec.kind)
+    dashed = False
+    for column, label, color in spec.lines:
+        if column not in values:
+            continue
+        ax.plot(
+            distance,
+            values[column].to_numpy(dtype=np.float64) * factor,
+            color=color,
+            linewidth=1.2,
+            label=label,
+            gid=column,
+        )
+        discrete = DISCRETE_COLUMN.get(column)
+        if discrete is None or discrete not in values:
+            continue
+        ax.plot(
+            distance,
+            values[discrete].to_numpy(dtype=np.float64) * factor,
+            color=color,
+            linewidth=1.0,
+            linestyle=DASHED,
+            label="_nolegend_",
+            gid=discrete,
+        )
+        dashed = True
+    handles, labels = ax.get_legend_handles_labels()
+    if dashed:
+        handles.append(Line2D([], [], color="0.3", linewidth=1.0, linestyle=DASHED))
+        labels.append("Discrete")
+    if len(handles) > 1:
+        # Above the panel, left, clear of the lines and the limits' labels.
+        ax.legend(
+            handles,
+            labels,
+            loc="lower left",
+            bbox_to_anchor=(0.0, 1.0),
+            ncols=len(handles),
+            fontsize=7,
+            borderaxespad=0.1,
+        )
+
+
+def _check_row(result: Result, check: str) -> Any:
+    """Return a check's row of `Result.checks`, or None."""
+    rows = result.checks[result.checks["check"] == check]
+    return None if rows.empty else rows.iloc[0]
+
+
+def _draw_limits(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -> None:
+    """Draw a panel's limit lines, or note the limits not given."""
+    missing: list[str] = []
+    for limit in spec.limits:
+        row = _check_row(result, limit.check)
+        if row is None:
+            continue
+        given = float(row["limit"])
+        if math.isnan(given):
+            if limit.label and limit.label not in missing:
+                missing.append(limit.label)
+            continue
+        radius = row["unit"] == "m"
+        level = limit.sign * (1.0 / given if radius else given)
+        shown = level * display.factor(spec.kind)
+        ax.axhline(shown, color="0.45", linewidth=0.7, linestyle="-", gid=limit.name)
+        if not limit.label:
+            continue
+        value = given * display.factor("length") if radius else shown
+        unit = display.symbol("length" if radius else spec.kind)
+        text = f"R = {value:.4g} {unit}" if radius else f"{value:.4g} {unit}"
+        ax.annotate(
+            f"{limit.label}: {text}",
+            (1.0, shown),
+            xycoords=("axes fraction", "data"),
+            xytext=(-2, 2 if limit.sign > 0 else -2),
+            textcoords="offset points",
+            ha="right",
+            va="bottom" if limit.sign > 0 else "top",
+            fontsize=6,
+            color="0.35",
+            gid=limit.name,
+        )
+    if missing:
+        ax.annotate(
+            "no " + ", no ".join(missing),
+            (1.0, 1.0),
+            xycoords="axes fraction",
+            xytext=(-2, -2),
+            textcoords="offset points",
+            ha="right",
+            va="top",
+            fontsize=6,
+            color="0.35",
+            gid="no_limit",
+        )
+
+
+def _panels(
+    axs: Sequence[Axes] | None, specs: tuple[Panel, ...]
+) -> tuple[Figure, list[Axes]]:
+    count = len(specs)
     if axs is None:
         fig, created = plt.subplots(
-            PANELS, 1, sharex=True, figsize=(7.0, 9.0), layout="constrained"
+            count,
+            1,
+            sharex=True,
+            figsize=(7.0, 9.0 if count == 4 else 12.5),
+            layout="constrained",
         )
         return fig, list(created)
     panels = list(axs)
-    if len(panels) != PANELS or not all(isinstance(ax, Axes) for ax in panels):
+    if len(panels) != count or not all(isinstance(ax, Axes) for ax in panels):
+        names = ", ".join(spec.title.lower() for spec in specs)
         raise ValueError(
-            f"axs must be {PANELS} matplotlib Axes, one per panel (settlement, "
-            "horizontal movement, strain along, curvature), as "
-            f"plt.subplots({PANELS}, 1, sharex=True) returns them."
+            f"axs must be {count} matplotlib Axes, one per panel ({names}), as "
+            f"plt.subplots({count}, 1, sharex=True) returns them."
         )
     figure = panels[0].get_figure()
     if not isinstance(figure, Figure):
@@ -213,36 +477,66 @@ def _critical_ticks(ax: Axes, values: pd.DataFrame, distance: FloatArray) -> Non
     )
 
 
-def _mark_governing(panels: list[Axes], result: Result, display: DisplayUnits) -> None:
-    """Mark each governing value with a point and its value."""
+def _mark(ax: Axes, x: float, y: float, text: str, gid: str, *, inverted: bool) -> None:
+    """Mark a point with its value."""
+    ax.plot(
+        [x], [y], marker="o", markersize=4, color="black", linestyle="none", gid=gid
+    )
+    ax.annotate(
+        text,
+        (x, y),
+        xytext=(4, 4 if y >= 0 else -4),
+        textcoords="offset points",
+        va="bottom" if (y >= 0) != inverted else "top",
+        fontsize=7,
+        gid=gid,
+    )
+
+
+def _mark_governing(
+    ax: Axes, spec: Panel, result: Result, display: DisplayUnits
+) -> None:
+    """Mark each governing value of the panel's columns with its value."""
     length = display.factor("length")
     for row in result.governing().itertuples():
-        panel = GOVERNING_PANEL.get(str(row.column))
         value = float(row.value)
         where = float(row.distance)
-        if panel is None or not (np.isfinite(value) and np.isfinite(where)):
+        if str(row.column) not in spec.governing or not (
+            np.isfinite(value) and np.isfinite(where)
+        ):
             continue
-        kind = KINDS[panel]
-        shown = value * display.factor(kind)
-        ax = panels[panel]
-        ax.plot(
-            [where * length],
-            [shown],
-            marker="o",
-            markersize=4,
-            color="black",
-            linestyle="none",
-            gid=f"governing:{row.name}",
+        shown = value * display.factor(spec.kind)
+        _mark(
+            ax,
+            where * length,
+            shown,
+            f"{shown:.3g} {display.symbol(spec.kind)}",
+            f"governing:{row.name}",
+            inverted=spec is SETTLEMENT,
         )
-        ax.annotate(
-            f"{shown:.3g} {display.symbol(kind)}",
-            (where * length, shown),
-            xytext=(4, 4 if shown >= 0 else -4),
-            textcoords="offset points",
-            va="bottom" if (shown >= 0) != (panel == 0) else "top",
-            fontsize=7,
-            gid=f"governing:{row.name}",
-        )
+
+
+def _mark_checks(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) -> None:
+    """Mark each of the panel's checks at its governing value and utilization."""
+    length = display.factor("length")
+    for check in spec.checks:
+        row = _check_row(result, check)
+        if row is None:
+            continue
+        value = float(row["value"])
+        where = float(row["governing_distance"])
+        if not (np.isfinite(value) and np.isfinite(where)):
+            continue
+        utilization = float(row["utilization"])
+        used = "no limit" if math.isnan(utilization) else f"u = {utilization:.2f}"
+        if row["unit"] == "m":
+            # A radius is drawn at its curvature, 1/R, positive as the resultant.
+            shown = display.factor(spec.kind) / value
+            text = f"R = {value * length:.4g} {display.symbol('length')}, {used}"
+        else:
+            shown = value * display.factor(spec.kind)
+            text = f"{shown:.3g} {display.symbol(spec.kind)}, {used}"
+        _mark(ax, where * length, shown, text, f"check:{check}", inverted=False)
 
 
 def _offset_axis(

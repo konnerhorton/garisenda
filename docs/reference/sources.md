@@ -6,7 +6,8 @@ The bibliography (SPEC §2.2): one entry per source garisenda cites, with its sh
 Bracegirdle, A., Mair, R. J., Nyren, R. J. & Taylor, R. N. (1996). A methodology for evaluating potential damage to cast iron pipes induced by tunnelling. In *Geotechnical Aspects of Underground Construction in Soft Ground*, eds R. J. Mair & R. N. Taylor, pp. 659–664. Balkema, Rotterdam.
 - Cited for: Eq. 1, settlement with the volume and width at the pipe's depth, and Eq. 2, the width at depth in clay, with the limit "only ... above the level of the crown of the tunnel" (p. 660).
 - Eq. 3 (horizontal movement) has a smudge in its denominator; read as y/(z₀ − z_p), not cited (`docs/work/m2b-subsurface.md`).
-- Verified 2026-11-04 (M2 (b)).
+- Cited for (M3 (a)): the approach, ground strains "obtained directly by differentiating the displacements" (p. 660) and pipes that follow the ground (p. 663); Eqs. 7–9, curvature at the trough's center and peak hogging curvature and horizontal strain at √3 i (p. 662); combined tensile strain as bending plus axial strain (pp. 662–663).
+- Verified 2026-11-04 (M2 (b)); Eqs. 7–9 and pp. 660, 662–663 verified 2026-11-06 (M3 (a)), Eqs. 7–9 against the page image.
 
 ## `mair1993`
 Mair, R. J., Taylor, R. N. & Bracegirdle, A. (1993). Subsurface settlement profiles above tunnels in clays. *Géotechnique* 43(2), 315–320.

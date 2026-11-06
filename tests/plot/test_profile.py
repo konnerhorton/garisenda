@@ -143,3 +143,147 @@ def test_flag_notes_name_their_source(twins_below_the_surface):
     for text, flag in zip(lines, twins.warnings, strict=True):
         assert text.startswith("Outside (")
         assert text.endswith(f": {flag.source}: {flag.reason}")
+
+
+# M3 (a), spec decision 13, AC 15: a check result in six panels
+
+CHECK_LINES = [
+    (0, "vertical", 1e3, False),
+    (1, "along", 1e3, False),
+    (1, "lateral", 1e3, False),
+    (2, "axial_strain", 1e6, True),
+    (3, "vertical_curvature", 1e3, True),
+    (3, "lateral_curvature", 1e3, True),
+    (3, "resultant_curvature", 1e3, True),
+    (4, "vertical_bending_strain", 1e6, False),
+    (4, "lateral_bending_strain", 1e6, False),
+    (4, "bending_strain", 1e6, True),
+    (5, "tensile_strain", 1e6, True),
+    (5, "compressive_strain", 1e6, True),
+]
+
+
+def test_a_check_draws_six_panels(checked):
+    fig, axs = gs.plot.profile(checked)
+    assert len(axs) == 6
+    assert all(ax.figure is fig for ax in axs)
+    assert axs[2].get_ylabel() == "Axial strain (µε)"
+    assert axs[5].get_ylabel() == "Combined strain (µε)"
+    assert "1 m" in fig.get_suptitle()
+
+
+@pytest.mark.parametrize(("panel", "column", "factor", "discrete"), CHECK_LINES)
+def test_a_check_draws_each_column_and_its_discrete_one(
+    checked, panel, column, factor, discrete
+):
+    _, axs = gs.plot.profile(checked)
+    values = checked.values
+    drawn = line(axs[panel], column)
+    np.testing.assert_allclose(drawn.get_ydata(), values[column] * factor, rtol=1e-12)
+    gid = f"discrete_{column}"
+    dashed = [item for item in axs[panel].get_lines() if item.get_gid() == gid]
+    if not discrete:
+        assert not dashed
+        return
+    (dashed,) = dashed
+    assert dashed.get_color() == drawn.get_color()
+    assert dashed.get_linestyle() != drawn.get_linestyle()
+    expected = values[f"discrete_{column}"].to_numpy(dtype=float) * factor
+    np.testing.assert_allclose(dashed.get_ydata(), expected, rtol=1e-12)
+    # gaps where a station has no discrete value (the ends, spec decision 6)
+    assert np.isnan(dashed.get_ydata()[0])
+
+
+@pytest.mark.parametrize(
+    ("panel", "name", "levels"),
+    [
+        (2, "tensile_strain_limit", [1000.0]),
+        (2, "compressive_strain_limit", [-1000.0]),
+        (3, "radius_of_curvature_limit", [0.2, -0.2]),  # 1/(5000 m), in 1/km
+        (4, "bending_strain_limit", [50.0]),
+        (5, "tensile_strain_limit", [1000.0]),
+        (5, "compressive_strain_limit", [-1000.0]),
+    ],
+)
+def test_a_check_draws_its_limits(checked, panel, name, levels):
+    _, axs = gs.plot.profile(checked)
+    drawn = [item for item in axs[panel].get_lines() if item.get_gid() == name]
+    assert sorted(item.get_ydata()[0] for item in drawn) == pytest.approx(
+        sorted(levels), rel=1e-12
+    )
+    assert [text for text in axs[panel].texts if text.get_gid() == name]
+
+
+@pytest.mark.parametrize(
+    ("panel", "check", "factor"),
+    [
+        (2, "axial_tension", 1e6),
+        (2, "axial_compression", 1e6),
+        (3, "radius_of_curvature", None),
+        (4, "bending", 1e6),
+        (5, "tensile_strain", 1e6),
+        (5, "compressive_strain", 1e6),
+    ],
+)
+def test_a_check_marks_each_governing_value(checked, panel, check, factor):
+    _, axs = gs.plot.profile(checked)
+    row = checked.checks.set_index("check").loc[check]
+    mark = line(axs[panel], f"check:{check}")
+    assert mark.get_xdata()[0] == pytest.approx(row["governing_distance"], rel=1e-12)
+    expected = 1e3 / row["value"] if factor is None else row["value"] * factor
+    assert mark.get_ydata()[0] == pytest.approx(expected, rel=1e-12)
+    (text,) = [item for item in axs[panel].texts if item.get_gid() == f"check:{check}"]
+    assert f"u = {row['utilization']:.2f}" in text.get_text()
+
+
+def test_a_check_keeps_the_settlement_marker_only(checked):
+    _, axs = gs.plot.profile(checked)
+    marks = [
+        str(item.get_gid())
+        for ax in axs
+        for item in ax.get_lines()
+        if str(item.get_gid()).startswith("governing:")
+    ]
+    assert marks == ["governing:largest_settlement"]
+
+
+@pytest.mark.parametrize(
+    ("limit", "panels", "note"),
+    [
+        ("tensile_strain_limit", (2, 5), "no tensile limit"),
+        ("bending_strain_limit", (4,), "no bending limit"),
+        ("radius_of_curvature_limit", (3,), "no radius limit"),
+    ],
+)
+def test_a_limit_of_none_draws_no_line(make_check, limit, panels, note):
+    result = make_check(**{limit: None})
+    _, axs = gs.plot.profile(result)
+    for panel in panels:
+        ax = axs[panel]
+        assert not [item for item in ax.get_lines() if item.get_gid() == limit]
+        (text,) = [item for item in ax.texts if item.get_gid() == "no_limit"]
+        assert text.get_text() == note
+    for index, ax in enumerate(axs):
+        if index not in panels:
+            assert not [item for item in ax.texts if item.get_gid() == "no_limit"]
+
+
+def test_a_check_shows_the_ends_flag(checked):
+    _, axs = gs.plot.profile(checked)
+    (note,) = [text for text in axs[-1].texts if text.get_gid() == "flags"]
+    assert note.get_text().startswith("Within (2 stations, 0 to 80 m)")
+
+
+def test_a_check_needs_six_axes(checked):
+    _, given = plt.subplots(4, 1)
+    with pytest.raises(ValueError, match="6 matplotlib Axes"):
+        gs.plot.profile(checked, axs=given)
+    _, given = plt.subplots(6, 1, sharex=True)
+    _, returned = gs.plot.profile(checked, axs=given)
+    assert list(returned) == list(given)
+
+
+def test_a_check_leaves_no_global_state(checked):
+    before = dict(mpl.rcParams)
+    gs.plot.profile(checked)
+    assert dict(mpl.rcParams) == before

@@ -2,6 +2,7 @@
 
 import math
 import re
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -127,8 +128,63 @@ def find_critical_distances(
             for n in range(3)
         ]
     )
-    band = NEGLIGIBLE * scales[ORDER]
-    values = derivatives[:, ORDER, DIRECTION]
+
+    def functions(distance: FloatArray) -> FloatArray:
+        derivatives = _derivatives(evaluate(distance), a, v, lat)
+        values: FloatArray = derivatives[:, ORDER, DIRECTION]
+        return values
+
+    return find_zeros(
+        functions,
+        length=length,
+        step=sampling * feature,
+        tolerance=tolerance,
+        scales=scales[ORDER],
+    )
+
+
+def find_zeros(
+    functions: Callable[[FloatArray], FloatArray],
+    *,
+    length: float,
+    step: float,
+    tolerance: float,
+    scales: FloatArray,
+) -> FloatArray:
+    """Return the zeros of several functions of distance along a segment.
+
+    The segment [0, L] is sampled at h = L / ceil(L / step), ends included.
+    Function f brackets a zero between consecutive samples whose signs differ
+    (an exact zero counts as a sign of its own), unless both values are below
+    1e-10 of ``scales[f]``. Every bracket is refined by bisection at once until
+    it is shorter than `tolerance`, and the zeros of all the functions are
+    returned together, sorted, clipped to [0, L] and with those closer than
+    `tolerance` merged.
+
+    Parameters
+    ----------
+    functions : callable
+        Takes distances, shape (N,), and returns the functions' values there,
+        shape (N, F).
+    length : float
+        The segment's length L in m.
+    step : float
+        The largest sampling interval in m.
+    tolerance : float
+        The length in m to which each zero is found.
+    scales : numpy.ndarray
+        Shape (F,): each function's scale, below 1e-10 of which a value is
+        negligible.
+
+    Returns
+    -------
+    numpy.ndarray
+        The distances of the zeros in m.
+    """
+    count = max(math.ceil(length / step), 1)
+    samples = np.linspace(0.0, length, count + 1)
+    values = functions(samples)
+    band = NEGLIGIBLE * np.asarray(scales, dtype=np.float64)
 
     sign = np.sign(values)
     changes = (sign[:-1] != sign[1:]) & ~(
@@ -146,10 +202,7 @@ def find_critical_distances(
     )
     while low.size and np.max(high - low) >= tolerance:
         middle = (low + high) / 2
-        refined = _derivatives(evaluate(middle), a, v, lat)
-        middle_sign = np.sign(
-            refined[np.arange(middle.size), ORDER[function], DIRECTION[function]]
-        )
+        middle_sign = np.sign(functions(middle)[np.arange(middle.size), function])
         at_zero = middle_sign == 0
         found.append(middle[at_zero])
         keep = ~at_zero

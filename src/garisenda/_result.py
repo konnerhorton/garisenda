@@ -17,12 +17,36 @@ if TYPE_CHECKING:
 CHECK_COLUMNS = (
     "check",
     "value",
+    "unit",
     "limit",
     "utilization",
     "governing_distance",
     "passes",
+    "governed_by",
+    "analytical",
+    "analytical_distance",
+    "discrete",
+    "discrete_distance",
+    "difference",
 )
-"""The columns of `Result.checks`, empty until the utility checks (M3)."""
+"""The columns of `Result.checks`, empty for an analysis with no checks."""
+
+CHECK_TYPES = {
+    "check": "object",
+    "value": "float64",
+    "unit": "object",
+    "limit": "float64",
+    "utilization": "float64",
+    "governing_distance": "float64",
+    "passes": "boolean",
+    "governed_by": "object",
+    "analytical": "float64",
+    "analytical_distance": "float64",
+    "discrete": "float64",
+    "discrete_distance": "float64",
+    "difference": "float64",
+}
+"""Each column's dtype: ``passes`` is pandas' nullable boolean, NA with no limit."""
 
 GOVERNING_COLUMNS = ("name", "column", "value", "unit", "distance", "verdict")
 """The columns of `Result.governing()`."""
@@ -54,8 +78,10 @@ SUMMARY: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 
 
 def empty_checks() -> pd.DataFrame:
-    """Return an empty checks table with its columns."""
-    return pd.DataFrame({name: [] for name in CHECK_COLUMNS})
+    """Return an empty checks table with its columns and their dtypes."""
+    return pd.DataFrame(
+        {name: pd.Series([], dtype=CHECK_TYPES[name]) for name in CHECK_COLUMNS}
+    )
 
 
 @dataclass(frozen=True)
@@ -76,9 +102,14 @@ class Result:
         ``distance`` column (m along the asset), with units in
         ``values.attrs["units"]`` (SPEC §6).
     checks : pandas.DataFrame
-        Each quantity against its limit: columns ``check``, ``value``,
-        ``limit``, ``utilization``, ``governing_distance`` and ``passes``.
-        Empty until the utility checks (M3).
+        Each check against its limit, one row per check: ``check`` (its
+        name), ``value`` (the governing value, in ``unit``), ``limit`` (NaN
+        if none was given), ``utilization``, ``governing_distance`` (m),
+        ``passes`` (pandas NA with no limit), ``governed_by``
+        (``"analytical"`` or ``"discrete"``), ``analytical`` and
+        ``analytical_distance``, ``discrete`` and ``discrete_distance``, and
+        ``difference`` (discrete - analytical). Empty for an analysis with no
+        checks, such as a movement profile.
     method : tuple of MethodRecord
         The methods used, with their equations and sources.
     assumptions : tuple of str
@@ -269,9 +300,8 @@ class Result:
                 )
                 parts.append(f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}")
             lines.append(f"  {label}: {'; '.join(parts)}")
-        if not self.checks.empty:
-            failing = int((~self.checks["passes"].astype(bool)).sum())
-            lines.append(f"  checks: {len(self.checks)}, {failing} failing")
+        for check in self.checks.itertuples(index=False):
+            lines.append(f"  {check.check}: {_check_text(check)}")
         for flag in self.warnings:
             lines.append(f"  {flag.verdict}: {flag_text(flag)}")
             if distance is not None and flag.points:
@@ -331,16 +361,33 @@ def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
     return int(positions[int(np.argmin(distance))])
 
 
+def _check_text(check: Any) -> str:
+    """Return a check's line of the summary, after its name."""
+    if not math.isfinite(check.value):
+        return "none"
+    unit = _unit(check.unit)
+    text = f"{check.value:.5g}{unit}"
+    if math.isfinite(check.governing_distance):
+        text += f" at {check.governing_distance:.4g} m"
+    text += f" ({check.governed_by})"
+    if not math.isfinite(check.limit):
+        return f"{text}, no limit"
+    limit = f"{check.limit:.5g}{unit}"
+    return f"{text}, utilization {check.utilization:.3g} against {limit}"
+
+
 def _unit(unit: str | None) -> str:
     return "" if unit in (None, "", "dimensionless") else f" {unit}"
 
 
 def _plain(value: Any) -> Any:
-    """Make a value JSON-ready: numpy scalars as Python, non-finite as None."""
+    """Make a value JSON-ready: numpy scalars as Python, NA and non-finite as None."""
     if isinstance(value, dict):
         return {str(key): _plain(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
         return [_plain(item) for item in value]
+    if value is pd.NA:
+        return None
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, float) and not math.isfinite(value):
