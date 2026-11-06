@@ -28,11 +28,13 @@ nav = [
     "guides/several-tunnels.md",
     "guides/below-the-surface.md",
     "guides/continuous-pipes.md",
+    "guides/jointed-pipes.md",
   ] },
   { "Reference" = [
     "reference/garisenda.md",
     "reference/sources.md",
     "reference/utilities.md",
+    "reference/presets.md",
     "reference/plot.md",
   ] },
 ]

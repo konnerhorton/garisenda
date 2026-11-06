@@ -568,3 +568,63 @@ def test_a_sweep_of_profiles_has_no_check_columns():
     for name in CHECKS:
         assert name not in table.columns
         assert f"{name}_passes" not in table.columns
+
+
+def jointed_pipe_check(volume_loss=1 * u.percent):
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    trough = gs.sources.transverse_trough(
+        tunnel,
+        volume_loss=volume_loss,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="A",
+        station=0,
+        start_offset=-40,
+        end_offset=40,
+        depth=2.0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    joints = gs.presets.cast_iron_joint_limits(joint="lead_yarn_water_main")
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    return gs.check_jointed_pipe(
+        gs.movement_profile(utility, trough, spacing=1.0),
+        pipe_lengths={("spun_grey_iron", 0.3): 4.0},
+        pipe_type="spun_grey_iron",
+        interaction="greenfield",
+        joint_rotation_limit=joints.rotation,
+        joint_pullout_limit=joints.pullout,
+        tensile_strain_limit=strains.tensile,
+        compressive_strain_limit=strains.compressive,
+        bending_strain_limit=None,
+        radius_of_curvature_limit=None,
+    )
+
+
+def test_a_jointed_check_sweep_row_equals_a_direct_call():
+    # M3 (b) AC 14: the joint checks are columns too.
+    volume_losses = [0.5, 1.0] * u.percent
+    table = gs.sweep(jointed_pipe_check, vary={"volume_loss": volume_losses})
+    for (_, row), volume_loss in zip(table.iterrows(), volume_losses, strict=True):
+        direct = jointed_pipe_check(volume_loss=volume_loss)
+        assert direct.checks["check"].tolist()[-2:] == [
+            "joint_rotation",
+            "joint_pullout",
+        ]
+        for check in direct.checks.itertuples():
+            assert row[check.check] == check.value
+            assert row[f"{check.check}_distance"] == check.governing_distance
+            if math.isnan(check.utilization):
+                assert math.isnan(row[f"{check.check}_utilization"])
+            else:
+                assert row[f"{check.check}_utilization"] == check.utilization
+            if check.passes is pd.NA:
+                assert row[f"{check.check}_passes"] is pd.NA
+            else:
+                assert row[f"{check.check}_passes"] == check.passes
+    assert table.attrs["units"]["joint_rotation"] == "rad"
+    assert table.attrs["units"]["joint_pullout"] == "m"

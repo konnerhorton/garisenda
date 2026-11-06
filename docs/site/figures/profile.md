@@ -37,10 +37,23 @@ A result of `gs.check_continuous_pipe` is drawn in six panels: settlement and ho
 
 The example is on the [Continuous pipes](../guides/continuous-pipes.md) page.
 
+## A jointed-pipe check
+
+A result of `gs.check_jointed_pipe` is drawn in eight panels: the continuous check's six, with the discrete values at the pipe length, then two for the joints.
+
+![A jointed-pipe check in eight panels](../img/generated/jointed-pipes.png)
+
+- **Joint rotation:** vertical, lateral and the resultant, in degrees, with the rotation limit.
+- **Joint opening:** at the pipe's axis, solid, and the outer opening, dashed, with the pullout limit above zero. The largest closure, below zero, is marked and labeled as not checked.
+- **Gaps:** there's no rotation within one pipe length of an end and no opening within half of one, so the lines stop short of the ends.
+- **Checks:** the worst joint for each check is marked with its value and utilization, as for the barrel.
+
+The example is on the [Jointed pipes](../guides/jointed-pipes.md) page.
+
 ## Options
 
-`display_units=` changes the units of any kind of quantity: `length` (m), `displacement` (mm), `strain` (microstrain) and `curvature` (1/km). The example's second figure shows movement in inches:
+`display_units=` changes the units of any kind of quantity: `length` (m), `displacement` (mm), `strain` (microstrain), `curvature` (1/km) and `angle` (degree). The example's second figure shows movement in inches:
 
 ![The same profile with movement in inches](../img/generated/profile-inches.png)
 
-`axs=` draws into four axes you already have (six for a check), top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).
+`axs=` draws into four axes you already have (six for a continuous-pipe check, eight for a jointed one), top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).

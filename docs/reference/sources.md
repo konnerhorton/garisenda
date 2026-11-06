@@ -7,7 +7,17 @@ Bracegirdle, A., Mair, R. J., Nyren, R. J. & Taylor, R. N. (1996). A methodology
 - Cited for: Eq. 1, settlement with the volume and width at the pipe's depth, and Eq. 2, the width at depth in clay, with the limit "only ... above the level of the crown of the tunnel" (p. 660).
 - Eq. 3 (horizontal movement) has a smudge in its denominator; read as y/(z₀ − z_p), not cited (`docs/work/m2b-subsurface.md`).
 - Cited for (M3 (a)): the approach, ground strains "obtained directly by differentiating the displacements" (p. 660) and pipes that follow the ground (p. 663); Eqs. 7–9, curvature at the trough's center and peak hogging curvature and horizontal strain at √3 i (p. 662); combined tensile strain as bending plus axial strain (pp. 662–663).
-- Verified 2026-11-04 (M2 (b)); Eqs. 7–9 and pp. 660, 662–663 verified 2026-11-06 (M3 (a)), Eqs. 7–9 against the page image.
+- Cited for (M3 (b)): Table 2, allowable joint rotation and pull-out, after Attewell et al. (1986), and the text on individual joints and the conservative pull-out (p. 661); Table 4, allowable increase in strain, and Herbert & Leach (1990)'s grey iron tensile values as quoted (p. 662); joints taken as rigid for bending strain (p. 663).
+- Eqs. 5–6 (p. 661), conservative joint rotation for one trough, are read but not used: Eq. 5's derivation can't be checked without Attewell et al. (1986), and it exceeds the joint geometry only for some pipe lengths (TODO #4).
+- Verified 2026-11-04 (M2 (b)); Eqs. 7–9 and pp. 660, 662–663 verified 2026-11-06 (M3 (a)), Eqs. 7–9 against the page image; Tables 2 and 4, Eqs. 5–6 and pp. 661–663 verified 2026-11-06 (M3 (b)) against the page images.
+
+## `attewell1986`
+Attewell, P. B., Yeates, J. & Selby, A. R. (1986). *Soil Movements Induced by Tunnelling and their Effects on Pipelines and Structures*. Blackie and Son Ltd., London. As listed in Bracegirdle et al. (1996)'s references (read from the text layer, 2026-11-06).
+- 🔬 Not read: cited only as quoted in Bracegirdle et al. (1996), Table 2 (SPEC §2.1), and named so in `gs.presets.cast_iron_joint_limits`. TODO #4.
+
+## `herbert_leach1990`
+Herbert, R. & Leach, G. (1990). Damage control procedures for distribution mains. *Gas '90*, Institution of Gas Engineers, Communication 1437. As listed in Bracegirdle et al. (1996)'s references (read from the text layer, 2026-11-06).
+- 🔬 Not read: cited only as quoted in Bracegirdle et al. (1996), p. 662 (SPEC §2.1), and named so in `gs.presets.grey_iron_tensile_strain_limit`.
 
 ## `mair1993`
 Mair, R. J., Taylor, R. N. & Bracegirdle, A. (1993). Subsurface settlement profiles above tunnels in clays. *Géotechnique* 43(2), 315–320.

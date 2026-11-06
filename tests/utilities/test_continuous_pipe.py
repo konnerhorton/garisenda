@@ -415,11 +415,36 @@ def test_interval_must_be_positive(profile, value):
 
 
 @pytest.mark.parametrize("name", list(limits()))
-@pytest.mark.parametrize("size", [0.0, -1.0])
-def test_limits_must_be_positive(profile, name, size):
+@pytest.mark.parametrize("size", [-1.0, math.inf])
+def test_limits_must_be_zero_or_positive(profile, name, size):
     unit = u.m if name == "radius_of_curvature_limit" else u.dimensionless
-    with pytest.raises(ValueError, match=f"{name} must be positive"):
+    with pytest.raises(ValueError, match=f"{name} must be zero or positive"):
         gs.check_continuous_pipe(profile, **arguments(**{name: size * unit}))
+
+
+def test_a_zero_limit_allows_nothing():
+    # M3 (b), decision 11: infinity and fail for a nonzero value; a zero
+    # radius limit gives 0 and passes.
+    result = check(
+        case_a_pipe(),
+        tensile_strain_limit=0 * u.dimensionless,
+        compressive_strain_limit=0 * u.dimensionless,
+        bending_strain_limit=0 * u.dimensionless,
+        radius_of_curvature_limit=0 * u.m,
+    )
+    checks = result.checks.set_index("check")
+    for name in ("axial_tension", "axial_compression", "bending", "tensile_strain"):
+        assert checks.loc[name, "utilization"] == math.inf
+        assert not checks.loc[name, "passes"]
+    assert checks.loc["radius_of_curvature", "utilization"] == 0
+    assert checks.loc["radius_of_curvature", "passes"]
+
+
+def test_a_zero_limit_passes_a_zero_value():
+    from garisenda.utilities._continuous_pipe import _utilization
+
+    assert _utilization(0.0, 0.0, smallest=False) == (0.0, True)
+    assert _utilization(1e-9, 0.0, smallest=False) == (math.inf, False)
 
 
 def test_every_judgment_is_recorded(profile):
@@ -739,3 +764,30 @@ def test_summary_lists_the_six_checks(case_a):
     for name in case_a.checks["check"]:
         assert f"  {name}: " in text
     assert "tensile_strain: 0.00032108 at 24.41 m (analytical)" in text
+
+
+# M3 (b), decision 13: a preset's caveats join the assumptions
+
+
+def test_a_strain_preset_adds_its_caveat_once():
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    result = check(
+        case_a_pipe(),
+        tensile_strain_limit=strains.tensile,
+        compressive_strain_limit=strains.compressive,
+        bending_strain_limit=strains.tensile,
+    )
+    (caveat,) = strains.tensile.caveats
+    assert result.assumptions.count(caveat) == 1
+    entry = next(e for e in result.inputs if e.name == "tensile_strain_limit")
+    assert entry.source == strains.tensile.source
+
+
+def test_a_call_with_no_preset_adds_no_caveat(case_a):
+    strains = gs.presets.iron_strain_limits(material="grey_iron")
+    assert strains.tensile.caveats[0] not in case_a.assumptions
+    profile_assumptions = gs.movement_profile(
+        case_a_pipe(), trough(), spacing=1.0
+    ).assumptions
+    added = case_a.assumptions[len(profile_assumptions) :]
+    assert not any("Bracegirdle" in text for text in added)

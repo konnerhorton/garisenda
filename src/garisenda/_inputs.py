@@ -41,6 +41,36 @@ class Sourced:
 
 
 @dataclass(frozen=True)
+class Preset(Sourced):
+    """A preset value: a `Sourced` that also carries caveats (SPEC §4).
+
+    Every argument that takes a `Sourced` takes a `Preset`. Its source names
+    the preset call, the row, the paper, the table or page and whom the paper
+    quotes; a check adds its caveats to the result's assumptions, once each.
+
+    Parameters
+    ----------
+    value : object
+        The value, a pint quantity.
+    source : str
+        The preset call and its citation.
+    caveats : tuple of str
+        What the engineer should know before relying on the value.
+    """
+
+    caveats: tuple[str, ...]
+
+
+def preset_caveats(*values: object) -> tuple[str, ...]:
+    """Return the caveats of every `Preset` among `values`, in order, each once."""
+    found: list[str] = []
+    for value in values:
+        if isinstance(value, Preset):
+            found.extend(caveat for caveat in value.caveats if caveat not in found)
+    return tuple(found)
+
+
+@dataclass(frozen=True)
 class InputRecord:
     """One input as used: its value in SI, its kind, how it was given and its source.
 
