@@ -194,6 +194,7 @@ The governing values off the center come from Claude's dense evaluation of the c
 7. 🟡 **The worst position is found exactly.** As M3 (a), decision 7, rows are added at the zeros of d(θ²)/ds and dΔ/ds within each feasible range (Geometry 5). The derivatives are exact: dθ_v/ds = (w′(s + L) − 2w′(s) + w′(s − L))/L and dΔ/ds = ε_a(s + L/2) − ε_a(s − L/2), both from the source's derivatives at the shifted points. They use the sampling and tolerance of `find_critical_distances`. Rows are also added at the ends of each feasible range (s = L, ℓ − L, L/2, ℓ − L/2), because a peak can sit at the range's edge where the function is still rising. Without them a monotonic run near an end would be missed. Every added row is marked `critical`.
 8. 🟡 **The barrel is M3 (a)'s check with h = L.** Its six checks, analytical and discrete, the worse governing, are computed exactly as `check_continuous_pipe(..., interval=L)` computes them (SPEC §7). Then θ_v = L κ_v,d, θ_l = L κ_l,d and Δ = L ε_a,d at every row. The joint columns and the barrel's discrete columns are one calculation, so they can't disagree.
    - **Confirmed against the spreadsheet** (review, 2026-11-06): it also uses the pipe length as the interval.
+   - **Over every row** (plan, 2026-11-06): the rows added at the peaks of θ and Δ are the peaks of the discrete curvature and axial strain, which `check_continuous_pipe` samples only at its own stations. The barrel checks run over every row, so the values table and the checks table agree, and a discrete governing value can be slightly worse than M3 (a)'s at the same interval.
 9. 🟡 **The joint checks sit in the checks table as discrete values.**
    - Rows `joint_rotation` (value θ, unit rad) and `joint_pullout` (value Δ, unit m) come after M3 (a)'s six.
    - `discrete` and `discrete_distance` hold the governing value and its distance; `analytical`, `analytical_distance` and `difference` are NaN; `governed_by` is `"discrete"`. They have no analytical counterpart: a joint exists only at a spacing L.
@@ -278,7 +279,7 @@ The governing values off the center come from Claude's dense evaluation of the c
 1. **Case J-A:** the values at the center joint and the governing rotation, opening and closure with their distances, within the stated tolerances. `joint_lateral_rotation` is exactly zero.
 2. **Case J-B:** case J-B's values, and the barrel's discrete columns equal case B's at h = 9 m within 1e-9. At every row, `joint_vertical_rotation` = L × `discrete_vertical_curvature` and `joint_opening` = L × `discrete_axial_strain`, within 1e-12 relative.
 3. **Case J-C:** the oblique values at s = 49.44365 m (a station of the profile) and at the crossing, and the governing values.
-4. **The barrel is M3 (a)'s:** for case J-A, the six barrel check rows equal `check_continuous_pipe(..., interval=4 m)`'s with the same limits, column for column.
+4. **The barrel is M3 (a)'s, over more rows** (reworded at the plan, 2026-11-06): for case J-A, the six barrel check rows' analytical fields equal `check_continuous_pipe(..., interval=4 m)`'s with the same limits exactly. The discrete columns equal it at every row the two results share. Each discrete governing value is no smaller in size than M3 (a)'s (no larger for the radius).
 5. **The worst joint is found:** for cases J-A and J-C and for M2 (a)'s twin tunnels at L = 4 m and 9 m, the governing rotation and opening are at least the largest found by evaluating the source independently every 1 mm over the feasible range, refined every 1 µm within 1 mm of each maximum, and exceed it by no more than 1e-9 relative. The added rows are marked `critical`.
 6. **A peak at the range's edge:** a pipe ending where θ is still rising toward the end (case J-A's pipe cut to offsets −40 m to −2 m, L = 4 m) has its governing rotation at s = ℓ − L, not at the last interior station.
 7. **The ends and short pipes:** rows within L (rotation) and L/2 (opening) of an end are NaN, under one `within` flag that names them. A pipe shorter than 2L has a NaN rotation with `passes` NA, and one shorter than L the same for pullout.
@@ -306,3 +307,135 @@ The governing values off the center come from Claude's dense evaluation of the c
 16. **Docs:**
     - the API reference has `check_jointed_pipe`, with Geometry 1–5 in its docstring and the sources, and `gs.presets`, with each preset's table, source and caveats;
     - the "Jointed pipes" guide's example runs in the docs build and shows decision 12's caveat.
+
+## Plan
+
+Eight build commits, each with lint, format, mypy strict and pytest green. Opus does 1–5, Sonnet does 6–7, and Opus does 8 (figures by eye, the spreadsheet comparison, close-out). A new session starts before 6 and before 8. Items not in the spec are marked 🟡. Following the workflow rule, each SPEC change goes in the commit that makes it true.
+
+### 1. `M3 (b): allow a zero limit` (Opus)
+Spec decision 11, for `check_continuous_pipe` first.
+- `src/garisenda/utilities/_continuous_pipe.py`:
+  - `_read_limit` accepts 0 and still raises for a negative or non-finite limit. The message says "must be zero or positive".
+  - `_utilization`: with a zero limit, ∞ and fail for a nonzero value, 0 and pass for a zero value. With a zero radius limit, 0 and pass. The docstring says so.
+- `SPEC.md` §7: a zero limit is allowed for every check, and means nothing is allowed.
+- Tests: `tests/utilities/test_continuous_pipe.py` changes the zero-limit test from "raises" to AC 9's zero cases (∞/fail, 0/pass, radius 0/pass). Negative limits still raise.
+
+### 2. `M3 (b): split the continuous check into reusable steps` (Opus)
+A refactor with no change in behavior. The jointed check runs the same barrel calculation with extra rows (decision 8).
+- `src/garisenda/utilities/_continuous_pipe.py`:
+  - `_read_limits(**limits) -> (dict, records)`, the loop over the four limits.
+  - `_along(utility, source)`: start, direction a, v, lat, length, feature length and a `derivatives(distance)` evaluator, taken from `_peaks`. Both checks use it.
+  - `_barrel(profile, utility, source, interval, extra_peaks, ends_reason_extra) -> (values, flags, validity, checks)`: the body from `_peaks` to `_checks`. It merges `extra_peaks` with the analytical peaks through `_add_stations`.
+  - `_interval_assumption(interval, what)`, which returns the assumption sentence naming the interval ("a pipe length L = 4 m" for jointed).
+  - `check_continuous_pipe` calls them.
+  - `_utilization` gains `determined: bool = True`. With `False` (no feasible position) it returns NaN and NA, even with a limit (decision 10). Unused until step 5.
+- Tests: the existing suite passes unchanged.
+
+### 3. `M3 (b): add gs.presets` (Opus)
+Spec decisions 13–16. Citations checked against the page images as quoted in the spec.
+- New `src/garisenda/presets.py` (exported as `gs.presets`):
+  - `Preset(Sourced)`, a frozen dataclass with `caveats: tuple[str, ...]`;
+  - `cast_iron_joint_limits(*, joint)` returning a frozen `JointLimits(rotation, pullout)`;
+  - `iron_strain_limits(*, material)` returning `StrainLimits(tensile, compressive)`;
+  - `grey_iron_tensile_strain_limit(*, diameter, situation)`.
+  - Each has `@judgments`, so a missing row raises `TypeError`, and an unknown row raises `ValueError` listing the rows. Values are pint quantities (degree, mm, `"µε"` as a string). Sources are as in decision 13. Caveats are decisions 12, 14, 15 and 16 verbatim.
+  - Each docstring is the reference entry: its table, source and caveats.
+- `src/garisenda/_inputs.py`: `preset_caveats(*values) -> tuple[str, ...]`, the caveats of every `Preset` among the raw arguments, in order, each once.
+- `check_continuous_pipe` adds `preset_caveats` of its limits to its assumptions. Decision 13 is "a check", and the strain presets apply to continuous pipes too.
+- `src/garisenda/__init__.py` exports `presets`. New `docs/site/reference/presets.md` (`::: garisenda.presets`), added to the `zensical.toml` nav, because `test_every_public_name_has_a_reference_entry` requires it.
+- `SPEC.md` §4: the first presets, `gs.presets`, and how a preset is recorded (its source names the call; caveats join the assumptions).
+- Tests in new `tests/test_presets.py` (AC 11, first two bullets): every row's value and source, missing and unknown rows, and that `record()` takes a `Preset` as a `Sourced`. `tests/utilities/test_continuous_pipe.py` checks that a strain preset's caveat appears once in the assumptions, and that a call with no preset adds none.
+
+### 4. `M3 (b): add gs.check_jointed_pipe` (Opus)
+The inputs, the pipe-length table, the joint columns and the checks, at the rows the barrel already has (profile stations and M3 (a)'s peaks).
+- New `src/garisenda/utilities/_jointed_pipe.py`, `check_jointed_pipe(profile, *, pipe_lengths, pipe_type, interaction, joint_rotation_limit, joint_pullout_limit, tensile_strain_limit, compressive_strain_limit, bending_strain_limit, radius_of_curvature_limit)` with `@judgments` for all ten (decisions 1–2). The docstring is the reference entry: Geometry 1–5, the barrel at h = L by reference to `check_continuous_pipe`, inputs and outputs with units, assumptions and sources (AC 16, that part).
+  - `_pipe_length(table, pipe_type, diameter) -> (L, InputRecord)` (decision 3). It unwraps a `Sourced` table. Each key's diameter and each length go through `record` (m, read as SI). A non-positive or non-finite length raises naming the key. Matching is within `MERGE_TOLERANCE` (1 µm). A missing type or diameter raises as decision 3 says. The record is `InputRecord("pipe_length", L m, "design judgment", "from pipe_lengths, (<type>, <d> m)", table source)`.
+  - `pipe_type`: a non-empty `str`, or `ValueError`, recorded as a design judgment `"name"`.
+  - `joint_rotation_limit`: through `record(unit="radian", plain_number="refuse")`. `joint_pullout_limit` in m, read as SI. Both may be `None`, zero allowed, as `_read_limit`.
+  - The barrel from `_barrel(..., interval=L)`. Then `joint_vertical_rotation = L·discrete_vertical_curvature`, `joint_lateral_rotation = L·discrete_lateral_curvature`, `joint_rotation = hypot`, `joint_opening = L·discrete_axial_strain`, `joint_outer_opening = Δ + rθ`, with units rad and m (decision 17).
+  - The checks: M3 (a)'s six, then `joint_rotation` (largest θ) and `joint_pullout` (largest positive Δ), with the discrete fields only and `governed_by="discrete"` (decision 9). Uses `extreme` and `_utilization`.
+  - `method`, `inputs` and `assumptions` as decision 17. Preset caveats are added here too.
+- Exported from `src/garisenda/__init__.py`. `docs/site/reference/garisenda.md` gains `::: garisenda.check_jointed_pipe`.
+- Tests in new `tests/utilities/test_jointed_pipe.py`, with cases J-A, J-B and J-C as fixtures built from M3 (a)'s cases:
+  - AC 1's and AC 3's center and station values (s = 40 m, s = 49.44365 m), to 1e-9 relative;
+  - AC 2 (J-B's center values, discrete columns equal to case B's at h = 9 m, the L × identities to 1e-12);
+  - AC 4 as reworded;
+  - AC 8 (the table: inches, missing type and diameter, non-positive length, `Sourced` source);
+  - AC 9 (limits; a plain-number rotation limit refused);
+  - AC 10 (the ten judgments, empty `pipe_type`, the inputs).
+
+### 5. `M3 (b): find the worst joint exactly` (Opus)
+Spec decisions 7 and 10, and the rest of 17.
+- `src/garisenda/utilities/_jointed_pipe.py`:
+  - `_joint_peaks(utility, source, L) -> FloatArray`. `find_zeros` (`src/garisenda/sources/_critical.py`) runs on two shifted ranges, with `step` and `tolerance` from `CRITICAL_DISTANCE_SAMPLING` and `CRITICAL_DISTANCE_TOLERANCE`:
+    - t ∈ [0, ℓ − 2L], s = L + t, for d(θ²)/ds = 2(θ_v θ_v′ + θ_l θ_l′), where θ′ = (w′(s+L) − 2w′(s) + w′(s−L))/L from `_along`'s `derivatives` at the three shifted points;
+    - t ∈ [0, ℓ − L], s = L/2 + t, for dΔ/ds = ε_a(s+L/2) − ε_a(s−L/2).
+    - The scales are set as `_peaks` sets them: the sampled maximum, or the floor from U and the feature length.
+    - Rows are also added at the range ends L, ℓ − L, L/2 and ℓ − L/2, where the range exists.
+    - All of these go to `_barrel` as `extra_peaks`, so they are marked `critical`.
+  - Short pipes: if ℓ < 2L, rotation is NaN with `passes` NA (`determined=False`); if ℓ < L, pullout is the same. With positions but none opening, pullout is NaN and passes.
+  - The ends flag: `_barrel`'s `within` reason names the joints: no rotation within L, no opening within L/2, and the short-pipe sentence.
+  - Assumptions: the full decision 17 list.
+- `src/garisenda/_result.py` `__repr__`: when any check starts with `joint_`, the joint checks print first under `joints:`, then the rest under `barrel:` (🟡 the "barrel" heading isn't in the spec).
+- Tests in `tests/utilities/test_jointed_pipe.py`:
+  - AC 1's governing values and distances, including the J-A opening tie at 24.2821 m. Values to 1e-9 relative, distances to 1e-6 m. `joint_lateral_rotation` is exactly zero.
+  - AC 3's governing values.
+  - AC 5: J-A, J-C and the `twins_below_the_surface` fixture at L = 4 m and 9 m, against an independent evaluation every 1 mm, refined every 1 µm, within 1e-9. Added rows are `critical`.
+  - AC 6 (the cut pipe: governing at ℓ − L).
+  - AC 7.
+  - AC 11, third bullet: the Table 2 pullout caveat appears once.
+  - AC 13 (`to_dict` through `json.dumps`, `to_frame` units, eight check lines in the summary).
+  - AC 12 in `tests/utilities/test_jointed_pipe_properties.py`, hypothesis over angle as M3 (a)'s.
+  - AC 14 in `tests/test_sweep.py`: a sweep over volume loss equals direct calls, joint checks included. No sweep code change is expected, since `_sweep._table` reads `checks` generically.
+
+### 6. `M3 (b): draw a jointed pipe result in eight panels` (Sonnet)
+Spec decision 17's figure.
+- `src/garisenda/plot/_display.py`: kind `"angle"`, default `"degree"`, SI `"radian"`.
+- `src/garisenda/plot/_profile.py`:
+  - `JOINTED_PANELS` = `CHECK_PANELS` plus two panels:
+    - joint rotation: θ_v, θ_l, θ, kind `"angle"`, with a `Limit("joint_rotation_limit", "joint_rotation", 1, "rotation limit")`;
+    - joint opening: Δ and the outer opening (dashed), kind `"displacement"`, with the pullout limit. The closure is marked with `gid` `closure` 🟡.
+  - Panels are chosen by `result.analysis`: `"jointed_pipe_check"` gives eight. `axs=` checks for eight Axes.
+  - Joint columns have no discrete twin, so they aren't in `DISCRETE_COLUMN`.
+  - The docstring describes the figure.
+- `SPEC.md` §9: the jointed-pipe figure.
+- Tests in `tests/plot/test_profile.py` (AC 15, automated part):
+  - eight panels by `gid`: joint lines, limit lines, `check:joint_rotation`, `check:joint_pullout` and `closure`;
+  - the rotation axis in degrees (a limit of 1.5° drawn at y = 1.5);
+  - a continuous check still draws six and a profile four;
+  - the wrong `axs` count raises;
+  - `rcParams` are unchanged.
+
+### 7. `M3 (b): write the jointed pipes guide` (Sonnet)
+- New `docs/site/guides/jointed-pipes.md` and `docs/site/examples/jointed-pipes.py`:
+  - case J-A's crossing with a pipe-length table stated as the example's own, `pipe_type="spun_grey_iron"` and 🟡 a 4 m length;
+  - `gs.presets.cast_iron_joint_limits(joint="lead_yarn_water_main")` and `gs.presets.iron_strain_limits(material="grey_iron")`, with `bending_strain_limit=None`;
+  - the eight-panel figure;
+  - reading the joint checks, and printing decision 12's caveat from `.assumptions`;
+  - what the check assumes: the two idealizations, the axis opening, closure reported only;
+  - why Eq. 5 isn't used, linking the reference.
+- `zensical.toml` nav. `docs/site/figures/profile.md` shows the jointed figure.
+- Tests: `tests/docs/test_site.py` picks up the example. The docs build passes with `--strict` and no `griffe:` warnings (AC 16).
+
+### 8. `M3 (b): check figures and close out` (Opus)
+- Check `docs/site/img/generated/` by eye against decision 17 (the rest of AC 15), and fix anything found.
+- Run every check:
+  - the CI line;
+  - Python 3.13 and 3.14;
+  - `lowest-direct`, then `git checkout uv.lock`;
+  - the docs build.
+- **The spreadsheet comparison (SPEC §12.4, intent):** run on the work machine by the user, not in this repo. Only "done, differences explained" is recorded. M3 isn't marked done until it is.
+- Close-out:
+  - `SPEC.md`:
+    - §1.3: the joint idealization;
+    - §2.1: Eqs. 3 and 5 aren't used until verified;
+    - §5.1: the result;
+    - §7: the jointed check, its API and geometry, and "unless joint locations are given" noted as M5;
+    - §12.4: M3 done, with the date.
+  - `docs/reference/sources.md`: `bracegirdle1996` gains Table 2, p. 661, Table 4 with Herbert & Leach, p. 663, and Eqs. 5–6 read but not used. Attewell 1986 and Herbert & Leach 1990 are listed as 🔬 not read, cited as quoted.
+  - `docs/TODO.md`:
+    - #4: joint definitions decided, plus the Eq. 5 comparison;
+    - #5: stays open;
+    - #6: deleted, moved into SPEC.
+  - `CLAUDE.md`: the status and "Next" sentence move to M4. Recurring mistakes go into its conventions.
+  - Report each of the 16 ACs as met or not, with evidence.
