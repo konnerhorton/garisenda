@@ -25,10 +25,22 @@ Each panel's sign convention is above it on the right. The figure draws the resu
 - **Critical stations**: red ticks along the bottom of each panel, where the trough's quantities peak or change sign.
 - **Flags**: stations that aren't *within* the method's range are shaded, pink for *outside* and amber for *marginal*, and each flag's reason is printed under the figure with its range of distance. A utility below the ground surface, for one, is shaded over its length. Nothing flagged is left unmarked.
 
+## A continuous-pipe check
+
+A result of `gs.check_continuous_pipe` is drawn in six panels: settlement and horizontal movement as above, then axial strain, curvature (vertical, lateral and resultant), bending strain at the outermost fiber (vertical, lateral and resultant), and combined tensile and compressive strain.
+
+![A continuous-pipe check in six panels](../img/generated/continuous-pipes.png)
+
+- **Analytical and discrete:** analytical values are solid lines, discrete ones dashed in the same color, with gaps near the ends, where a station has no discrete value.
+- **Limits:** thin gray lines, labeled with their value: the tensile limit above zero and the compressive limit below it, the bending limit, and the radius limit as ±1/R on the curvature panel, since a radius is infinite where the pipe is straight. A check given no limit draws no line, and its panel says so.
+- **Checks:** each check's governing value is marked with its value and utilization (`u`), the radius at its curvature. The largest settlement is marked as for a profile.
+
+The example is on the [Continuous pipes](../guides/continuous-pipes.md) page.
+
 ## Options
 
 `display_units=` changes the units of any kind of quantity: `length` (m), `displacement` (mm), `strain` (microstrain) and `curvature` (1/km). The example's second figure shows movement in inches:
 
 ![The same profile with movement in inches](../img/generated/profile-inches.png)
 
-`axs=` draws into four axes you already have, top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).
+`axs=` draws into four axes you already have (six for a check), top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).
