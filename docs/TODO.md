@@ -68,3 +68,46 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 - **Decided at M1 (c)'s figure review (2026-11-03), to revisit with users:** the profile joins stations with straight lines, so it looks jagged at a coarse `spacing` (the figure draws only the result's values; a finer spacing smooths it); the lateral lines stay, though they are zero for a perpendicular utility.
 - **Open:** whether to drop the lateral lines for a built perpendicular utility, and whether users want a note or a smoother line for coarse spacings.
 - **Decided at M3 (a)'s figure review (2026-11-06), to revisit with users:** in a check's figure, the limit lines set each panel's scale, so a check far below its limit looks flat (the example's bending: 23 µε against 500 µε). It shows the utilization at a glance. The alternative is to scale each panel to its data and mark a limit beyond it at the panel's edge.
+
+## Agent-use review (2026-11-09)
+
+From a whole-package review at M3 (`dc59a48`) for whether an AI agent can use garisenda to produce work an engineer can sign off, with two trial agents working from the published docs only (one run each: a jointed main over twin tunnels, a welded main over a volume loss sweep). Probe scripts are not kept; each item gives enough to reproduce.
+
+### 15. Flag an asset that ends where the trough is still significant · Claude (You to set the margin) · SPEC §8.3, §7
+- **What happens:** a utility from −3 m to +3 m over a trough with i = 9 m returns `within` with no warnings; `axial_tension` is `none` with `passes=True`, though the tension peak (about ±√3 i ≈ ±15.6 m) is beyond the pipe's ends. A truncated pipe passes, and nothing says its extent was too short.
+- **Record:** SPEC §8.3 (🟡) says such an asset is flagged, with the margin set in M3's spec; `docs/work/m1b-movement-profile.md` defers it to M3. M3's specs don't set it and nothing tracks it.
+- **Open:** the margin (settlement or strain at an end as a fraction of its peak, or any source critical distance beyond an end), and whether it applies to the profile or only to the checks. Record it as a constant on the result.
+
+### 16. A `within` verdict where no range was checked · You · SPEC §5.2, TODO #2
+- **What happens:** volume loss 50 %, k = 0.01 or k = 5 all give `within` (0.63 m settlement at 50 %). The only trace is one assumption, "No validity range is checked for k or volume loss", among 10–23. One trial agent caught it; nothing makes it hard to miss.
+- **Options:** a fourth verdict (`unchecked`); a broad plausibility band flagged `marginal` until TODO #2 sets real limits; or state "ranges not checked" on the summary's verdict line.
+
+### 17. Plain-number lengths read as m without a visible trace · You · SPEC §6
+- **What happens:** `IdealizedTunnel(diameter=20, axis_depth=60)` from a project in feet is silently 3.28× off. The input record says `given_as="plain number, read as m"`, but the summary doesn't show it.
+- **Options:** refuse plain lengths as percentages and angles are refused; or list plain-number inputs in the summary. Revisits SPEC §6's "a plain float is accepted and read as the documented SI unit".
+
+### 18. Offsets for twin tunnels with the alignment between the bores · You · SPEC §8.3, §9
+- **What happens:** a brief giving offsets from an alignment midway between twin bores has to be shifted by hand to one bore (trial A). The profile figure's top axis reads "Offset from tunnel axis" without naming which tunnel, so a memo figure's offsets are from the left bore with nothing to say so. The cross-section already says "reference tunnel axis".
+- **Fix:** name the reference tunnel in the profile's offset label. **Open:** whether to support a reference line that isn't a bore (a centerline), for the common twin-tunnel layout.
+
+### 19. Internal references in published text and results · Claude · SPEC §2.2, §8.5
+- **What happens:** result assumptions read "(SPEC §1.3)" and "(TODO #2)"; the pullout preset's caveat cites "the M3 (b) spec's case J-A"; errors cite "(SPEC §7)", "(SPEC §1.3)"; 25 public docstrings cite SPEC or TODO (52 string literals in `src/`). The engineer signing off can't follow them.
+- **Fix:** replace with the docs page or the source citation, and a test that no published string (docstrings, assumptions, error messages) contains `SPEC §`, `TODO #` or a milestone id.
+
+### 20. Stale status in the README and getting-started · Claude · SPEC §12.3
+- `README.md` says "utility and building checks come next"; `docs/site/getting-started.md` says "Whether the pipe can take the movement is a separate check, not yet in garisenda." Both are wrong since M3, and an agent reading only these won't look for `gs.check_*`.
+
+### 21. When to use `transverse_surface_trough` and when `transverse_trough` · Claude · SPEC §3
+- **What happens:** both trial agents had to work out the difference; the sweep example uses the surface trough, the pipe guides the trough at depth. Keeping both is decided (SPEC §3).
+- **Fix:** say in the surface trough's docstring and the sweep guide that a buried utility needs `transverse_trough`, and that the linear method at z = 0 is the surface trough.
+
+### 22. Input records with the same name · Claude · SPEC §5.1
+- A single-tunnel result has two inputs named `diameter` (the tunnel's and the utility's) with no owner; superposition prefixes source inputs (`north.diameter`) but the utility's stay bare. An audit table or memo built from `inputs` can mix them up.
+- **Fix:** prefix by owner (`tunnel.`, `utility.`), as superposition does.
+
+### 23. A governing utilization for a check and a sweep · You · SPEC §5.1, §5.3
+- `checks` and `gs.sweep` give no overall governing utilization or pass, so trial B took the maximum itself and bisected for the volume loss at which the pipe stops passing. A symmetric peak reports one location only (trial A).
+- **Open:** whether to add a governing row or column (with `None` limits and NA passes handled explicitly), and whether to report both locations of a symmetric peak.
+
+### 24. The inside-the-bore error · Claude · SPEC §8.5
+- A utility through the bore raises "Points inside the bore can't be evaluated at distances 38.4075, 38.5948, … m along the segment": about 20 internal sample distances, and no remedy. It should name the utility's depth and the bore's extent, and say to check the depth or its `elevation_reference`.
