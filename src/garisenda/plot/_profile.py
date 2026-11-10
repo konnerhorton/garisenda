@@ -1,4 +1,4 @@
-"""The profile figure: movement, strain and curvature along a utility."""
+"""The profile figure: movement, strain and the checks along an asset."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -14,6 +14,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
 from garisenda._result import Result, flag_text
+from garisenda.buildings._building import Building
+from garisenda.plot._building import draw_building_check
 from garisenda.plot._display import DisplayUnits, resolve
 from garisenda.plot._panel import (
     DASHED,
@@ -38,7 +40,10 @@ CHECK_ANALYSIS = "continuous_pipe_check"
 """The analysis drawn in six panels."""
 
 JOINTED_ANALYSIS = "jointed_pipe_check"
-"""The analysis drawn in eight panels; any other result gets four."""
+"""The analysis drawn in eight panels."""
+
+BUILDING_ANALYSIS = "building_check"
+"""The analysis drawn in five panels; any other result gets four."""
 
 
 SETTLEMENT = Panel(
@@ -166,7 +171,48 @@ JOINTED_PANELS = (
 )
 """The eight panels of a jointed-pipe check."""
 
-PANELS = {CHECK_ANALYSIS: CHECK_PANELS, JOINTED_ANALYSIS: JOINTED_PANELS}
+BUILDING_PANELS = (
+    Panel(
+        (("vertical", "Settlement", "C0"),),
+        "displacement",
+        "Settlement",
+        "down +",
+        limits=(Limit("settlement_limit", "settlement", 1, "settlement limit"),),
+        checks=("settlement",),
+        down=True,
+    ),
+    Panel(
+        (("deflection", "Deflection", "C0"),),
+        "displacement",
+        "Deflection from chord",
+        "down +, as the settlement",
+        down=True,
+    ),
+    Panel(
+        (("vertical_slope", "Slope", "C0"),),
+        "slope",
+        "Slope",
+        "settlement increasing along +",
+        limits=(
+            Limit("slope_limit", "slope", 1, "slope limit"),
+            Limit("slope_limit", "slope", -1, ""),
+        ),
+    ),
+    Panel(
+        (("along_strain", "Horizontal strain", "C0"),),
+        "strain",
+        "Horizontal strain",
+        "tension +",
+    ),
+    Panel((), "strain", "Tensile strain", "tension +, by zone"),
+)
+"""The five panels of a building check; its zones are drawn by `_building`."""
+
+PANELS = {
+    CHECK_ANALYSIS: CHECK_PANELS,
+    JOINTED_ANALYSIS: JOINTED_PANELS,
+    BUILDING_ANALYSIS: BUILDING_PANELS,
+}
 """The panels of each check's analysis."""
 
 DISCRETE_COLUMN = {
@@ -189,10 +235,10 @@ def profile(
     axs: Sequence[Axes] | None = None,
     display_units: Mapping[str, object] | None = None,
 ) -> tuple[Figure, list[Axes]]:
-    """Draw a profile along its utility: four, six or eight panels.
+    """Draw a profile along its asset: four, five, six or eight panels.
 
     A movement profile is drawn in four panels, top to bottom, against
-    distance along the utility:
+    distance along the utility or wall:
 
     1. settlement (``vertical``), its axis pointing down, so the trough hangs
        as it does in the ground;
@@ -237,6 +283,19 @@ def profile(
     Joint values exist only at a pipe length's spacing, so they have no
     analytical twin; they are solid lines with gaps near the ends.
 
+    A building check (from `garisenda.check_building`) is drawn in five
+    panels against distance along the wall, at its foundation level:
+
+    1. settlement, its axis pointing down, with the settlement limit and the
+       largest settlement marked with its utilization;
+    2. deflection from the chord, ``deflection`` (d = w - c), its axis
+       pointing down as the settlement's;
+    3. slope, ``vertical_slope``, in mm/m by default, with the slope limit as
+       +-limit (the check is on its size) labeled also as 1/n, and the
+       largest slope marked at its sign;
+    4. horizontal strain, ``along_strain``, tension positive;
+    5. tensile strain by zone.
+
     On every figure, critical stations are ticked along the bottom of every panel.
     Stations that aren't ``"within"`` are shaded on every panel by verdict, and
     each flag's reason is printed under the figure with its distance range, so
@@ -249,10 +308,11 @@ def profile(
     ----------
     result : Result
         A movement profile, from `garisenda.movement_profile`, or a check,
-        from `garisenda.check_continuous_pipe` or
-        `garisenda.check_jointed_pipe`.
+        from `garisenda.check_continuous_pipe`,
+        `garisenda.check_jointed_pipe` or `garisenda.check_building`.
     axs : sequence of matplotlib Axes, optional
-        Four, or six for a continuous-pipe check, or eight for a jointed one.
+        Four, or six for a continuous-pipe check, eight for a jointed one, or
+        five for a building check.
         The panels to draw into, top to bottom, as `matplotlib.pyplot.subplots`
         returns them; no figure is created. Otherwise a new figure is made.
     display_units : mapping, optional
@@ -270,7 +330,7 @@ def profile(
     Raises
     ------
     ValueError
-        If `axs` isn't four Axes (six or eight for a check), the result has no
+        If `axs` isn't four Axes (five, six or eight for a check), the result has no
         ``distance`` column, or `display_units` names an unknown kind.
     pint.DimensionalityError
         If a display unit doesn't fit its kind.
@@ -301,7 +361,10 @@ def profile(
             _mark_closure(ax, spec, values, distance, display)
             if spec.down:
                 ax.invert_yaxis()
-        panels[-1].set_xlabel(display.label("Distance along utility", "length"))
+        if result.analysis == BUILDING_ANALYSIS:
+            draw_building_check(panels, result, distance, display)
+        along = "wall" if isinstance(result.asset, Building) else "utility"
+        panels[-1].set_xlabel(display.label(f"Distance along {along}", "length"))
         _offset_axis(panels[0], values, length, display, offset_label(result))
         flag_notes(panels[-1], result, distance, display)
         fig.suptitle(_title(result, display), fontsize=10)
@@ -309,6 +372,13 @@ def profile(
 
 
 def _title(result: Result, display: DisplayUnits) -> str:
+    if result.analysis == BUILDING_ANALYSIS:
+        recorded = {entry.name: entry.value for entry in result.inputs}
+        return (
+            f"Building check along {result.subject}\n"
+            f"{recorded.get('beam_method', '')} beam; cut-off: "
+            f"{recorded.get('cutoff', '')}; chords dashed"
+        )
     if result.analysis not in PANELS:
         return f"Movement profile along {result.subject}"
     jointed = result.analysis == JOINTED_ANALYSIS
@@ -390,7 +460,7 @@ def _panels(
             count,
             1,
             sharex=True,
-            figsize=(7.0, {4: 9.0, 6: 12.5}.get(count, 16.0)),
+            figsize=(7.0, {4: 9.0, 5: 11.5, 6: 12.5}.get(count, 16.0)),
             layout="constrained",
         )
         return fig, list(created)

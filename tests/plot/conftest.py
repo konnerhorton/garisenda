@@ -148,3 +148,57 @@ def make_jointed():
 @pytest.fixture
 def jointed():
     return jointed_check()
+
+
+def building_check_with(**changes):
+    """The building figures' example: a wall over one tunnel, checked with presets.
+
+    A tunnel 20 m deep, 6 m in diameter, volume loss 1.5 %, k = 0.5; a wall
+    from offset -30 m to +30 m, 9 m high on a foundation 1.5 m down; the
+    Burland & Wroth beam, a 2.5 i cut-off and acceptable category 2.
+    `changes` replace the wall's arguments (``wall``), the trough's
+    (``volume_loss``) or the check's judgments.
+    """
+    tunnel_ = tunnel()
+    source = gs.sources.transverse_trough(
+        tunnel_,
+        volume_loss=changes.pop("volume_loss", 1.5 * u.percent),
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    wall = {
+        "building_id": "W-1",
+        "station": 50,
+        "start_offset": -30,
+        "end_offset": 30,
+        "height": 9.0,
+        "foundation_depth": 1.5,
+    }
+    wall.update(changes.pop("wall", {}))
+    building = gs.buildings.perpendicular_building(tunnel_, **wall)
+    limits = gs.presets.preliminary_assessment_limits()
+    judgments = {
+        "beam_method": gs.buildings.burland_wroth_beam(),
+        "youngs_to_shear_modulus_ratio": gs.presets.youngs_to_shear_modulus_ratio(
+            structure="masonry"
+        ),
+        "category_limits": gs.presets.damage_categories(),
+        "cutoff": gs.buildings.trough_width_cutoff(multiple=2.5),
+        "settlement_limit": limits.settlement,
+        "slope_limit": limits.slope,
+        "acceptable_category": 2,
+        "interaction": "greenfield",
+    }
+    judgments.update(changes)
+    return gs.check_building(
+        gs.movement_profile(building, source, spacing=1.0), **judgments
+    )
+
+
+@pytest.fixture(scope="module")
+def building_check():
+    return building_check_with()
+
+
+@pytest.fixture
+def make_building_check():
+    return building_check_with

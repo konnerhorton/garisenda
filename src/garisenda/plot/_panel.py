@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib.axes import Axes
 
 from garisenda._result import Result
-from garisenda.plot._display import DisplayUnits
+from garisenda.plot._display import DisplayUnits, one_in
 
 
 @dataclass(frozen=True)
@@ -75,6 +75,8 @@ def draw_limits(ax: Axes, spec: Panel, result: Result, display: DisplayUnits) ->
         value = given * display.factor("length") if radius else shown
         unit = display.symbol("length" if radius else spec.kind)
         text = f"R = {value:.4g} {unit}" if radius else f"{value:.4g} {unit}"
+        if spec.kind == "slope":
+            text += f" ({one_in(given)})"
         ax.annotate(
             f"{limit.label}: {text}",
             (1.0, shown),
