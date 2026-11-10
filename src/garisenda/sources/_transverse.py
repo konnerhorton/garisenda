@@ -65,6 +65,11 @@ def transverse_surface_trough(
 ) -> "TransverseSurfaceTrough":
     """Return the steady-state transverse Gaussian trough at the ground surface.
 
+    This is the movement at the ground surface (z = 0) only. For a buried
+    utility, use `gs.sources.transverse_trough`, which gives the trough at its
+    depth, and at z = 0 gives this same trough with
+    `gs.sources.linear_trough_width` and the same k.
+
     With o the offset of a point from the tunnel axis in plan, z0 the axis depth
     and D the diameter:
 

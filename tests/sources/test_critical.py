@@ -1,6 +1,7 @@
 """Critical distances by root-finding (M2 (a), spec decisions 8-10, AC 6)."""
 
 import math
+import re
 
 import numpy as np
 import pytest
@@ -115,7 +116,27 @@ def test_bore_message_gives_distances():
     assert "[" not in message
     assert message == (
         "Points inside the bore can't be evaluated at distances "
-        "17.5, 18.75, 20, 21.25, 22.5 m along the segment."
+        "17.5, 18.75, 20, 21.25, 22.5 m along the segment. The bore has its "
+        "axis at depth 20 m and diameter 6 m, so it spans depths 17 to 23 m."
+    )
+
+
+def test_bore_message_gives_a_range_past_five_points():
+    # Sampled finer through the bore: more than five points inside it.
+    with pytest.raises(ValueError) as caught:
+        find_critical_distances(
+            trough(),
+            start=(-20, 50, 20),
+            end=(20, 50, 20),
+            sampling=0.01,
+            tolerance=TOLERANCE,
+        )
+    message = str(caught.value)
+    assert "[" not in message
+    assert re.search(
+        r"^Points inside the bore can't be evaluated at \d+ points from "
+        r"17\.\d+ to 22\.\d+ m along the segment\. The bore",
+        message,
     )
 
 

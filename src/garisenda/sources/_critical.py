@@ -238,14 +238,30 @@ def _derivatives(
 
 
 def _with_distances(message: str, distance: FloatArray) -> str:
-    """Replace the last list of point indices in a message with distances."""
+    """Replace the last list of point indices in a message with distances.
+
+    Up to `LISTED_DISTANCES` are listed; more are given as a count and range.
+    """
     lists = list(re.finditer(r":? ?\[(\d+(?:, \d+)*)\]", message))
     if not lists:
         return message
     last = lists[-1]
     indices = [int(index) for index in last.group(1).split(", ")]
-    named = ", ".join(f"{distance[index]:.6g}" for index in indices)
     return (
-        f"{message[: last.start()]} at distances {named} m along the segment"
-        f"{message[last.end() :]}"
+        f"{message[: last.start()]} {_distances(distance[indices])} along the "
+        f"segment{message[last.end() :]}"
     )
+
+
+LISTED_DISTANCES = 5
+"""Up to this many distances are listed in a message; more are given as a range."""
+
+
+def _distances(distance: FloatArray) -> str:
+    """Name distances in m: each, or past `LISTED_DISTANCES`, a count and range."""
+    if distance.size > LISTED_DISTANCES:
+        return (
+            f"at {distance.size} points from {float(np.min(distance)):.6g} to "
+            f"{float(np.max(distance)):.6g} m"
+        )
+    return f"at distances {', '.join(f'{value:.6g}' for value in distance)} m"

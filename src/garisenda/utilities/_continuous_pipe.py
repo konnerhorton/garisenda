@@ -14,11 +14,10 @@ from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
 from garisenda._units import PlainNumber
 from garisenda.profile._movement_profile import (
     MERGE_TOLERANCE,
-    _with_distances,
     merge_stations,
     profile_rows,
 )
-from garisenda.sources._critical import _derivatives, find_zeros
+from garisenda.sources._critical import _derivatives, _with_distances, find_zeros
 from garisenda.sources._movement import Flag, MethodRecord, Source, Verdict, worst
 from garisenda.sources._segment import directions
 from garisenda.sources._transverse_trough import (

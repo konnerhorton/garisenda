@@ -214,7 +214,7 @@ def test_twins_draw_both_bores_axes_and_troughs(twins_a):
         north, south = (line(ax, f"trough:{name}:{key}") for name in ("north", "south"))
         assert north.get_linestyle() == "--"
         assert south.get_linestyle() == ":"
-    assert bottom.get_xlabel() == "Offset from reference tunnel axis (m)"
+    assert bottom.get_xlabel() == "Offset from axis of tunnel 'north' (m)"
     assert "note" not in gids(bottom)
 
 

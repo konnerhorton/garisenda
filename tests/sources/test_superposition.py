@@ -212,7 +212,7 @@ def test_profile_through_a_bore_names_the_distances():
     with pytest.raises(
         ValueError,
         match=r"^Utility 'W-1': south: .*inside the bore can't be evaluated "
-        r"at distances [\d., ]+ m along the segment\.$",
+        r"at distances [\d., ]+ m along the segment\. The bore has its axis",
     ):
         profile(case_a(), depth=20.0, start_offset=8, end_offset=30)
 

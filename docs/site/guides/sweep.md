@@ -31,7 +31,7 @@ The values can be a list, a numpy array or a pint array, and each element is pas
 
 - `run`, then each varied input **as used**: its magnitude in SI from the run's input record, so 1 % appears as 0.01.
 - For each governing value, its value and `<name>_distance`, where along the utility it occurs.
-- `validity`, the result's verdict, and `warnings`, how many flags it has. Above, the runs at depth 2 m are *outside*, because the trough is a surface method.
+- `validity`, the result's verdict, and `warnings`, how many flags it has. Above, the runs at depth 2 m are *outside*, because the trough is a surface method. For a buried utility, use `gs.sources.transverse_trough`, the trough at depth ([Below the surface](below-the-surface.md)).
 - `error`: a run that raises is recorded in its row, with its values missing, and the sweep goes on. Above, the runs at depth 20 m put the sewer through the tunnel. If every run raises, the sweep raises the first error, since that is a mistake in the function.
 
 `table.attrs` holds each column's unit (`units`), the function's name (`run`), the `mode`, the varied names (`vary`) and every input that wasn't varied (`fixed_inputs`), with its value, unit and source.

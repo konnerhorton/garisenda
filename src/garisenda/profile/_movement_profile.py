@@ -1,7 +1,6 @@
 """The ground's movement resolved along a utility (SPEC §3)."""
 
 import math
-import re
 
 import numpy as np
 import numpy.typing as npt
@@ -9,8 +8,9 @@ import pandas as pd
 
 from garisenda._inputs import judgments, record
 from garisenda._result import Result, empty_checks
+from garisenda.sources._critical import _with_distances
 from garisenda.sources._movement import Flag, MethodRecord, Source, Verdict, worst
-from garisenda.sources._segment import directions
+from garisenda.sources._segment import InsideBoreError, directions
 from garisenda.utilities._utility import Utility
 
 MERGE_TOLERANCE = 1e-6
@@ -128,7 +128,8 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         If `spacing` isn't positive or gives more than 1,000,000 stations, the
         utility is vertical (it has no lateral direction), or the source can't
         evaluate a station (inside the bore, say), naming the utility and the
-        stations' distances.
+        stations' distances; inside a bore, also the bore's depths, the
+        utility's depth and what to check.
 
     Notes
     -----
@@ -171,7 +172,7 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
             source.critical_distances(start=start, end=end), dtype=np.float64
         )
     except ValueError as error:
-        raise ValueError(f"{where}: {error}") from error
+        raise ValueError(f"{where}: {error}{_bore_remedy(utility, error)}") from error
     distance, is_critical = _stations(length, spacing_m, critical)
     values, flags, validity = profile_rows(utility, source, distance, is_critical)
     return Result(
@@ -210,7 +211,8 @@ def profile_rows(
     try:
         movement = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
     except ValueError as error:
-        raise ValueError(f"{where}: {_with_distances(str(error), distance)}") from error
+        message = _with_distances(str(error), distance)
+        raise ValueError(f"{where}: {message}{_bore_remedy(utility, error)}") from error
 
     gradient, hessian = movement.gradient, movement.hessian
 
@@ -292,11 +294,23 @@ def _stations(
     )
 
 
-def _with_distances(message: str, distance: FloatArray) -> str:
-    """Name the stations' distances where a source's message lists indices."""
-    lists = re.findall(r"\[(\d+(?:, \d+)*)\]", message)
-    if not lists:
-        return message
-    indices = [int(index) for index in lists[-1].split(", ")]
-    named = ", ".join(f"{distance[index]:.6g}" for index in indices)
-    return f"{message} These are the stations at distances {named} m along it."
+def _bore_remedy(utility: Utility, error: ValueError) -> str:
+    """For a point inside a bore, the utility's depth and what to check."""
+    if not isinstance(error, InsideBoreError):
+        return ""
+    depths = np.asarray(utility.vertices, dtype=np.float64)[:, 2]
+    low, high = float(np.min(depths)), float(np.max(depths))
+    if high - low < 1e-9:
+        at = f"at depth {low:.6g} m"
+    else:
+        at = f"at depths {low:.6g} to {high:.6g} m"
+    built = utility.built
+    if built is None:
+        check = "Check its vertices' depths."
+    else:
+        check = (
+            "Check its depth, and its elevation_reference "
+            f"({built.elevation_reference!r}), which is converted to the axis "
+            "with the given diameter."
+        )
+    return f" The utility's axis is {at}. {check}"
