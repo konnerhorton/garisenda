@@ -134,3 +134,46 @@ def directions(
     lateral = np.array([along[1], -along[0], 0.0]) / horizontal
     vertical: FloatArray = np.cross(lateral, along)
     return along, vertical, lateral
+
+
+def offset_extent(
+    tunnel: "IdealizedTunnel",
+    start: FloatArray,
+    end: FloatArray,
+    length: float,
+    half_width: float,
+) -> tuple[float, float] | None:
+    """Return the distances along a segment within a half-width of a tunnel's axis.
+
+    The offset o is linear in distance s along a straight segment, so the
+    points with |o(s)| <= half_width form one interval, clipped to [0, L].
+    A segment parallel to the tunnel is all within or all beyond.
+
+    Returns
+    -------
+    tuple of two floats, or None
+        The interval's ends in m from `start`, or None if no length of the
+        segment is within.
+    """
+    _, offsets = tunnel.station_offset(
+        x=np.array([start[0], end[0]]), y=np.array([start[1], end[1]])
+    )
+    o_start, o_end = (float(value) for value in np.atleast_1d(offsets))
+    change = o_end - o_start
+    if abs(change) <= 1e-12 * length:
+        return (0.0, length) if abs(o_start) <= half_width else None
+    ends = sorted(
+        length * (target - o_start) / change for target in (-half_width, half_width)
+    )
+    low, high = max(ends[0], 0.0), min(ends[1], length)
+    if high <= low:
+        return None
+    return low, high
+
+
+def read_multiple(multiple: float) -> float:
+    """Return a trough-width multiple as a positive finite float, or raise."""
+    value = float(multiple)
+    if not (math.isfinite(value) and value > 0):
+        raise ValueError(f"multiple must be positive and finite, not {value}.")
+    return value

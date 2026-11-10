@@ -10,7 +10,13 @@ import numpy.typing as npt
 from garisenda._inputs import InputRecord, judgments, record, record_method
 from garisenda.sources._critical import find_critical_distances
 from garisenda.sources._movement import Flag, MethodRecord, Movement
-from garisenda.sources._segment import check_outside_bore, read_points, read_segment
+from garisenda.sources._segment import (
+    check_outside_bore,
+    offset_extent,
+    read_multiple,
+    read_points,
+    read_segment,
+)
 from garisenda.sources._trough_width import LINEAR_NAME, TroughWidth
 from garisenda.sources._tunnel import IdealizedTunnel
 
@@ -19,6 +25,8 @@ DEPTH_TOLERANCE = 1e-3
 CRITICAL_DISTANCE_SAMPLING = 1 / 8
 """Sampling interval for critical distances, as a fraction of the feature length."""
 CRITICAL_DISTANCE_TOLERANCE = 1e-9
+LEVEL_TOLERANCE = 1e-9
+"""Change of depth in m along a segment within which it counts as level."""
 """Length in m to which critical distances are found."""
 
 HOW = (
@@ -390,6 +398,48 @@ class TransverseTrough:
         """
         start_m, end_m, _ = read_segment(start, end)
         return float(self.width_at(max(float(start_m[2]), float(end_m[2]))))
+
+    def trough_extent(
+        self, *, start: object, end: object, multiple: float
+    ) -> tuple[float, float] | None:
+        """Return where a level segment is within m i of the tunnel's axis in plan.
+
+        i is the trough's width at the segment's depth (capped at the crown),
+        the trough the segment follows. The offset o is linear in distance
+        along a straight segment, so the extent is the one interval where
+        |o| <= m i, clipped to [0, L]. A segment parallel to the tunnel is all
+        within or all beyond.
+
+        Parameters
+        ----------
+        start, end : array of three lengths
+            The segment's ends as (x, y, depth), in m if plain numbers.
+        multiple : float
+            m, the half-width of the extent in trough widths. Positive.
+
+        Returns
+        -------
+        tuple of two floats, or None
+            The distances from `start` in m where the extent begins and ends,
+            within [0, L], or None if no length of the segment is within it.
+
+        Raises
+        ------
+        ValueError
+            If an end isn't three finite values, the segment has zero length,
+            `multiple` isn't positive and finite, or the segment changes depth
+            (more than 1e-9 m), since i would then vary along it.
+        """
+        half_width = read_multiple(multiple)
+        start_m, end_m, length = read_segment(start, end)
+        if abs(float(end_m[2]) - float(start_m[2])) > LEVEL_TOLERANCE:
+            raise ValueError(
+                "The trough's extent is found only on a level segment: this one "
+                f"runs from depth {float(start_m[2]):g} m to {float(end_m[2]):g} m, "
+                "so the trough width i would vary along it."
+            )
+        half_width *= float(self.width_at(float(start_m[2])))
+        return offset_extent(self.tunnel, start_m, end_m, length, half_width)
 
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         crown = self.crown_depth

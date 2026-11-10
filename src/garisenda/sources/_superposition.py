@@ -326,6 +326,45 @@ class Superposition:
             for source in self.sources.values()
         )
 
+    def trough_extent(
+        self, *, start: object, end: object, multiple: float
+    ) -> tuple[float, float] | None:
+        """Return the hull of the sources' trough extents on a segment.
+
+        From the first point within any source's extent to the last, so the
+        ground between two tunnels is kept even where it is beyond both.
+
+        Parameters
+        ----------
+        start, end : array of three lengths
+            The segment's ends as (x, y, depth), in m if plain numbers.
+        multiple : float
+            m, the half-width of the extent in trough widths. Positive.
+
+        Returns
+        -------
+        tuple of two floats, or None
+            The distances from `start` in m where the extent begins and ends,
+            within [0, L], or None if every source gives none.
+
+        Raises
+        ------
+        ValueError
+            A source's error, raised again with its message prefixed
+            ``"<name>: "``.
+        """
+        extents = []
+        for name, source in self.sources.items():
+            try:
+                extent = source.trough_extent(start=start, end=end, multiple=multiple)
+            except ValueError as error:
+                raise ValueError(f"{name}: {error}") from error
+            if extent is not None:
+                extents.append(extent)
+        if not extents:
+            return None
+        return min(low for low, _ in extents), max(high for _, high in extents)
+
 
 def _sum(arrays: Iterator[npt.NDArray[np.float64]]) -> npt.NDArray[np.float64]:
     total: npt.NDArray[np.float64] = np.sum(list(arrays), axis=0)
