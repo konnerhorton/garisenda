@@ -76,28 +76,26 @@ From a whole-package review at M3 (`dc59a48`) for whether an AI agent can use ga
 ### 15. Flag an asset that ends where the trough is still significant · Claude (You to set the margin) · SPEC §8.3, §7
 - **What happens:** a utility from −3 m to +3 m over a trough with i = 9 m returns `within` with no warnings; `axial_tension` is `none` with `passes=True`, though the tension peak (about ±√3 i ≈ ±15.6 m) is beyond the pipe's ends. A truncated pipe passes, and nothing says its extent was too short.
 - **Record:** SPEC §8.3 (🟡) says such an asset is flagged, with the margin set in M3's spec; `docs/work/m1b-movement-profile.md` defers it to M3. M3's specs don't set it and nothing tracks it.
-- **Open:** the margin (settlement or strain at an end as a fraction of its peak, or any source critical distance beyond an end), and whether it applies to the profile or only to the checks. Record it as a constant on the result.
+- **Decided (2026-11-10), provisional:** a margin of 3 m, likely to change, so it's a constant recorded on the result. 🟡 How it's read: the asset is flagged when one of the source's critical distances lies beyond an end, or within 3 m inside it.
+- **Open:** whether it applies to the profile or only to the checks. Needs its own unit.
 
 ### 16. A `within` verdict where no range was checked · You · SPEC §5.2, TODO #2
 - **What happens:** volume loss 50 %, k = 0.01 or k = 5 all give `within` (0.63 m settlement at 50 %). The only trace is one assumption, "No validity range is checked for k or volume loss", among 10–23. One trial agent caught it; nothing makes it hard to miss.
-- **Options:** a fourth verdict (`unchecked`); a broad plausibility band flagged `marginal` until TODO #2 sets real limits; or state "ranges not checked" on the summary's verdict line.
+- **Decided (2026-11-10):** warn. The result carries a warning that no validity range was checked for k or volume loss, until TODO #2 sets real limits. The verdict stays `within`.
 
 ### 17. Plain-number lengths read as m without a visible trace · You · SPEC §6
 - **What happens:** `IdealizedTunnel(diameter=20, axis_depth=60)` from a project in feet is silently 3.28× off. The input record says `given_as="plain number, read as m"`, but the summary doesn't show it.
-- **Options:** refuse plain lengths as percentages and angles are refused; or list plain-number inputs in the summary. Revisits SPEC §6's "a plain float is accepted and read as the documented SI unit".
-
-### 18. A reference line between twin bores · You · SPEC §8.3, §9
-- **What happens:** a brief giving offsets from an alignment midway between twin bores has to be shifted by hand to one bore (trial A). The profile and the cross-section now name the tunnel the offsets are from.
-- **Open:** whether to support a reference line that isn't a bore (a centerline), for the common twin-tunnel layout.
+- **Decided (2026-11-10):** always show units: the summary shows each input with its unit, and how it was given, so a plain number read as m is visible. Plain lengths are still accepted (SPEC §6 unchanged).
 
 ### 19. Internal references in published text and results · Claude · SPEC §2.2, §8.5
 - **What happens:** result assumptions read "(SPEC §1.3)" and "(TODO #2)"; the pullout preset's caveat cites "the M3 (b) spec's case J-A"; errors cite "(SPEC §7)", "(SPEC §1.3)"; 25 public docstrings cite SPEC or TODO (52 string literals in `src/`). The engineer signing off can't follow them.
-- **Fix:** replace with the docs page or the source citation, and a test that no published string (docstrings, assumptions, error messages) contains `SPEC §`, `TODO #` or a milestone id.
+- **Fix:** replace with the docs page or the source citation, and a test that no published string (docstrings, assumptions, error messages) contains `SPEC §`, `TODO #` or a milestone id. Planned in `docs/work/published-text-and-input-names.md`.
 
 ### 22. Input records with the same name · Claude · SPEC §5.1
 - A single-tunnel result has two inputs named `diameter` (the tunnel's and the utility's) with no owner; superposition prefixes source inputs (`north.diameter`) but the utility's stay bare. An audit table or memo built from `inputs` can mix them up.
-- **Fix:** prefix by owner (`tunnel.`, `utility.`), as superposition does.
+- **Fix:** prefix the utility's inputs (`utility.diameter`), as superposition prefixes its sources'. Planned in `docs/work/published-text-and-input-names.md`.
 
 ### 23. A governing utilization for a check and a sweep · You · SPEC §5.1, §5.3
 - `checks` and `gs.sweep` give no overall governing utilization or pass, so trial B took the maximum itself and bisected for the volume loss at which the pipe stops passing. A symmetric peak reports one location only (trial A).
 - **Open:** whether to add a governing row or column (with `None` limits and NA passes handled explicitly), and whether to report both locations of a symmetric peak.
+- **Deferred (2026-11-10):** to revisit later; no trigger set.
