@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pandas as pd
 import pytest
@@ -458,3 +458,18 @@ def test_a_check_row_with_zone_and_category_round_trips():
     assert row["category"] == 1
     assert row["limit"] is None
     assert row["governing_distance"] is None
+
+
+# M4 (b), AC 11: a building check keeps its damage categories, outside the views
+
+
+def test_categories_are_none_but_for_a_building_check():
+    for made in made_by_analyses():
+        assert made.categories is None
+        assert "categories" not in made.to_dict()
+
+
+def test_categories_take_no_part_in_equality():
+    made = made_by_analyses()[1]
+    other = replace(made, categories=gs.presets.damage_categories())
+    assert other == made

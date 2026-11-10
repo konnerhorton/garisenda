@@ -69,6 +69,10 @@ Items to think through or research. Each item notes who owns it and the SPEC sec
 
 ## Figures
 
+### 25. Building figures deferred by M4 (b) · You · SPEC §9
+- **Deferred (2026-11-10), if users ask:** Burland (1995)'s interaction chart (Δ/L against ε_h by category, for a given L/H), drawn from Eqs. 7–10 rather than digitized: each zone has its own L/H, so it is a figure per zone. And the deformed wall drawn exaggerated on the cross-section: the profile's deflection panel shows it to scale, and an exaggerated drawing needs a magnification the reader has to keep in mind.
+- **Open with #7:** the buildings guide cites no figure of Mair, Taylor & Burland (1996); their Fig. 3 (zones, chord and Δ) is to be read against the page before it is cited.
+
 ### 11. Profile figure details, after user feedback · You · SPEC §9
 - **Decided at M1 (c)'s figure review (2026-11-03), to revisit with users:** the profile joins stations with straight lines, so it looks jagged at a coarse `spacing` (the figure draws only the result's values; a finer spacing smooths it); the lateral lines stay, though they are zero for a perpendicular utility.
 - **Open:** whether to drop the lateral lines for a built perpendicular utility, and whether users want a note or a smoother line for coarse spacings.

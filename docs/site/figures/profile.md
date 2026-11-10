@@ -50,10 +50,24 @@ A result of `gs.check_jointed_pipe` is drawn in eight panels: the continuous che
 
 The example is on the [Jointed pipes](../guides/jointed-pipes.md) page.
 
+## A building check
+
+A result of `gs.check_building` is drawn in five panels against distance along the wall, at its foundation level, from the example's second part:
+
+![A building check in five panels](../img/generated/profile-building.png)
+
+- **Zones:** hogging (red) and sagging (purple) zones on every panel, split by thin vertical lines. Where the cut-off falls inside the wall, a dotted line marks it and the wall beyond is hatched, not assessed.
+- **Settlement:** each zone's chord dashed, and the deflection between the chord and the settlement filled, with the settlement limit.
+- **Deflection from the chord:** each zone's Δ marked where it occurs, with Δ/L as 1/n.
+- **Slope**, in mm/m, with the slope limit as ±1/500; **horizontal strain**, with each zone's average ε_h as a level line.
+- **Tensile strain by zone:** each zone's total bending and diagonal strain as level lines, the one that governs thick, on the damage categories' bands, with the acceptable category's limit and the governing zone marked.
+
+How to read it is on the [Buildings](../guides/buildings.md#the-figures) page.
+
 ## Options
 
-`display_units=` changes the units of any kind of quantity: `length` (m), `displacement` (mm), `strain` (microstrain), `curvature` (1/km) and `angle` (degree). The example's second figure shows movement in inches:
+`display_units=` changes the units of any kind of quantity: `length` (m), `displacement` (mm), `strain` (microstrain), `curvature` (1/km), `angle` (degree) and `slope` (mm/m). The example's second figure shows movement in inches:
 
 ![The same profile with movement in inches](../img/generated/profile-inches.png)
 
-`axs=` draws into four axes you already have (six for a continuous-pipe check, eight for a jointed one), top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).
+`axs=` draws into four axes you already have (five for a building check, six for a continuous-pipe check, eight for a jointed one), top to bottom, as `plt.subplots(4, 1, sharex=True)` returns them. The function returns `(fig, axs)`, so you can change anything matplotlib can before saving. See [`gs.plot.profile`](../reference/plot.md#garisenda.plot.profile).

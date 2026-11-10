@@ -29,6 +29,7 @@ nav = [
     "guides/below-the-surface.md",
     "guides/continuous-pipes.md",
     "guides/jointed-pipes.md",
+    "guides/buildings.md",
   ] },
   { "Reference" = [
     "reference/garisenda.md",
