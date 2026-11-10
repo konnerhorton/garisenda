@@ -48,12 +48,31 @@ def draw_building_check(
         _zone_ends(ax, zones, length)
     _cutoff(panels, result, distance, length)
     if zones.empty:
+        for ax in (panels[1], panels[4]):
+            _note(ax, "no zone: the wall is wholly beyond the cut-off", "no_zone")
+        _mark_slope(panels[2], result, display)
         return
     _settlement(panels[0], result, display)
     _deflection(panels[1], result, display)
     _mark_slope(panels[2], result, display)
     _horizontal_strain(panels[3], zones, display)
     _tensile_strain(panels[4], result, display)
+
+
+def _note(ax: Axes, text: str, gid: str) -> None:
+    """Write a note at the top right of a panel, as a missing limit is noted."""
+    ax.annotate(
+        text,
+        (1.0, 1.0),
+        xycoords="axes fraction",
+        xytext=(-2, -2),
+        textcoords="offset points",
+        ha="right",
+        va="top",
+        fontsize=6,
+        color="0.35",
+        gid=gid,
+    )
 
 
 def _middle(zone: Any, length: float) -> float:
@@ -320,7 +339,11 @@ def _tensile_strain(ax: Axes, result: Result, display: DisplayUnits) -> None:
             )
     band, limit = _acceptable(result)
     shown_limit = limit * factor
-    if band is not None and math.isfinite(limit):
+    if band is None:
+        _note(ax, "no acceptable category", "no_limit")
+    elif math.isinf(limit):
+        _note(ax, f"acceptable: category {band.label}, no upper limit", "no_limit")
+    else:
         ax.axhline(
             shown_limit, color="0.45", linewidth=0.7, gid="damage_category_limit"
         )
@@ -359,7 +382,8 @@ def _scale(ax: Axes, result: Result, factor: float) -> None:
         if math.isfinite(upper):
             levels.append(upper)
     low, high = min(levels) * factor, max(levels) * factor
-    span = high - low
+    # All at zero (a flat zone with no limit set): any range will do.
+    span = high - low if high > low else 1.0
     ax.set_ylim(low - MARGIN * span, high + MARGIN * span)
 
 

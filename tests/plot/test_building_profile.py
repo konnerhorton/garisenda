@@ -389,3 +389,75 @@ def test_twin_tunnels_draw_five_zones(twin_building_check):
     ]
     assert len(marks) == 5
     plt.close(fig)
+
+
+# AC 9: the edge cases draw, with their reason
+
+
+def test_a_wall_wholly_beyond_the_cutoff(make_building_check):
+    result = make_building_check(wall={"start_offset": 40, "end_offset": 100})
+    assert result.zones.empty
+    fig, axs = gs.plot.profile(result)
+    assert len(axs) == 5
+    for panel in (1, 4):
+        (note,) = texts(axs[panel], "no_zone")
+        assert note.get_text() == "no zone: the wall is wholly beyond the cut-off"
+    for ax in axs:
+        assert not lines(ax, "zone_end")
+        assert not lines(ax, "cutoff")
+        (hatched,) = patches(ax, "beyond_cutoff")
+        assert hatched.get_width() == pytest.approx(60.0)
+    assert not lines(axs[4], "check:damage_category")
+    bands = [item for item in axs[4].patches if str(item.get_gid()).startswith("band")]
+    assert not bands
+    assert not [item for item in axs[1].get_lines() if "delta:" in str(item.get_gid())]
+    (flags,) = texts(axs[-1], "flags")
+    assert "no zone is assessed" in flags.get_text()
+    plt.close(fig)
+    fig, section = gs.plot.cross_section(result)
+    assert not [item for item in section[2].get_lines() if item.get_gid() == "zone_end"]
+    plt.close(fig)
+
+
+def test_a_flat_zone(make_building_check):
+    result = make_building_check(
+        wall={"start_offset": 500, "end_offset": 560}, cutoff=gs.buildings.no_cutoff()
+    )
+    assert list(result.zones["mode"]) == ["flat"]
+    fig, axs = gs.plot.profile(result)
+    (note,) = texts(axs[1], "flat:zone_1")
+    assert note.get_text() == "flat: no deflection"
+    assert not lines(axs[1], "delta:zone_1")
+    assert lines(axs[3], "horizontal_strain:zone_1")
+    assert lines(axs[4], "total_bending_strain:zone_1")
+    plt.close(fig)
+
+
+@pytest.mark.parametrize(
+    ("judgment", "panel", "text", "limit"),
+    [
+        ("settlement_limit", 0, "no settlement limit", "settlement_limit"),
+        ("slope_limit", 2, "no slope limit", "slope_limit"),
+        ("acceptable_category", 4, "no acceptable category", "damage_category_limit"),
+    ],
+)
+def test_no_limit(make_building_check, judgment, panel, text, limit):
+    result = make_building_check(**{judgment: None})
+    fig, axs = gs.plot.profile(result)
+    (note,) = texts(axs[panel], "no_limit")
+    assert note.get_text() == text
+    assert not lines(axs[panel], limit)
+    (mark,) = texts(axs[4], "check:damage_category")
+    if judgment == "acceptable_category":
+        assert mark.get_text() == "category 0 (negligible), no limit"
+    plt.close(fig)
+
+
+def test_the_last_band_accepted(make_building_check):
+    result = make_building_check(acceptable_category=4)
+    fig, axs = gs.plot.profile(result)
+    assert not lines(axs[4], "damage_category_limit")
+    (note,) = texts(axs[4], "no_limit")
+    assert note.get_text() == "acceptable: category 4 to 5, no upper limit"
+    assert texts(axs[4], "check:damage_category")
+    plt.close(fig)
