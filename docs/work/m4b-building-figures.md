@@ -179,3 +179,136 @@ The example for 1–8: a tunnel 20 m deep, 6 m in diameter, volume loss 1.5 %, k
 13. **The plot contract:** `rcParams` unchanged after drawing; drawing into given `axs` creates no figure; the result is unchanged after drawing (its `values`, `zones` and `checks` equal copies taken before).
 14. **Docs:** `examples/buildings.py`, `profile.py` and `cross-section.py` run; the site builds with `--strict` and no `griffe:` warning; `tests/test_published_text.py` passes over the new pages and strings.
 15. **Looked at:** the generated figures are checked by eye against decisions 2, 5 and 7 once the tests pass, in a new session if cheaper.
+
+## Plan
+
+Nine build commits, each green on lint, format, mypy strict and pytest. Steps 1–6 run on Sonnet: they are plumbing, a refactor and drawing, the spec names every artist and its data, and the tests compare drawn data with the result. Steps 7–9 run on Opus: the edge cases (SPEC §10), the guide's sources section, and judging the figures against the spec. A new session starts before 4, before 7 and before 9. Items not in the spec are marked 🟡. Following the workflow rule, each SPEC change goes in the commit that makes it true.
+
+The drawing test fixture is the acceptance criteria's example (tunnel 20 m deep, 6 m, 1.5 %, k = 0.5; wall −30 to +30 m, H = 9 m, foundation 1.5 m, spacing 1 m; the presets, Burland & Wroth, 2.5i, acceptable category 2), built in `tests/plot/conftest.py` as `building_check`, with a `building_check_with(**changes)` helper for the variants. Drawn data are compared with the result's column times the display factor to `rtol=1e-12`; distances with `np.isclose(..., rtol=0, atol=1e-9)`.
+
+### 1. `M4 (b): keep a building check's damage categories in the result` (Sonnet)
+Spec decision 3.
+- `src/garisenda/_result.py`: `categories: "DamageCategories | None" = field(default=None, repr=False, compare=False)`, after `asset`, documented as `source` and `asset` are. Not in `to_dict()`.
+- `src/garisenda/buildings/_check.py`: passes `categories=categories` to `Result`.
+- `src/garisenda/_sweep.py`: check that a sweep's per-run results keep it (no change expected).
+- `SPEC.md` §5.1: a result keeps a building check's damage categories beside its source and asset.
+- Tests (AC 11):
+  - `tests/buildings/test_check_building.py`: a check's `categories` is the object passed (`is`);
+  - `tests/test_result.py`: a movement profile's and both pipe checks' are `None`; `"categories"` isn't a key of `to_dict()`; a check and a copy with `categories` replaced (`dataclasses.replace`) compare equal.
+
+### 2. `M4 (b): add the slope display kind` (Sonnet)
+Spec decision 4.
+- `src/garisenda/plot/_display.py`:
+  - `DEFAULTS["slope"] = "mm/m"`, `SI["slope"] = "dimensionless"`; the docstrings list the six kinds;
+  - `one_in(ratio) -> str` 🟡: a dimensionless ratio as "1/n", n = 1/ratio to 3 significant figures written in full ("1/500", "1/4700", "1/12300"), for the slope limit's label and Δ/L. A ratio of zero or less, or NaN, raises `ValueError` (a caller never passes one).
+- `gs.plot.profile`'s and `gs.plot.cross_section`'s docstrings list `slope` (default mm/m) among the display units.
+- `SPEC.md` §6 and §9: the `slope` kind, default mm/m.
+- Tests in `tests/plot/test_display.py` (AC 12, except the drawn panel, which is step 4's):
+  - `resolve(None)` gives mm/m for `slope`, and its factor is 1000;
+  - `{"slope": "percent"}` gives a factor of 100 and the symbol `%`;
+  - `{"slope": "m"}` raises `pint.DimensionalityError`;
+  - an unknown kind's message lists `'slope'`;
+  - `one_in`: 0.002 → "1/500", 1/4712 → "1/4710", 1/12345 → "1/12300", and 0 raises.
+
+### 3. `M4 (b): move the profile's panel helpers to their own module` (Sonnet)
+A refactor with no change in behavior, so step 4's building code can share the helpers without a circular import.
+- New `src/garisenda/plot/_panel.py`: `Limit`, `Panel`, `DASHED`, `_check_row`, `_mark`, `_draw_limits` and `_mark_checks` move here from `_profile.py`, which imports them.
+- `Panel` gains `down: bool = False` 🟡, an axis pointing down; `SETTLEMENT` has `down=True`, and `profile` inverts each panel whose spec says so instead of `panels[0]`.
+- Tests: the existing `tests/plot/` suite passes unchanged.
+
+### 4. `M4 (b): draw a building check in five panels` (Sonnet)
+Spec decision 2's panels with their lines, limits and checks; the zone overlays are step 5's. New session.
+- `src/garisenda/plot/_profile.py`:
+  - `BUILDING_ANALYSIS = "building_check"` and `BUILDING_PANELS` in `PANELS`:
+    1. settlement: `vertical`, displacement, `down=True`, limit `Limit("settlement_limit", "settlement", 1, "settlement limit")`, check `settlement`;
+    2. deflection from chord: `deflection`, displacement, `down=True`, "down +, as the settlement", no limit;
+    3. slope: `vertical_slope`, `slope`, "settlement increasing along +", limits `slope_limit` at ±1 (the − one unlabeled, as the radius limit), no generic check (the signed mark is drawn below);
+    4. horizontal strain: `along_strain`, strain, "tension +";
+    5. tensile strain: no lines, strain, "tension +, by zone".
+  - Labels "Settlement", "Deflection from chord", "Slope", "Horizontal strain", "Tensile strain"; the length error names the five panels for a building check.
+  - The x label is "Distance along wall" when `result.asset` is a `Building` (a check or a movement profile), else "Distance along utility".
+  - `_title`: "Building check along <id>", then the beam method's and the cut-off's recorded text from `inputs` and "chords dashed" (decision 2's title).
+- `src/garisenda/plot/_panel.py`: `_draw_limits` writes a `slope` limit's label as "slope limit: 2 mm/m (1/500)" with `one_in`.
+- New `src/garisenda/plot/_building.py` 🟡 (the building overlays, kept out of `_profile.py`, now 700 lines), with `draw_building_check(panels, result, distance, display)`, called from `profile` for a building check. In this step it marks the `slope` check at the signed `vertical_slope` of the `values` row at its `governing_distance` (`gid="check:slope"`), with its utilization.
+- `profile`'s docstring describes the five panels (the reference entry).
+- `SPEC.md` §9: the building check's profile in one sentence.
+- Tests in new `tests/plot/test_building_profile.py`:
+  - AC 1: five Axes, their y labels, "Distance along wall (m)"; four or six `axs` raise `ValueError` naming the five panels; a building's movement profile has four panels and "Distance along wall (m)";
+  - AC 2, the lines: `vertical`, `settlement_limit` at the check's limit, `check:settlement` at its value and distance;
+  - AC 3, the line: `deflection` equals the column, NaN where it is;
+  - AC 4: `vertical_slope` in mm/m, `slope_limit` at ±2 with "2 mm/m (1/500)", `check:slope` at the signed value of the governing row;
+  - AC 5, the line: `along_strain`;
+  - AC 12, the panel: `{"slope": "percent"}` labels it "Slope (%)" and draws the column × 100;
+  - AC 13: `rcParams` unchanged; given `axs` creates no figure (`plt.get_fignums()` before and after); `values`, `zones` and `checks` equal copies taken before.
+
+### 5. `M4 (b): draw the zones, chords, Δ and categories` (Sonnet)
+The rest of spec decision 2.
+- `src/garisenda/plot/_building.py`, for a check with zones:
+  - **every panel:** a `zone_end` line at each inner zone end (each zone's `end` but the last); the cut-off, where the first zone's `start` is after the first station or the last zone's `end` before the last (to 1e-9 m), as a dotted `cutoff` line and a hatched `beyond_cutoff` span (`axvspan`, outside the assessed range), labeled "beyond the cut-off: not assessed" on the top panel only;
+  - **colors** 🟡: hogging and sagging one color each, a flat zone gray, as module constants;
+  - **panel 1:** per zone, `chord:zone_<n>` (the `chord` column over the zone's rows, thin, dashed), the `zone_<n>` fill between `vertical` and `chord` over those rows (`fill_between`), and `zone_label:<n>` ("1 hogging") at the zone's middle, at the top of the panel;
+  - **panel 2:** per zone not flat, `delta:zone_<n>` at (`deflection_distance`, −Δ hogging / +Δ sagging) × factor, with "Δ = 3.2 mm, Δ/L = 1/4700" (Δ to 3 significant figures, Δ/L by `one_in`);
+  - **panel 4:** `horizontal_strain:zone_<n>`, a level line from `start` to `end` at `horizontal_strain`, in the zone's color;
+  - **panel 5:**
+    - per zone, `total_bending_strain:zone_<n>` and `total_diagonal_strain:zone_<n>` over [`start`, `end`], the one `governed_by` names at linewidth 2.0, the other at 0.8 🟡, labeled at the zone's right end with "bending"/"diagonal" and the governing one with the zone's category label;
+    - the scale, set explicitly (decision 2's rule): from the zones' strains, the acceptable limit, and the finite upper limit of the band holding the largest strain, plus `margins`-like padding 🟡 of 18 % as other panels; then each band of `result.categories` overlapping that range as `band:<number>` (`axhspan`, alternating grays, behind the lines), labeled at the right with "<number> <label>", drawn after the limits are set so they don't move them;
+    - `damage_category_limit` at the acceptable band's upper limit, labeled "acceptable: category 2, 1500 µε" 🟡 (the spec's example writes the limit in %; the label uses the panel's display unit, as every other limit label does);
+    - `check:damage_category` at the governing zone's middle, on its governing level line, with "category 1 (very slight), u = 0.42".
+- `profile`'s docstring: the overlays.
+- Tests in `tests/plot/test_building_profile.py`:
+  - AC 2: one `chord:zone_<n>` per zone equal to `chord` over its rows; one `zone_<n>` fill per zone (`PolyCollection`);
+  - AC 3: each `delta:` mark's position and text (Δ in mm, `one_in(deflection_ratio)`);
+  - AC 5: each `horizontal_strain:zone_<n>`'s x and y;
+  - AC 6: both level lines per zone at their columns over [`start`, `end`], the governing one thicker; the `band:` artists are those of `result.categories` whose span meets the y range, at their limits; `damage_category_limit` at 1500 µε; `check:damage_category` on the governing line with its label and utilization; the y range contains the largest strain, 1500 µε and the governing band's upper limit;
+  - AC 7: two `zone_end` and two `cutoff` lines per panel at the right distances, `beyond_cutoff` on both sides; with `no_cutoff()`, none of the three;
+  - AC 10: twin tunnels (the `twins_below_the_surface` geometry, a wall wide enough for five zones 🟡, checked first that it gives five): five `zone_<n>` fills, four `zone_end` lines on each panel, five `delta:` marks.
+
+### 6. `M4 (b): draw the wall on the cross-section` (Sonnet)
+Spec decision 7.
+- `src/garisenda/plot/_cross_section.py`, for a `Building`, in place of the interim line:
+  - the wall as a rectangle (`Rectangle` patch or closed line 🟡) between its offsets, from its foundation depth up to H above it (`gid="building"`), labeled with its id and "H = 9 m"; the section's data limits include its top, so the y range reaches above the ground when H exceeds the foundation depth;
+  - for a building check: a `zone_end` tick on the wall's base at each inner zone end, at the `offset` of the `values` row at that distance (the row exists, matched to 1e-9 m); `zone_label:<n>` inside the wall above its base at the zone's middle offset 🟡 (middle of the two ends' offsets); `cutoff` dotted vertical lines on all three panels at the offsets of the rows at the assessed range's ends, when the cut-off is inside the wall;
+  - the trough panels say "at foundation level (depth 1.5 m)" for a `Building`, in place of "at depth 1.5 m".
+- The docstring (the reference entry): the wall, its zones and the cut-off.
+- `SPEC.md` §9: the cross-section's wall in one sentence.
+- Tests in `tests/plot/test_cross_section.py` (AC 8):
+  - the `building` outline's x span is the offsets and its y span [foundation − H, foundation] (depth down +), and the section's y limits include −7.5 m;
+  - `zone_end` ticks at the rows' offsets; `cutoff` lines on all three panels;
+  - the trough panels' labels contain "at foundation level (depth 1.5 m)";
+  - a building's movement profile draws the outline and no `zone_end`, `zone_label:` or `cutoff`;
+  - `rcParams` unchanged.
+
+### 7. `M4 (b): draw a building check's edge cases` (Opus)
+Spec decision 5 and AC 9, on both figures. New session.
+- `src/garisenda/plot/_building.py`:
+  - **no zone** (empty `zones`): the whole wall hatched `beyond_cutoff`; panels 2 and 5 say "no zone: the wall is wholly beyond the cut-off" (`gid="no_zone"`); no zone lines, no `delta:`, no bands 🟡 (with no strain there is no band to show), no `check:damage_category`;
+  - **a flat zone:** `flat:zone_<n>` ("flat: no deflection") at its middle on panel 2, no `delta:` mark; its level lines on panels 4 and 5 drawn as any zone's;
+  - **no limit:** `settlement_limit=None` and `slope_limit=None` go through `_draw_limits`'s existing `no_limit` note; `acceptable_category=None` draws no `damage_category_limit` and "no acceptable category" (`no_limit`), and the governing zone's mark says "no limit";
+  - **the last band accepted** (limit ∞): no line, and "acceptable: category 4 to 5, no upper limit" 🟡 (the band numbers from the acceptable one to the last of `result.categories`), as `no_limit`.
+- `src/garisenda/plot/_cross_section.py`: with no zone, no zone marks; the cut-off isn't drawn (it's outside the wall) 🟡.
+- Read each spec decision against the drawing code once, and fix what differs.
+- Tests in `tests/plot/test_building_profile.py` and `test_cross_section.py` (AC 9):
+  - a wall wholly beyond the 2.5i cut-off: five panels, `no_zone` on panels 2 and 5, the flag's reason in `flags`, the cross-section draws; no raise, and no warning (pytest's warnings-as-errors);
+  - a wall 500 m away with `no_cutoff()`: `flat:zone_1`, no `delta:`;
+  - each `None` limit: its `no_limit` text, no limit line, and `check:damage_category` present with "no limit";
+  - acceptable category 4: no `damage_category_limit`, and the text.
+
+### 8. `M4 (b): write the buildings guide and figure sections` (Opus)
+Spec decision 9.
+- New `docs/site/examples/buildings.py`, invented geometry, sections 1–6 of decision 9 in order, saving `buildings-<name>.png` and printing what the page shows. The single-tunnel wall is the acceptance criteria's example; twin tunnels reuse the several-tunnels guide's tunnels 🟡; the deep foundation sets `foundation_depth` past 0.2 × axis depth; the sweep uses `gs.sweep` over volume loss and prints each run's `damage_category_category`.
+- New `docs/site/guides/buildings.md`, the seven sections of decision 9, each judgment saying it has no default and pointing to its preset's caveats; the sources section in published words (authors and years), with no figure number from Mair, Taylor & Burland until it's read (Sources, 🔬).
+- `zensical.toml`: "guides/buildings.md" after "guides/jointed-pipes.md".
+- `docs/site/examples/profile.py` and `cross-section.py`: a building check, saved as `profile-building.png` and `cross-section-building.png`; `docs/site/figures/profile.md` gains "A building check" and `figures/cross-section.md` "A building", each brief and pointing to the guide.
+- Tests and checks (AC 14): `tests/docs/test_site.py` runs the new example (it globs the examples); `tests/test_published_text.py` passes; `prepare_site.py`, then `zensical build --clean --strict`, with no `griffe:` warning.
+
+### 9. `M4 (b): check the figures and close out M4` (Opus)
+New session.
+- **Look** (AC 15): the generated building figures in `docs/site/img/generated/`, against decisions 2, 5 and 7: zones where the settlement's inflections are, Δ at the largest departure from each chord, the limits and bands readable, labels clear of each other and of the lines, the wall to scale. Fix what's wrong in this commit, or a separate one if it's large.
+- **Run** every check: the CI line; Python 3.13 and 3.14; `lowest-direct`, then `git checkout uv.lock`; the docs build.
+- **Close-out:**
+  - `SPEC.md` §12.4: M4 (b) done with the date, and M4 done;
+  - `README.md`: the status line (building checks are in);
+  - `CHANGELOG.md` Unreleased: the building check's five-panel profile, the wall on the cross-section, the `slope` display unit, `Result.categories`, the buildings guide;
+  - `CLAUDE.md`: the status sentence and "Next" (M5), plus any recurring mistake as a convention;
+  - `docs/TODO.md`: the interaction chart and the exaggerated deformed wall (deferred, "if users ask") 🟡, and #7 still open for the figure numbers;
+  - report each of the 15 ACs as met or not, with evidence.
