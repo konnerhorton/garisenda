@@ -23,6 +23,8 @@ CHECK_COLUMNS = (
     "governing_distance",
     "passes",
     "governed_by",
+    "zone",
+    "category",
     "analytical",
     "analytical_distance",
     "discrete",
@@ -40,13 +42,79 @@ CHECK_TYPES = {
     "governing_distance": "float64",
     "passes": "boolean",
     "governed_by": "object",
+    "zone": "Int64",
+    "category": "Int64",
     "analytical": "float64",
     "analytical_distance": "float64",
     "discrete": "float64",
     "discrete_distance": "float64",
     "difference": "float64",
 }
-"""Each column's dtype: ``passes`` is pandas' nullable boolean, NA with no limit."""
+"""Each column's dtype: ``passes`` is pandas' nullable boolean, NA with no limit.
+
+``zone`` and ``category`` are nullable integers, NA except on a building check's
+zone and damage-category rows.
+"""
+
+ZONE_COLUMNS = (
+    "zone",
+    "mode",
+    "start",
+    "end",
+    "length",
+    "deflection",
+    "deflection_distance",
+    "deflection_ratio",
+    "horizontal_strain",
+    "bending_strain",
+    "diagonal_strain",
+    "total_bending_strain",
+    "total_diagonal_strain",
+    "tensile_strain",
+    "governed_by",
+    "category",
+    "label",
+    "severity",
+)
+"""The columns of `Result.zones`, empty for an analysis with no zones."""
+
+ZONE_TYPES = {
+    "zone": "Int64",
+    "mode": "object",
+    "start": "float64",
+    "end": "float64",
+    "length": "float64",
+    "deflection": "float64",
+    "deflection_distance": "float64",
+    "deflection_ratio": "float64",
+    "horizontal_strain": "float64",
+    "bending_strain": "float64",
+    "diagonal_strain": "float64",
+    "total_bending_strain": "float64",
+    "total_diagonal_strain": "float64",
+    "tensile_strain": "float64",
+    "governed_by": "object",
+    "category": "Int64",
+    "label": "object",
+    "severity": "object",
+}
+"""Each zone column's dtype."""
+
+ZONE_UNITS = {
+    "start": "m",
+    "end": "m",
+    "length": "m",
+    "deflection": "m",
+    "deflection_distance": "m",
+    "deflection_ratio": "dimensionless",
+    "horizontal_strain": "dimensionless",
+    "bending_strain": "dimensionless",
+    "diagonal_strain": "dimensionless",
+    "total_bending_strain": "dimensionless",
+    "total_diagonal_strain": "dimensionless",
+    "tensile_strain": "dimensionless",
+}
+"""The units of the zones' numeric columns, kept in ``zones.attrs["units"]``."""
 
 GOVERNING_COLUMNS = ("name", "column", "value", "unit", "distance", "verdict")
 """The columns of `Result.governing()`."""
@@ -79,9 +147,28 @@ SUMMARY: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 
 def empty_checks() -> pd.DataFrame:
     """Return an empty checks table with its columns and their dtypes."""
-    return pd.DataFrame(
-        {name: pd.Series([], dtype=CHECK_TYPES[name]) for name in CHECK_COLUMNS}
-    )
+    return checks_frame([])
+
+
+def checks_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Return a checks table from rows, with every column and its dtype.
+
+    A column a row leaves out is NaN, or NA for a nullable one.
+    """
+    table = pd.DataFrame(rows, columns=list(CHECK_COLUMNS))
+    return table.astype(CHECK_TYPES)
+
+
+def zones_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Return a zones table from rows, with every column, its dtype and units."""
+    table = pd.DataFrame(rows, columns=list(ZONE_COLUMNS)).astype(ZONE_TYPES)
+    table.attrs["units"] = dict(ZONE_UNITS)
+    return table
+
+
+def empty_zones() -> pd.DataFrame:
+    """Return an empty zones table with its columns, dtypes and units."""
+    return zones_frame([])
 
 
 @dataclass(frozen=True)
@@ -106,7 +193,9 @@ class Result:
         name), ``value`` (the governing value, in ``unit``), ``limit`` (NaN
         if none was given), ``utilization``, ``governing_distance`` (m),
         ``passes`` (pandas NA with no limit), ``governed_by``
-        (``"analytical"`` or ``"discrete"``), ``analytical`` and
+        (``"analytical"`` or ``"discrete"``), ``zone`` and ``category``
+        (nullable integers: a building check's zone and damage category, NA
+        otherwise), ``analytical`` and
         ``analytical_distance``, ``discrete`` and ``discrete_distance``, and
         ``difference`` (discrete - analytical). Empty for an analysis with no
         checks, such as a movement profile.
@@ -120,6 +209,10 @@ class Result:
         The worst verdict over the stations and the flags.
     warnings : tuple of Flag
         Everything flagged, with ``points`` as row positions in `values`.
+    zones : pandas.DataFrame
+        A building check's zones of hogging and sagging, one row per zone, with
+        units in ``zones.attrs["units"]``; empty with its columns for every
+        other analysis. See `garisenda.check_building`.
     source : Source or None
         The source the analysis evaluated, kept so a figure can draw the field
         beyond the asset. Not part of the views or of equality.
@@ -136,6 +229,7 @@ class Result:
     inputs: tuple[InputRecord, ...]
     validity: Verdict
     warnings: tuple[Flag, ...]
+    zones: pd.DataFrame = field(default_factory=empty_zones)
     source: "Source | None" = field(default=None, repr=False, compare=False)
     asset: "Asset | None" = field(default=None, repr=False, compare=False)
 
@@ -149,7 +243,7 @@ class Result:
         """
         if not isinstance(other, Result):
             return NotImplemented
-        for table in ("values", "checks"):
+        for table in ("values", "checks", "zones"):
             mine, theirs = getattr(self, table), getattr(other, table)
             if not (mine.equals(theirs) and mine.attrs == theirs.attrs):
                 return False
@@ -236,7 +330,8 @@ class Result:
         -------
         dict
             ``analysis``, ``subject``, ``values`` (a list per column),
-            ``units``, ``checks`` (a list of rows), ``method``, ``assumptions``,
+            ``units``, ``checks`` (a list of rows), ``zones`` (a list of rows,
+            empty with no zones), ``method``, ``assumptions``,
             ``inputs`` (each with ``name``, ``magnitude``, ``unit``, ``kind``,
             ``given_as`` and ``source``), ``validity`` and ``warnings`` (each
             with ``verdict``, ``reason``, ``limit``, ``points`` and
@@ -252,6 +347,7 @@ class Result:
             },
             "units": dict(self.values.attrs.get("units", {})),
             "checks": _plain(self.checks.to_dict(orient="records")),
+            "zones": _plain(self.zones.to_dict(orient="records")),
             "method": [
                 {
                     "name": record.name,

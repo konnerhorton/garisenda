@@ -10,7 +10,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
-from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
+from garisenda._result import Result, checks_frame
 from garisenda._units import PlainNumber
 from garisenda.profile._movement_profile import (
     MERGE_TOLERANCE,
@@ -765,8 +765,7 @@ def _checks(values: pd.DataFrame, limits: dict[str, float]) -> pd.DataFrame:
                 "difference": difference,
             }
         )
-    table = pd.DataFrame(rows, columns=list(CHECK_COLUMNS))
-    return table.astype(CHECK_TYPES)
+    return checks_frame(rows)
 
 
 def governing_value(

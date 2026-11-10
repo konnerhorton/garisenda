@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
-from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
+from garisenda._result import CHECK_TYPES, Result, checks_frame
 from garisenda._units import units
 from garisenda.profile._movement_profile import MERGE_TOLERANCE
 from garisenda.sources._critical import find_zeros
@@ -596,4 +596,4 @@ def _joint_checks(
                 "difference": math.nan,
             }
         )
-    return pd.DataFrame(rows, columns=list(CHECK_COLUMNS)).astype(CHECK_TYPES)
+    return checks_frame(rows)

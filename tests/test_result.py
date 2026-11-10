@@ -6,7 +6,15 @@ import pytest
 
 import garisenda as gs
 from garisenda._inputs import record, record_method
-from garisenda._result import CHECK_COLUMNS, empty_checks, unit_text, value_text
+from garisenda._result import (
+    CHECK_COLUMNS,
+    ZONE_COLUMNS,
+    checks_frame,
+    empty_checks,
+    unit_text,
+    value_text,
+    zones_frame,
+)
 from garisenda.sources import Flag, MethodRecord
 
 u = gs.units
@@ -272,31 +280,34 @@ def test_views_take_a_method_record():
 def test_empty_checks_has_every_column():
     checks = empty_checks()
     assert tuple(checks.columns) == CHECK_COLUMNS
-    assert len(CHECK_COLUMNS) == 13
+    assert len(CHECK_COLUMNS) == 15
     assert str(checks["passes"].dtype) == "boolean"
     assert str(checks["value"].dtype) == "float64"
+    assert str(checks["zone"].dtype) == "Int64"
+    assert str(checks["category"].dtype) == "Int64"
 
 
 def checks_table():
     nan = float("nan")
-    table = pd.DataFrame(
-        {
-            "check": ["tensile_strain", "radius_of_curvature", "axial_tension"],
-            "value": [3.2e-4, 6462.9, nan],
-            "unit": ["dimensionless", "m", "dimensionless"],
-            "limit": [1e-3, nan, 1e-3],
-            "utilization": [0.32, nan, nan],
-            "governing_distance": [24.41, 40.0, nan],
-            "passes": pd.array([True, pd.NA, True], dtype="boolean"),
-            "governed_by": ["analytical", "analytical", "analytical"],
-            "analytical": [3.2e-4, 6462.9, nan],
-            "analytical_distance": [24.41, 40.0, nan],
-            "discrete": [3.1e-4, float("inf"), nan],
-            "discrete_distance": [24.41, 40.0, nan],
-            "difference": [-1e-5, float("inf"), nan],
-        }
-    )
-    return table[list(CHECK_COLUMNS)]
+    columns = {
+        "check": ["tensile_strain", "radius_of_curvature", "axial_tension"],
+        "value": [3.2e-4, 6462.9, nan],
+        "unit": ["dimensionless", "m", "dimensionless"],
+        "limit": [1e-3, nan, 1e-3],
+        "utilization": [0.32, nan, nan],
+        "governing_distance": [24.41, 40.0, nan],
+        "passes": pd.array([True, pd.NA, True], dtype="boolean"),
+        "governed_by": ["analytical", "analytical", "analytical"],
+        "analytical": [3.2e-4, 6462.9, nan],
+        "analytical_distance": [24.41, 40.0, nan],
+        "discrete": [3.1e-4, float("inf"), nan],
+        "discrete_distance": [24.41, 40.0, nan],
+        "difference": [-1e-5, float("inf"), nan],
+    }
+    rows = [
+        {name: column[index] for name, column in columns.items()} for index in range(3)
+    ]
+    return checks_frame(rows)
 
 
 def test_checks_with_no_limit_round_trip_to_json():
@@ -320,3 +331,130 @@ def test_summary_lists_each_check():
     )
     assert "radius_of_curvature: 6462.9 m at 40 m (analytical), no limit" in text
     assert "axial_tension: none" in text
+
+
+# M4 (a) AC 16: zones on every result, and the new check columns
+
+
+def test_zones_are_empty_with_their_columns_by_default():
+    zones = result().zones
+    assert tuple(zones.columns) == ZONE_COLUMNS
+    assert len(zones) == 0
+    assert str(zones["zone"].dtype) == "Int64"
+    assert str(zones["category"].dtype) == "Int64"
+    assert str(zones["tensile_strain"].dtype) == "float64"
+    assert zones.attrs["units"]["deflection"] == "m"
+    assert result().to_dict()["zones"] == []
+
+
+def made_by_analyses():
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    source = gs.sources.transverse_surface_trough(
+        tunnel, volume_loss=1 * u.percent, trough_width_parameter=0.5
+    )
+    utility = gs.utilities.perpendicular_utility(
+        tunnel,
+        utility_id="A",
+        station=0,
+        start_offset=-40,
+        end_offset=40,
+        depth=2.0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    profile = gs.movement_profile(utility, source, spacing=1.0)
+    strain = u.Quantity(1000, "µε")
+    limits = {
+        "tensile_strain_limit": strain,
+        "compressive_strain_limit": strain,
+        "bending_strain_limit": strain,
+        "radius_of_curvature_limit": 5000 * u.m,
+        "interaction": "greenfield",
+    }
+    return (
+        profile,
+        gs.check_continuous_pipe(profile, interval=1 * u.m, **limits),
+        gs.check_jointed_pipe(
+            profile,
+            pipe_lengths={("spun_grey_iron", 0.3 * u.m): 4 * u.m},
+            pipe_type="spun_grey_iron",
+            joint_rotation_limit=1.5 * u.degree,
+            joint_pullout_limit=15 * u.mm,
+            **limits,
+        ),
+    )
+
+
+def test_profiles_and_pipe_checks_have_empty_zones_and_every_check_column():
+    for made in made_by_analyses():
+        assert tuple(made.zones.columns) == ZONE_COLUMNS
+        assert made.zones.empty
+        assert tuple(made.checks.columns) == CHECK_COLUMNS
+        assert made.checks["zone"].isna().all()
+        assert made.checks["category"].isna().all()
+        assert str(made.checks["zone"].dtype) == "Int64"
+
+
+def zones_table():
+    return zones_frame(
+        [
+            {
+                "zone": 1,
+                "mode": "hogging",
+                "start": 0.0,
+                "end": 21.0,
+                "length": 21.0,
+                "deflection": 2.67e-3,
+                "deflection_distance": 11.7,
+                "deflection_ratio": 1.27e-4,
+                "horizontal_strain": 1.77e-4,
+                "bending_strain": 1.78e-4,
+                "diagonal_strain": 8.8e-5,
+                "total_bending_strain": 3.55e-4,
+                "total_diagonal_strain": 2.07e-4,
+                "tensile_strain": 3.55e-4,
+                "governed_by": "bending",
+                "category": 1,
+                "label": "1",
+                "severity": "very slight",
+            }
+        ]
+    )
+
+
+def test_zones_round_trip_to_json_and_take_part_in_equality():
+    made = result(zones=zones_table())
+    data = json.loads(json.dumps(made.to_dict(), allow_nan=False))
+    (zone,) = data["zones"]
+    assert zone["zone"] == 1
+    assert zone["category"] == 1
+    assert zone["mode"] == "hogging"
+    assert made == result(zones=zones_table())
+    assert made != result()
+
+
+def test_a_check_row_with_zone_and_category_round_trips():
+    table = checks_frame(
+        [
+            {
+                "check": "damage_category",
+                "value": 3.55e-4,
+                "unit": "dimensionless",
+                "limit": float("inf"),
+                "utilization": 0.0,
+                "passes": True,
+                "zone": 1,
+                "category": 1,
+            }
+        ]
+    )
+    assert table["zone"].iloc[0] == 1
+    assert table["discrete"].isna().all()
+    data = json.loads(json.dumps(result(checks=table).to_dict(), allow_nan=False))
+    row = data["checks"][0]
+    assert row["zone"] == 1
+    assert row["category"] == 1
+    assert row["limit"] is None
+    assert row["governing_distance"] is None

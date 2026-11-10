@@ -551,6 +551,8 @@ def test_a_check_sweep_row_equals_a_direct_call():
     assert units["radius_of_curvature_distance"] == "m"
     assert units["bending_utilization"] == "dimensionless"
     assert str(table["bending_passes"].dtype) == "boolean"
+    # M4 (a): only a building check's categorized rows add a category column.
+    assert not [name for name in table.columns if name.endswith("_category")]
 
 
 def test_a_check_with_no_limit_and_a_failed_run_in_a_sweep():
@@ -635,3 +637,4 @@ def test_a_jointed_check_sweep_row_equals_a_direct_call():
                 assert row[f"{check.check}_passes"] == check.passes
     assert table.attrs["units"]["joint_rotation"] == "rad"
     assert table.attrs["units"]["joint_pullout"] == "m"
+    assert not [name for name in table.columns if name.endswith("_category")]
