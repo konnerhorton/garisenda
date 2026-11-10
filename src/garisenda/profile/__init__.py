@@ -1,4 +1,4 @@
-"""The ground's movement along an asset (SPEC §3)."""
+"""The ground's movement along an asset."""
 
 from garisenda.profile._movement_profile import movement_profile
 

@@ -1,4 +1,4 @@
-"""Joint and barrel checks for a jointed pipe (M3 (b) spec)."""
+"""Joint and barrel checks for a jointed pipe."""
 
 import math
 from collections.abc import Mapping
@@ -52,8 +52,9 @@ METHOD = MethodRecord(
         "worst joint: the largest theta and the largest positive Delta over s",
         "the barrel: the continuous-pipe check with interval h = L",
     ),
-    "Geometry, derived in the M3 (b) spec; individual joints as Bracegirdle et "
-    "al. (1996), p. 661 allow; rigid joints for strain, p. 663.",
+    "Geometry, derived by garisenda, not cited (gs.check_jointed_pipe's "
+    "docstring states it); individual joints as Bracegirdle et al. (1996), p. "
+    "661 allow; rigid joints for strain, p. 663.",
 )
 
 JOINT_UNITS = {
@@ -68,8 +69,8 @@ JOINT_ASSUMPTIONS = (
     "The pipe is a chain of rigid pipes of length L whose joints are points on "
     "its axis that follow the ground, so the joints take all of the ground's "
     "bending and stretch into their rotation and opening. Every position along "
-    "the pipe is taken as a possible joint, and the worst is reported (SPEC §7; "
-    "given joint locations come with M5).",
+    "the pipe is taken as a possible joint, and the worst is reported (given "
+    "joint locations aren't supported yet).",
     "The barrel is checked as a continuous pipe with rigid joints, following "
     "the ground (Bracegirdle et al. 1996, p. 663): it takes all of the ground's "
     "bending and stretch into its strain. Each idealization is conservative for "
@@ -92,7 +93,7 @@ JOINT_ASSUMPTIONS = (
     pipe_type="which type an old main is (pit cast or spun, say) is often the "
     'engineer\'s call. Pass the pipe_lengths key, e.g. pipe_type="spun_grey_iron".',
     interaction="it says how the pipe interacts with the ground. Phase 1 takes "
-    'only interaction="greenfield": the pipe follows the ground (SPEC §1.3).',
+    'only interaction="greenfield": the pipe follows the ground.',
     joint_rotation_limit="it depends on the joint and the main's condition. Pass "
     "an angle, e.g. 1.5 * gs.units.degree, a preset such as "
     'gs.presets.cast_iron_joint_limits(joint="lead_yarn_water_main").rotation, '
@@ -130,8 +131,8 @@ def check_jointed_pipe(
     A jointed pipe (cast iron, ductile iron, clay, concrete) is a chain of
     pipes of length L joined end to end. With s the distance along the line,
     u_a, w and u_l its displacement along, vertical (positive down) and
-    lateral, and r = D / 2 its outside radius, the geometry is (derived in
-    the M3 (b) spec, not cited):
+    lateral, and r = D / 2 its outside radius, the geometry is (derived
+    here, not cited):
 
     1. **The idealization.** Each pipe is rigid, and each joint is a point on
        the axis that moves with the ground, so a pipe is the chord between
@@ -165,11 +166,12 @@ def check_jointed_pipe(
 
     Bracegirdle et al. (1996, p. 661) give individual joints as the primary
     method; their Eq. 5 for rotation and the maximum horizontal movement for
-    pull-out are conservative shortcuts, not used (TODO #4).
+    pull-out are conservative shortcuts, not used (the Jointed pipes guide, "Why not
+    Eq. 5", says why).
 
     The barrel is checked exactly as `garisenda.check_continuous_pipe` checks
-    it with ``interval=L`` (SPEC §7: a jointed pipe's discrete interval is
-    its pipe length), over every row of this result. The joint columns are
+    it with ``interval=L`` (a jointed pipe's discrete interval is its pipe
+    length), over every row of this result. The joint columns are
     that check's discrete columns times L, so the two can't disagree.
 
     Parameters
@@ -244,7 +246,7 @@ def check_jointed_pipe(
 
     Notes
     -----
-    Sources: the geometry is derived in the M3 (b) spec; individual joints
+    Sources: the geometry is derived here, not cited; individual joints
     as Bracegirdle et al. (1996), p. 661 allow; rigid joints for the
     barrel's strain, p. 663.
     """
@@ -367,7 +369,7 @@ def _read_pipe_type(pipe_type: object) -> tuple[str, InputRecord]:
 def _pipe_length(
     table: object, pipe_type: str, utility: Utility
 ) -> tuple[float, InputRecord]:
-    """Look up the pipe length for the utility's diameter (decision 3)."""
+    """Look up the pipe length for the utility's diameter."""
     source = None
     if isinstance(table, Sourced):
         source = table.source
@@ -430,12 +432,12 @@ def _pipe_length(
         f"diameter of utility {utility.utility_id!r}; its diameters for "
         f"{pipe_type!r} are {diameters} m. A nominal size isn't matched to an "
         "outside diameter, and nothing is taken from the nearest diameter "
-        "(SPEC §7)."
+        "(the diameter is the pipe's outside diameter)."
     )
 
 
 def _joint_peaks(utility: Utility, source: Source, length: float) -> FloatArray:
-    """Return where theta and Delta peak, and the feasible ranges' ends (decision 7).
+    """Return where theta and Delta peak, and the feasible ranges' ends.
 
     The zeros of d(theta^2)/ds over s in [L, l - L] and of dDelta/ds over
     [L/2, l - L/2], found by `find_zeros` on the source's exact derivatives
@@ -513,7 +515,7 @@ def _joint_peaks(utility: Utility, source: Source, length: float) -> FloatArray:
 
 
 def _ends_reason(pipe: float, length: float) -> str:
-    """Return the ends flag's sentence on the joints (decision 10)."""
+    """Return the ends flag's sentence on the joints."""
     reason = (
         f"So no joint rotation within L = {length:g} m of an end and no joint "
         f"opening within L/2 = {length / 2:g} m: a joint there would have a "
@@ -533,7 +535,7 @@ def _ends_reason(pipe: float, length: float) -> str:
 
 
 def _with_joints(values: pd.DataFrame, length: float, radius: float) -> pd.DataFrame:
-    """Add the joint columns, L times the discrete ones (decision 8)."""
+    """Add the joint columns, L times the discrete ones."""
     vertical = length * values["discrete_vertical_curvature"].to_numpy(dtype=np.float64)
     lateral = length * values["discrete_lateral_curvature"].to_numpy(dtype=np.float64)
     rotation = np.hypot(vertical, lateral)
@@ -559,7 +561,7 @@ def _joint_checks(
     rotation_determined: bool,
     pullout_determined: bool,
 ) -> pd.DataFrame:
-    """Return the two joint checks (decisions 9 and 10)."""
+    """Return the two joint checks."""
     distance = values["distance"].to_numpy(dtype=np.float64)
     rows: list[dict[str, Any]] = []
     for name, column, unit, limit, determined in (

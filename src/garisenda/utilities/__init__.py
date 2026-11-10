@@ -1,4 +1,4 @@
-"""Utility lines and their builders (SPEC §8.3)."""
+"""Utility lines and their builders."""
 
 from garisenda.utilities._utility import (
     BuildRecord,
