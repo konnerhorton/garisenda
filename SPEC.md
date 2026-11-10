@@ -157,7 +157,7 @@ Every analysis returns a `gs.Result` with the same parts (decided 2026-11-03, M1
 - **validity:** the verdict (§5.2), with the limit that set it;
 - **warnings:** everything that was flagged.
 
-**Governing values** (decided 2026-11-03, M1 (c), [`docs/work/m1c-figures-sweep-docs.md`](docs/work/m1c-figures-sweep-docs.md)): `Result.governing()` tabulates the extremes of `values` (settlement, tension and compression along, hogging and sagging), each with its distance and verdict; a sign with no value is NaN, never zero. The summary, `gs.sweep` and the figures read it, so they agree. A result also keeps its source and asset (a `Utility` or a `Building`), outside the views, so a figure can draw what the table doesn't hold.
+**Governing values** (decided 2026-11-03, M1 (c), [`docs/work/m1c-figures-sweep-docs.md`](docs/work/m1c-figures-sweep-docs.md)): `Result.governing()` tabulates the extremes of `values` (settlement, tension and compression along, hogging and sagging), each with its distance and verdict; a sign with no value is NaN, never zero. The summary, `gs.sweep` and the figures read it, so they agree. A result also keeps its source and asset (a `Utility` or a `Building`), and a building check its damage categories (decided 2026-11-10, M4 (b)), outside the views, so a figure can draw what the table doesn't hold.
 
 **One calculation, many views** (decided 2026-11-03, M1 (b)): `.to_dict()` (JSON-ready), `.to_frame()`, a short text summary as its `repr()`, as in hangtu, and the figures (§9). Views never recalculate, so two views can't disagree.
 

@@ -932,3 +932,13 @@ def test_to_dict_is_json_ready():
     assert data["zones"][0]["mode"] == "hogging"
     assert data["zones"][1]["deflection_distance"] == pytest.approx(30)
     assert data["checks"][0]["zone"] is None
+
+
+# M4 (b), AC 11
+
+
+def test_a_check_keeps_the_categories_passed():
+    preset = gs.presets.damage_categories()
+    result = check(wall(-30, 30), trough_at_depth(), "BW", category_limits=preset)
+    assert result.categories is preset.value
+    assert "categories" not in result.to_dict()

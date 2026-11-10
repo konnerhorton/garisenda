@@ -12,6 +12,7 @@ from garisenda.sources._movement import Flag, MethodRecord, Verdict
 
 if TYPE_CHECKING:
     from garisenda._asset import Asset
+    from garisenda.buildings._categories import DamageCategories
     from garisenda.sources._movement import Source
 
 CHECK_COLUMNS = (
@@ -218,6 +219,10 @@ class Result:
         beyond the asset. Not part of the views or of equality.
     asset : Utility, Building or None
         The asset it was run on, kept for the same reason.
+    categories : DamageCategories or None
+        A building check's damage categories, kept so a figure can draw their
+        bands (``inputs`` gives them as text); ``None`` for every other
+        analysis. Not part of the views or of equality.
     """
 
     analysis: str
@@ -232,9 +237,12 @@ class Result:
     zones: pd.DataFrame = field(default_factory=empty_zones)
     source: "Source | None" = field(default=None, repr=False, compare=False)
     asset: "Asset | None" = field(default=None, repr=False, compare=False)
+    categories: "DamageCategories | None" = field(
+        default=None, repr=False, compare=False
+    )
 
     def __eq__(self, other: object) -> bool:
-        """Compare every part but `source` and `asset`, tables by content.
+        """Compare every part but those kept for figures, tables by content.
 
         The generated `__eq__` compares DataFrames with ``==``, which is
         elementwise and can't be a bool (and from Python 3.13 it no longer

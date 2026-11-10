@@ -450,6 +450,7 @@ def check_building(
         zones=zones_frame(zone_rows),
         source=source,
         asset=building,
+        categories=categories,
     )
 
 
