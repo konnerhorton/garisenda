@@ -29,6 +29,18 @@ Mair, R. J. & Taylor, R. N. (1997). Theme lecture: Bored tunnelling in the urban
 - 🔬 The proceedings' volume number isn't on the pages read.
 - Verified 2026-11-04 (M2 (b)).
 
+## `mair1996`
+Mair, R. J., Taylor, R. N. & Burland, J. B. (1996). Prediction of ground movements and assessment of risk of building damage due to bored tunnelling. In *Geotechnical Aspects of Underground Construction in Soft Ground*, eds R. J. Mair & R. N. Taylor, pp. 713–718. Balkema, Rotterdam.
+- Cited for (M4 (a)): Table 1, damage categories, and Table 2, limiting tensile strain per category, after Boscardin & Cording (1989) (p. 715); Eqs. 7–9, the deep beam's bending and diagonal strains and the combined bending strain, after Burland & Wroth (1974), with the section's t and I, H from foundation to eaves, the zones split at the inflection points and E/G = 2.6 for masonry (§§4.1–4.3, p. 716); Eq. 10, the combined diagonal strain with Poisson's ratio 0.3, E/G = 12.5 for framed buildings (§4.5), and the preliminary assessment's 10 mm and 1/500 (§§5.1–5.3, p. 717).
+- Burland & Wroth (1974), Burland et al. (1977) and Boscardin & Cording (1989) are cited "after" it, 🔬 (TODO #7). The beam with any shear coefficient and Eq. 10's general form are garisenda's own derivation (`docs/work/m4a-building-damage.md`, Mechanics).
+- The text layer is OCR; read the page images. Verified 2026-11-10 (M4 (a)) against the page images.
+
+## `jones2022`
+Jones, B. (2022). *Soft Ground Tunnel Design*. First edition. CRC Press, Boca Raton.
+- A check, not cited for an equation (SPEC §2.1): Eqs. 13.12 and 13.23 (pp. 476, 479), the corrected beam after Netzel (2009), check the Timoshenko form; Examples 13.1–13.2 (pp. 470–490) are case J's golden values. Its Example 13.2 calls the sagging zone category 1 where its own Table 13.1 gives 0.
+- Cited as the report of Harris & Franzius (2006)'s z_f/z₀ < 0.2 (§13.2.1, p. 490) and of Rankin (1988) for Stage 1 (p. 469), both 🔬 (TODO #7).
+- Book pages are PDF pages less 23. Verified 2026-11-10 (M4 (a)) against the page images for Eqs. 13.12 and 13.23 and Tables 13.2–13.3.
+
 ## `taylor1995`
 Taylor, R. N. (1995). Tunnelling in soft ground in the UK. In *Underground Construction in Soft Ground*, eds K. Fujita & O. Kusakabe, pp. 123–126. Balkema, Rotterdam.
 - Cited for: Eq. 5, K = 0.325 + 0.175/(1 − z/z₀), after Mair et al. (1993), and the constant-volume direction of movement, toward a point 0.175 z₀/0.325 below the axis, p. 125. Eqs. 1–4 and 6 (p. 124–125) restate the surface trough (TODO #2).

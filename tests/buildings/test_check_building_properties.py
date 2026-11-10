@@ -4,10 +4,11 @@ import math
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 import garisenda as gs
+from garisenda.profile._movement_profile import profile_rows
 
 u = gs.units
 
@@ -90,16 +91,30 @@ def assert_reversed(forward, backward, length):
     np.testing.assert_allclose(second["value"], first["value"], rtol=1e-9)
     assert second["passes"].tolist() == first["passes"].tolist()
     assert second["category"].tolist() == first["category"].tolist()
-    # Stage 1's distance is L - d, or a tie (the first by distance either way).
+    # Stage 1's distance is L - d, or a tie within 1e-9 (the first by distance
+    # either way), so a station near a flat peak can take it in one direction
+    # and the peak's row in the other.
     for name in ("settlement", "slope"):
         mirrored = length - second.loc[name, "governing_distance"]
         column = "vertical" if name == "settlement" else "vertical_slope"
-        values = forward.values
-        at = values.loc[np.isclose(values["distance"], mirrored, atol=1e-6), column]
-        assert abs(at.iloc[0]) == pytest.approx(first.loc[name, "value"], rel=1e-9)
+        at = value_at(forward, column, mirrored)
+        assert abs(at) == pytest.approx(first.loc[name, "value"], rel=1e-9)
+
+
+def value_at(result, column, distance):
+    """A profile column at a distance: its row's, or computed there."""
+    values = result.values
+    nearest = int(np.argmin(np.abs(values["distance"].to_numpy() - distance)))
+    if abs(values["distance"].iloc[nearest] - distance) < 1e-6:
+        return values[column].iloc[nearest]
+    rows, _, _ = profile_rows(
+        result.asset, result.source, np.array([distance]), np.array([False])
+    )
+    return rows[column].iloc[0]
 
 
 @settings(max_examples=20, deadline=None)
+@example(15.0, -2.0000000000000004, 2.0000076293945317)  # a station 7.6 um from L
 @given(
     st.floats(15.0, 165.0),
     st.floats(-40.0, -2.0),

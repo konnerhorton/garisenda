@@ -1,5 +1,6 @@
 """The building check (docs/work/m4a-building-damage.md, AC 1-12, 16)."""
 
+import json
 import math
 from decimal import Decimal
 
@@ -910,3 +911,24 @@ def test_the_summary(case_a):
         "    damage_category: zone 1, category 0 (negligible): 0.00038397 (bending)"
     )
     assert "largest" not in text
+
+
+def test_to_dict_is_json_ready():
+    for result in (
+        check(wall(-30, 30), trough_at_depth(), acceptable_category=4),
+        check(jones_wall(-25, 6.5), jones_trough()),
+        check(wall(30, 60), trough_at_depth(), cutoff=CUTOFF),
+    ):
+        data = json.loads(json.dumps(result.to_dict(), allow_nan=False))
+        assert len(data["zones"]) == len(result.zones)
+        assert len(data["checks"]) == len(result.checks)
+    accepted = check(wall(-30, 30), trough_at_depth(), acceptable_category=4)
+    data = accepted.to_dict()
+    governing = data["checks"][-1]
+    assert governing["check"] == "damage_category"
+    assert governing["limit"] is None  # infinity
+    assert governing["zone"] == 1
+    assert governing["category"] == 0
+    assert data["zones"][0]["mode"] == "hogging"
+    assert data["zones"][1]["deflection_distance"] == pytest.approx(30)
+    assert data["checks"][0]["zone"] is None
