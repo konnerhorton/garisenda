@@ -26,9 +26,17 @@ The trough's curve isn't in the result, which holds the utility's stations only,
 
 The duct bank above is below the ground surface, and the trough is a surface method, so every station is *outside*: the values are the surface's, and the trough at the duct's depth is narrower ([Below the surface](../guides/below-the-surface.md) gives it). Flagged stations are ringed, and each flag's reason is printed under the figure. Nothing flagged is left unmarked.
 
+## A building
+
+A building is drawn as its wall, to scale, from its foundation level up to its height, above the ground when it is taller than its foundation is deep. The trough panels show the movement at foundation level, and say so. For a building check, from the example's second part, each zone end is ticked on the wall's base, each zone is named above it, and where the cut-off falls inside the wall a dotted line marks it on every panel:
+
+![The cross-section at a wall's station, with its zones](../img/generated/cross-section-building.png)
+
+See [Buildings](../guides/buildings.md).
+
 ## When it applies
 
-The cross-section needs a utility built from station and offset (`gs.utilities.perpendicular_utility`), which knows its tunnel and station. A utility given by its vertices has no section to draw at, so `cross_section` raises; it will be drawn in plan by the plan figure, which comes with real alignments.
+The cross-section needs an asset built from station and offset (`gs.utilities.perpendicular_utility` or `gs.buildings.perpendicular_building`), which knows its tunnel and station. An asset given by its vertices has no section to draw at, so `cross_section` raises; it will be drawn in plan by the plan figure, which comes with real alignments.
 
 ## Options
 
