@@ -13,7 +13,7 @@ from matplotlib.patches import Circle, Rectangle
 
 from garisenda._result import Result
 from garisenda.plot._display import resolve
-from garisenda.plot._profile import SHADE, flag_notes
+from garisenda.plot._profile import SHADE, flag_notes, offset_label
 from garisenda.plot._style import style
 from garisenda.sources._movement import Source
 from garisenda.sources._superposition import (
@@ -321,12 +321,7 @@ def cross_section(
         if several:
             for bore in bores:
                 _axis(section, bore, length)
-        axis_label = (
-            "Offset from reference tunnel axis"
-            if several
-            else "Offset from tunnel axis"
-        )
-        section.set_xlabel(display.label(axis_label, "length"))
+        section.set_xlabel(display.label(offset_label(result), "length"))
         section.set_ylabel(display.label("Depth", "length"))
         below = NOTE_BELOW
         if skipped:

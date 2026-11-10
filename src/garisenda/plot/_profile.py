@@ -17,6 +17,12 @@ from matplotlib.patches import Rectangle
 from garisenda._result import Result, flag_text
 from garisenda.plot._display import DisplayUnits, resolve
 from garisenda.plot._style import style
+from garisenda.sources._superposition import (
+    PARALLEL_TOLERANCE,
+    Superposition,
+    tunnels,
+)
+from garisenda.sources._tunnel import IdealizedTunnel
 
 SHADE = {"marginal": "#f6d58e", "outside": "#f2a7a0"}
 """The fill of stations that aren't within, by verdict."""
@@ -320,7 +326,7 @@ def profile(
             _mark_closure(ax, spec, values, distance, display)
         panels[0].invert_yaxis()
         panels[-1].set_xlabel(display.label("Distance along utility", "length"))
-        _offset_axis(panels[0], values, length, display)
+        _offset_axis(panels[0], values, length, display, offset_label(result))
         flag_notes(panels[-1], result, distance, display)
         fig.suptitle(_title(result, display), fontsize=10)
     return fig, panels
@@ -627,7 +633,7 @@ def _mark_closure(
 
 
 def _offset_axis(
-    ax: Axes, values: pd.DataFrame, length: float, display: DisplayUnits
+    ax: Axes, values: pd.DataFrame, length: float, display: DisplayUnits, label: str
 ) -> None:
     """Add a top axis of offset from the tunnel axis, for a built utility."""
     if "offset" not in values or len(values) < 2:
@@ -649,7 +655,45 @@ def _offset_axis(
         return start + (o - origin) / slope
 
     top = ax.secondary_xaxis("top", functions=(forward, inverse))
-    top.set_xlabel(display.label("Offset from tunnel axis", "length"))
+    top.set_xlabel(display.label(label, "length"))
+
+
+SAME_AXIS_TOLERANCE = 1e-3
+"""Distance in m within which two parallel tunnels' axes count as the same."""
+
+
+def offset_label(result: Result) -> str:
+    """Name the axis a built utility's offsets are measured from.
+
+    One tunnel: its axis. Several, by superposition: the axis of the tunnel the
+    utility was built from, named when exactly one part's tunnel lies on it,
+    so the profile and the cross-section agree.
+    """
+    source = result.source
+    if not isinstance(source, Superposition):
+        return "Offset from tunnel axis"
+    built = getattr(result.asset, "built", None)
+    reference = getattr(built, "tunnel", None)
+    if isinstance(reference, IdealizedTunnel):
+        names = [
+            name
+            for name, tunnel in tunnels(source.sources)
+            if _same_axis(reference, tunnel)
+        ]
+        if len(names) == 1:
+            return f"Offset from axis of tunnel '{names[0]}'"
+    return "Offset from reference tunnel axis"
+
+
+def _same_axis(reference: IdealizedTunnel, tunnel: IdealizedTunnel) -> bool:
+    """Whether a tunnel is parallel to the reference and on its axis."""
+    if abs(math.sin(tunnel.azimuth - reference.azimuth)) > PARALLEL_TOLERANCE:
+        return False
+    _, offset = reference.station_offset(x=tunnel.reference_x, y=tunnel.reference_y)
+    return (
+        abs(float(offset)) <= SAME_AXIS_TOLERANCE
+        and abs(tunnel.axis_depth - reference.axis_depth) <= SAME_AXIS_TOLERANCE
+    )
 
 
 def flag_notes(

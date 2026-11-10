@@ -106,6 +106,58 @@ def test_offset_axis_only_for_a_built_utility(case_a, case_d):
     assert axs[0].child_axes == []
 
 
+def twin_profile(reference_offset):
+    """North and south twins 15 m apart; the utility built from a parallel tunnel."""
+    north = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0),
+        azimuth=0 * gs.units.degree,
+        diameter=6.0,
+        axis_depth=20.0,
+    )
+    south = north.parallel(offset=15.0, diameter=6.0, axis_depth=20.0)
+    reference = north.parallel(offset=reference_offset, diameter=6.0, axis_depth=20.0)
+    utility = gs.utilities.perpendicular_utility(
+        reference,
+        utility_id="W-1",
+        station=50,
+        start_offset=-20,
+        end_offset=20,
+        depth=0,
+        elevation_reference="axis",
+        diameter=0.3,
+    )
+    source = gs.superpose(
+        **{
+            name: gs.sources.transverse_surface_trough(
+                tunnel,
+                volume_loss=1 * gs.units.percent,
+                trough_width_parameter=0.5,
+            )
+            for name, tunnel in (("north", north), ("south", south))
+        }
+    )
+    return gs.movement_profile(utility, source, spacing=5.0)
+
+
+def top_label(result):
+    _, axs = gs.plot.profile(result)
+    (top,) = axs[0].child_axes
+    return top.get_xlabel()
+
+
+def test_offset_axis_names_the_single_tunnel(case_a):
+    assert top_label(case_a) == "Offset from tunnel axis (m)"
+
+
+def test_offset_axis_names_the_twin_the_utility_was_built_from():
+    assert top_label(twin_profile(0.0)) == "Offset from axis of tunnel 'north' (m)"
+    assert top_label(twin_profile(15.0)) == "Offset from axis of tunnel 'south' (m)"
+
+
+def test_offset_axis_is_the_reference_when_no_twin_is_on_it():
+    assert top_label(twin_profile(7.5)) == "Offset from reference tunnel axis (m)"
+
+
 def test_draws_into_given_axes(case_a):
     fig, given = plt.subplots(4, 1, sharex=True)
     before = plt.get_fignums()
