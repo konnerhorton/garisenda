@@ -84,7 +84,7 @@ def test_a_buildings_movement_profile_has_four_panels(make_building_check):
 def test_the_title_gives_the_beam_and_the_cutoff(drawn):
     title = drawn[0].get_figure()._suptitle.get_text()
     assert title.startswith("Building check along W-1\n")
-    assert "Burland & Wroth (1974), shear coefficient 3/2 beam" in title
+    assert "beam: Burland & Wroth (1974), shear coefficient 3/2\n" in title
     assert "cut-off: 2.5 i from each trough's axis" in title
     assert "chords dashed" in title
 

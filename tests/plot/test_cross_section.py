@@ -390,7 +390,7 @@ def test_a_buildings_movement_profile_draws_the_wall_with_no_zones():
     assert wall.get_height() == pytest.approx(8.0)
     assert not [item for item in bottom.patches if item.get_gid() == "utility"]
     assert any("B-1, H = 8 m" in text.get_text() for text in bottom.texts)
-    assert top.get_ylabel() == "Settlement at foundation level (depth 2 m) (mm)"
+    assert top.get_ylabel() == "Settlement (mm)\nat foundation level (depth 2 m)"
     for gid in ("zone_end", "zone_label:1", "cutoff"):
         assert not drawn_with(bottom, gid)
     assert dict(mpl.rcParams) == before

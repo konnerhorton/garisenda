@@ -312,3 +312,9 @@ New session.
   - `CLAUDE.md`: the status sentence and "Next" (M5), plus any recurring mistake as a convention;
   - `docs/TODO.md`: the interaction chart and the exaggerated deformed wall (deferred, "if users ask") 🟡, and #7 still open for the figure numbers;
   - report each of the 15 ACs as met or not, with evidence.
+
+### Built: differences from the plan
+- **Step 3:** the moved helpers are public in their private module (`check_row`, `mark`, `draw_limits`, `mark_checks`), since `_profile.py` and `_building.py` both import them.
+- **Step 5:** the twin-tunnel case puts the tunnels 25 m apart (see step 5's AC 10 note). The governing zone's mark is drawn by `_building.py`, its text 10 pt above the line, clear of the level line's own label.
+- **Step 9, from the figure review:** the profile's title is three lines (the beam's and the cut-off's recorded names don't fit on one); the acceptable limit's label is on the left of panel 5, since the bands are labeled on the right; the cut-off's hatching is drawn over the bands and its label on a white ground; on the cross-section a building's trough panels put "at foundation level (depth …)" on a second line of the y label, the wall's label is inside its top left (a wall often spans the section), the section leaves room above the wall's top, and the zone labels are at the wall's mid-height, clear of the ground line.
+- **Close-out:** the deferred figures are TODO #25 (#24 was used before).

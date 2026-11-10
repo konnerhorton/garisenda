@@ -393,8 +393,8 @@ def _title(result: Result, display: DisplayUnits) -> str:
         recorded = {entry.name: entry.value for entry in result.inputs}
         return (
             f"Building check along {result.subject}\n"
-            f"{recorded.get('beam_method', '')} beam; cut-off: "
-            f"{recorded.get('cutoff', '')}; chords dashed"
+            f"beam: {recorded.get('beam_method', '')}\n"
+            f"cut-off: {recorded.get('cutoff', '')}; chords dashed"
         )
     if result.analysis not in PANELS:
         return f"Movement profile along {result.subject}"

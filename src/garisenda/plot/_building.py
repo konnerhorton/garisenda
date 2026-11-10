@@ -137,7 +137,7 @@ def _cutoff(
                     edgecolor="0.7",
                     hatch="///",
                     linewidth=0,
-                    zorder=0,
+                    zorder=0.5,  # over the damage categories' bands
                     gid="beyond_cutoff",
                 )
             )
@@ -154,6 +154,7 @@ def _cutoff(
             rotation=90,
             fontsize=6,
             color="0.35",
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.0},
             gid="beyond_cutoff",
         )
 
@@ -349,11 +350,12 @@ def _tensile_strain(ax: Axes, result: Result, display: DisplayUnits) -> None:
         )
         ax.annotate(
             f"acceptable: category {band.label}, {shown_limit:.4g} {unit}",
-            (1.0, shown_limit),
+            # On the left: the bands are labeled on the right.
+            (0.0, shown_limit),
             xycoords=("axes fraction", "data"),
-            xytext=(-2, 2),
+            xytext=(2, 2),
             textcoords="offset points",
-            ha="right",
+            ha="left",
             va="bottom",
             fontsize=6,
             color="0.35",
@@ -436,11 +438,19 @@ def _mark_category(ax: Axes, result: Result, display: DisplayUnits) -> None:
     )
     utilization = float(row["utilization"])
     used = "no limit" if math.isnan(utilization) else f"u = {utilization:.2f}"
-    mark(
-        ax,
-        _middle(zone, display.factor("length")),
-        float(row["value"]) * display.factor("strain"),
+    x = _middle(zone, display.factor("length"))
+    y = float(row["value"]) * display.factor("strain")
+    gid = "check:damage_category"
+    ax.plot(
+        [x], [y], marker="o", markersize=4, color="black", linestyle="none", gid=gid
+    )
+    # Higher than other marks' text, clear of the line's own label.
+    ax.annotate(
         f"category {zone.label} ({zone.severity}), {used}",
-        "check:damage_category",
-        inverted=False,
+        (x, y),
+        xytext=(4, 10),
+        textcoords="offset points",
+        va="bottom",
+        fontsize=7,
+        gid=gid,
     )

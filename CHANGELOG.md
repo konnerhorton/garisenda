@@ -9,6 +9,10 @@ garisenda is pre-alpha: the API can change between releases, and the transverse 
 - **The building damage check**, `gs.check_building`: Mair, Taylor & Burland (1996)'s staged method. Stage 1 checks the largest settlement and slope along the wall. Stage 2 splits the wall into hogging and sagging zones and gives each its deflection ratio, horizontal strain, bending and diagonal strains, and damage category, with the governing zone. Every choice is an argument you give: the beam (`burland_wroth_beam()`, as practice uses it, or `timoshenko_beam()`), E/G, the damage categories, the cut-off (`no_cutoff()` or `trough_width_cutoff(multiple=...)`), the Stage 1 limits and the acceptable category. A foundation at 0.2 of a tunnel's axis depth or deeper is flagged `outside`.
 - **Presets for buildings**, in `gs.presets`: `youngs_to_shear_modulus_ratio(structure=...)` (masonry 2.6, framed 12.5), `damage_categories()` (Table 2) and `preliminary_assessment_limits()` (10 mm and 1/500), each with its source and caveats.
 - `Result.zones`, a building check's zones, empty for every other result; `Result.checks` has `zone` and `category` columns; and a sweep over a building check has a `<check>_category` column for its zones and damage category.
+- **The building check's figures:** `gs.plot.profile` draws a building check in five panels along the wall: settlement with each zone's chord and deflection, the deflection from the chord with each zone's Δ and Δ/L, the slope, the horizontal strain with each zone's average, and each zone's tensile strains on the damage categories' bands with the acceptable limit. The cut-off is marked on every panel. `gs.plot.cross_section` draws a building as its wall, to scale, with its zones.
+- A `slope` display unit, mm/m by default, for `display_units=`.
+- `Result.categories`: a building check's damage categories, kept for its figure.
+- **A Buildings guide** on the docs site.
 
 ### Changed
 - `gs.movement_profile`'s first argument is named `asset`, since it takes a utility or a building. Passing it by position, as every example does, is unchanged.
@@ -16,6 +20,7 @@ garisenda is pre-alpha: the API can change between releases, and the transverse 
 - A source in `gs.superpose` can't be named `utility`.
 - Assumptions, messages and docstrings no longer refer to garisenda's internal planning documents. Where a result's method was derived by garisenda, its source says so and points to the docstring that states it.
 - The cross-section's messages and notes no longer mention a plan figure, which doesn't exist yet.
+- The profile of a building is labeled "Distance along wall", and the cross-section's trough panels for a building say they are at foundation level.
 
 ## 0.1.0 (2026-11-05)
 

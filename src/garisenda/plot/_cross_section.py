@@ -324,7 +324,11 @@ def cross_section(
                     fontsize=8,
                 )
             ax.margins(y=0.15)
-            ax.set_ylabel(display.label(f"{label} {where}", "displacement"))
+            if isinstance(asset, Building):
+                # Two lines: "at foundation level (depth ...)" is long.
+                ax.set_ylabel(f"{display.label(label, 'displacement')}\n{where}")
+            else:
+                ax.set_ylabel(display.label(f"{label} {where}", "displacement"))
             ax.set_title(convention, loc="right", fontsize=7, color="0.35")
             ax.legend(loc="best", fontsize=7)
         trough_panels["vertical"].invert_yaxis()
@@ -511,7 +515,7 @@ def _wall(
     length: float,
     unit: str,
 ) -> None:
-    """Draw a wall: H high on its foundation level, with its zones on its base.
+    """Draw a wall: H high on its foundation level, with its zones marked.
 
     Depth points down, so the wall rises from its foundation depth to H above
     it, above the ground when H is more than the foundation depth.
@@ -529,14 +533,18 @@ def _wall(
             gid="building",
         )
     )
+    # Inside the wall's top left: a wall often spans the whole section.
     ax.annotate(
         f"{result.subject}, H = {height:.3g} {unit}",
-        (high * length, foundation - height),
-        xytext=(4, 0),
+        (low * length, foundation - height),
+        xytext=(3, -3),
         textcoords="offset points",
+        ha="left",
         va="top",
         fontsize=7,
     )
+    # Room above the wall's top, so it doesn't sit on the panel's edge.
+    ax.update_datalim([(low * length, foundation - 1.15 * height)])
     offsets = result.values["offset"].to_numpy(dtype=np.float64)
     for zone in result.zones.itertuples():
         start, end = (row_at(result, float(where)) for where in (zone.start, zone.end))
@@ -553,13 +561,12 @@ def _wall(
                 linestyle="none",
                 gid="zone_end",
             )
+        # At the wall's mid-height, clear of the ground line.
         ax.annotate(
             f"{zone.zone} {zone.mode}",
-            (0.5 * (offsets[start] + offsets[end]) * length, foundation),
-            xytext=(0, 4),
-            textcoords="offset points",
+            (0.5 * (offsets[start] + offsets[end]) * length, foundation - height / 2),
             ha="center",
-            va="bottom",
+            va="center",
             fontsize=6.5,
             color=MODE_COLOR[str(zone.mode)],
             gid=f"zone_label:{zone.zone}",
