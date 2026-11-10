@@ -343,3 +343,47 @@ def test_a_trough_at_depth_leaves_no_global_state():
     before = dict(mpl.rcParams)
     gs.plot.cross_section(mair(depth=18.0, start_offset=5, end_offset=20))
     assert dict(mpl.rcParams) == before
+
+
+# M4 (a): a building drawn as its wall at foundation level
+
+
+def building_profile():
+    tunnel = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0),
+        azimuth=0 * gs.units.degree,
+        diameter=6.0,
+        axis_depth=20.0,
+    )
+    source = gs.sources.transverse_trough(
+        tunnel,
+        volume_loss=1 * gs.units.percent,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    wall = gs.buildings.perpendicular_building(
+        tunnel,
+        building_id="B-1",
+        station=50,
+        start_offset=-30,
+        end_offset=30,
+        height=8,
+        foundation_depth=2.0,
+    )
+    return gs.movement_profile(wall, source, spacing=2.5)
+
+
+def test_a_building_is_drawn_as_its_wall_at_foundation_depth():
+    before = dict(mpl.rcParams)
+    _, (top, _, bottom) = gs.plot.cross_section(building_profile())
+    wall = line(bottom, "building")
+    np.testing.assert_allclose(wall.get_xdata(), [-30, 30])
+    np.testing.assert_allclose(wall.get_ydata(), [2.0, 2.0])
+    assert not [item for item in bottom.patches if item.get_gid() == "utility"]
+    assert any("height 8 m" in text.get_text() for text in bottom.texts)
+    assert top.get_ylabel() == "Settlement at depth 2 m (mm)"
+    assert dict(mpl.rcParams) == before
+
+
+def test_a_building_profile_draws_the_ground_panels():
+    _, axs = gs.plot.profile(building_profile())
+    assert len(axs) == 4

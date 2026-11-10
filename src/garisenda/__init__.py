@@ -2,7 +2,7 @@
 
 from importlib.metadata import version
 
-from garisenda import plot, presets, sources, utilities
+from garisenda import buildings, plot, presets, sources, utilities
 from garisenda._inputs import Sourced
 from garisenda._result import Result
 from garisenda._sweep import sweep
@@ -18,6 +18,7 @@ __all__ = [
     "Result",
     "Sourced",
     "__version__",
+    "buildings",
     "check_continuous_pipe",
     "check_jointed_pipe",
     "movement_profile",

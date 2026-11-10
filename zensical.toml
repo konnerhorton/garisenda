@@ -34,6 +34,7 @@ nav = [
     "reference/garisenda.md",
     "reference/sources.md",
     "reference/utilities.md",
+    "reference/buildings.md",
     "reference/presets.md",
     "reference/plot.md",
   ] },

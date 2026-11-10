@@ -1,46 +1,19 @@
 """A utility line and its station-and-offset builder."""
 
 from dataclasses import dataclass
-from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
 
+from garisenda._asset import (
+    ELEVATION_REFERENCES,
+    BuildRecord,
+    ElevationReference,
+    perpendicular_vertices,
+    scalar,
+)
 from garisenda._inputs import InputRecord, record
-from garisenda._units import Magnitude
 from garisenda.sources._tunnel import IdealizedTunnel
-
-ElevationReference = Literal["invert", "axis", "crown"]
-"""Which point of the pipe's section a given depth or elevation is at."""
-
-ELEVATION_REFERENCES: tuple[ElevationReference, ...] = ("invert", "axis", "crown")
-
-
-@dataclass(frozen=True)
-class BuildRecord:
-    """How a utility was built from station and offset.
-
-    Attributes
-    ----------
-    tunnel : IdealizedTunnel
-        The reference tunnel its station and offsets are measured from.
-    station : float
-        The station it crosses at, in m.
-    start_offset, end_offset : float
-        The offsets of its first and last vertex, in m, positive to the right
-        looking up-station.
-    orientation : {"perpendicular"}
-        Its plan direction relative to the tunnel.
-    elevation_reference : {"invert", "axis", "crown"}
-        The point of the pipe's section the given depth or elevation was at.
-    """
-
-    tunnel: IdealizedTunnel
-    station: float
-    start_offset: float
-    end_offset: float
-    orientation: Literal["perpendicular"]
-    elevation_reference: ElevationReference
 
 
 @dataclass(frozen=True, init=False)
@@ -229,7 +202,7 @@ def perpendicular_utility(
         magnitude, entry = record(
             name, value, kind="geometry", unit="m", plain_number="read as SI"
         )
-        number = _scalar(name, magnitude)
+        number = scalar(name, magnitude)
         inputs.append(entry)
         return number
 
@@ -272,10 +245,7 @@ def perpendicular_utility(
             f"ground surface (the {elevation_reference} at depth {level_depth} m)."
         )
 
-    along = station_m - tunnel.reference_station
-    t, n = np.array(tunnel.tangent), np.array(tunnel.normal)
-    origin = np.array([tunnel.reference_x, tunnel.reference_y]) + along * t
-    vertices = [(*(origin + offset * n), axis_depth) for offset in (start_m, end_m)]
+    vertices = perpendicular_vertices(tunnel, station_m, (start_m, end_m), axis_depth)
 
     utility = Utility(utility_id=utility_id, vertices=vertices, diameter=diameter_m)
     assumptions = [
@@ -304,14 +274,3 @@ def perpendicular_utility(
     }.items():
         object.__setattr__(utility, name, value)
     return utility
-
-
-def _scalar(name: str, magnitude: Magnitude) -> float:
-    array = np.asarray(magnitude, dtype=np.float64)
-    if array.ndim != 0:
-        raise ValueError(
-            f"{name} must be a single value, not an array of shape {array.shape}."
-        )
-    if not np.isfinite(array):
-        raise ValueError(f"{name} must be finite, not {float(array)}.")
-    return float(array)

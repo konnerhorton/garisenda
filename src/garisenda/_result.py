@@ -11,8 +11,8 @@ from garisenda._inputs import InputRecord
 from garisenda.sources._movement import Flag, MethodRecord, Verdict
 
 if TYPE_CHECKING:
+    from garisenda._asset import Asset
     from garisenda.sources._movement import Source
-    from garisenda.utilities._utility import Utility
 
 CHECK_COLUMNS = (
     "check",
@@ -96,7 +96,7 @@ class Result:
     analysis : str
         The analysis that made it, for example ``"movement_profile"``.
     subject : str
-        What it was run on: the utility's id.
+        What it was run on: the utility's or building's id.
     values : pandas.DataFrame
         The computed quantities, one row per station, keyed by the
         ``distance`` column (m along the asset), with units in
@@ -123,7 +123,7 @@ class Result:
     source : Source or None
         The source the analysis evaluated, kept so a figure can draw the field
         beyond the asset. Not part of the views or of equality.
-    asset : Utility or None
+    asset : Utility, Building or None
         The asset it was run on, kept for the same reason.
     """
 
@@ -137,7 +137,7 @@ class Result:
     validity: Verdict
     warnings: tuple[Flag, ...]
     source: "Source | None" = field(default=None, repr=False, compare=False)
-    asset: "Utility | None" = field(default=None, repr=False, compare=False)
+    asset: "Asset | None" = field(default=None, repr=False, compare=False)
 
     def __eq__(self, other: object) -> bool:
         """Compare every part but `source` and `asset`, tables by content.

@@ -12,6 +12,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle, Rectangle
 
 from garisenda._result import Result
+from garisenda.buildings._building import Building
 from garisenda.plot._display import resolve
 from garisenda.plot._profile import SHADE, flag_notes, offset_label
 from garisenda.plot._style import style
@@ -23,6 +24,7 @@ from garisenda.sources._superposition import (
 )
 from garisenda.sources._transverse_trough import TransverseTrough
 from garisenda.sources._tunnel import IdealizedTunnel
+from garisenda.utilities._utility import Utility
 
 PANELS = 3
 # The trough's panels: the quantity, its label, its sign convention and color.
@@ -117,7 +119,8 @@ def cross_section(
     Parameters
     ----------
     result : Result
-        A movement profile of a utility built from station and offset, over a
+        A movement profile of a utility or building built from station and
+        offset (a building is drawn as its wall at foundation level), over a
         source with a tunnel or a superposition of sources with tunnels, from
         `garisenda.movement_profile`.
     axs : sequence of three matplotlib Axes, optional
@@ -137,7 +140,7 @@ def cross_section(
     Raises
     ------
     ValueError
-        If the utility wasn't built from station and offset, or the source has
+        If the asset wasn't built from station and offset, or the source has
         no tunnel: the cross-section needs a section through a tunnel, and
         a plan figure isn't available yet. Also if `axs`
         isn't three Axes or `display_units` names an unknown kind.
@@ -149,10 +152,10 @@ def cross_section(
     built = getattr(asset, "built", None)
     if asset is None or source is None or built is None:
         raise ValueError(
-            "The cross-section is drawn at the station of a utility built from "
-            "station and offset (gs.utilities.perpendicular_utility); a utility "
-            "given by its vertices has no section, and a plan figure isn't "
-            "available yet."
+            "The cross-section is drawn at the station of an asset built from "
+            "station and offset (gs.utilities.perpendicular_utility or "
+            "gs.buildings.perpendicular_building); one given by its vertices "
+            "has no section, and a plan figure isn't available yet."
         )
     several = isinstance(source, Superposition)
     if several:
@@ -473,9 +476,50 @@ def _section(
     for bore in bores:
         deepest = max(deepest, _bore(ax, bore, length, unit))
 
+    low, high = sorted((built.start_offset, built.end_offset))
+    if isinstance(asset, Building):
+        # An interim drawing: the wall as a line at its foundation level.
+        foundation = asset.foundation_depth * length
+        ax.plot(
+            [low * length, high * length],
+            [foundation, foundation],
+            color="C2",
+            linewidth=2.0,
+            solid_capstyle="butt",
+            gid="building",
+        )
+        ax.annotate(
+            f"{result.subject}, height {asset.height * length:.3g} {unit}",
+            (high * length, foundation),
+            xytext=(4, 0),
+            textcoords="offset points",
+            va="center",
+            fontsize=7,
+        )
+    else:
+        _utility_band(ax, result, asset, low, high, length, unit)
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_xlim(reach[0] * length, reach[1] * length)
+    # Depth's range is set through the data limits, not fixed: at equal
+    # aspect with x shared, matplotlib extends y to fit the panel.
+    largest = max(bore.tunnel.diameter for bore in bores) * length
+    ax.update_datalim([(0.0, -largest), (0.0, deepest + largest)])
+    ax.autoscale_view()
+    ax.invert_yaxis()
+
+
+def _utility_band(
+    ax: Axes,
+    result: Result,
+    asset: Utility,
+    low: float,
+    high: float,
+    length: float,
+    unit: str,
+) -> None:
+    """Draw a utility as a band of its diameter about its axis."""
     utility_depth = float(np.mean(asset.vertices[:, 2])) * length
     diameter = asset.diameter * length
-    low, high = sorted((built.start_offset, built.end_offset))
     ax.add_patch(
         Rectangle(
             (low * length, utility_depth - diameter / 2),
@@ -495,14 +539,6 @@ def _section(
         va="center",
         fontsize=7,
     )
-    ax.set_aspect("equal", adjustable="datalim")
-    ax.set_xlim(reach[0] * length, reach[1] * length)
-    # Depth's range is set through the data limits, not fixed: at equal
-    # aspect with x shared, matplotlib extends y to fit the panel.
-    largest = max(bore.tunnel.diameter for bore in bores) * length
-    ax.update_datalim([(0.0, -largest), (0.0, deepest + largest)])
-    ax.autoscale_view()
-    ax.invert_yaxis()
 
 
 def _bore(ax: Axes, bore: _Bore, length: float, unit: str) -> float:
