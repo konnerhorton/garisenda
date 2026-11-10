@@ -465,3 +465,164 @@ These are Claude's calculations (2026-11-10), in a script independent of garisen
     - `CHECK_COLUMNS`' new columns are on every checks table.
 17. **Sweep:** a sweep row over volume loss equals a direct call, including `damage_category`'s category.
 18. **Published text:** no internal references in the new strings (`tests/test_published_text.py`).
+
+## Plan
+
+Seven build commits, each green on lint, format, mypy strict and pytest. All seven run on Opus. Most of the work is a calculation, its validity limits or its citations. The plumbing steps (2, and the plotting in 1) are too small to justify a session boundary for Sonnet. A new session starts before 5 and before 7. Items not in the spec are marked 🟡. Following the workflow rule, each SPEC change goes in the commit that makes it true.
+
+### 1. `M4 (a): add the building and let a profile run along it` (Opus)
+Spec decisions 1–2, and the profile half of SPEC §3's change.
+- New `src/garisenda/_asset.py`:
+  - `BuildRecord` moves here from `utilities/_utility.py`. `elevation_reference` becomes `ElevationReference | None`, and is `None` for a building 🟡. `gs.utilities.BuildRecord` still re-exports it.
+  - `Asset = Utility | Building`, with `asset_name(asset) -> (label, id, prefix)`: `("Utility", id, "utility")` or `("Building", id, "building")`.
+- New package `src/garisenda/buildings/` (exported as `gs.buildings`). `_building.py` holds:
+  - `Building(*, building_id, vertices, foundation_depth, height)`. `vertices` are two plan points; the class stores (x, y, foundation_depth) like `Utility`. It validates as `Utility` does, plus height > 0 and foundation_depth ≥ 0 and finite. Inputs `vertices`, `foundation_depth`, `height` are each `"geometry"`.
+  - `perpendicular_building(tunnel, *, building_id, station, start_offset, end_offset, height, foundation_depth=None, foundation_elevation=None, ground_elevation=None)`. It mirrors `perpendicular_utility`, with no section shift. It shares `_scalar` and the vertex placement through a helper extracted from `perpendicular_utility` 🟡, which is a refactor inside this commit with no change in behavior.
+  - Each docstring is the reference entry.
+- `src/garisenda/profile/_movement_profile.py`:
+  - `movement_profile(asset, source, *, spacing)`: the first parameter is renamed `utility` → `asset` 🟡. No example or test passes it by keyword.
+  - `profile_rows` and `_bore_remedy` take an `Asset`. Messages, and the input prefix (`utility.<name>` / `building.<name>`), come from `asset_name`. `_bore_remedy` names the elevation reference only for a utility.
+  - The docstring says a building's profile is at its foundation level.
+- `src/garisenda/_result.py`: `asset: "Asset | None"`.
+- `src/garisenda/plot/_cross_section.py` (the interim drawing from the spec's Changes): a building is drawn as its wall, a line at foundation depth with `gid="building"`, labeled with its height, in place of the utility band. `gs.plot.profile` already draws any unknown analysis as the four ground panels, so it needs no change.
+- `src/garisenda/__init__.py` exports `buildings`. New `docs/site/reference/buildings.md` goes in the `zensical.toml` nav (the reference-entry test needs it).
+- `SPEC.md`:
+  - §1.3: "facade" becomes "wall" in the Buildings row and the station-and-offset bullet;
+  - §3: `gs.movement_profile` takes a `Building`;
+  - §8.3: `Building`, `perpendicular_building`, and "wall" in the polyline bullet.
+- Tests:
+  - new `tests/buildings/test_building.py` covers AC 13: placement for depth and for elevation; the `BuildRecord` and the perpendicular assumption; each bad input (equal offsets, a level above the ground, a missing or doubled level, height ≤ 0, an empty id, three vertices); and a `Building` given by vertices equal to the built one;
+  - `tests/profile/test_movement_profile.py`: a building's profile equals a utility's on the same line, column for column; its inputs are named `building.height` and so on.
+  - `tests/plot/test_cross_section.py`: a building's profile draws the `building` line at foundation depth, and `rcParams` are unchanged.
+
+### 2. `M4 (a): add zones to Result and zone and category to the checks` (Opus)
+Spec decision 11's shape, with no building check yet.
+- `src/garisenda/_result.py`:
+  - `ZONE_COLUMNS` and `ZONE_TYPES` (decision 11's list; `zone` and `category` are `Int64`, `mode`, `governed_by`, `label` and `severity` are `object`), and `empty_zones()`.
+  - `Result.zones: pd.DataFrame = field(default_factory=empty_zones)`, placed after `warnings`. It is compared in `__eq__` like the other tables, and `to_dict()` gains `"zones"` (rows, ∞ as `None`).
+  - `CHECK_COLUMNS` gains `zone` and `category` (`Int64`) after `governed_by` 🟡.
+  - New `checks_frame(rows)`, which builds a checks table from row dicts, filling absent columns with NaN or NA and applying `CHECK_TYPES`. `_continuous_pipe._checks` and `_jointed_pipe._joint_checks` use it.
+- `src/garisenda/_sweep.py`: for a check whose `category` is non-NA in any run, the row gains `<check>_category` (`Int64`) 🟡. That covers `damage_category` and the zone rows.
+- `SPEC.md` §5.1: `zones`, the two new check columns, and `asset` may be a `Building`.
+- Tests:
+  - `tests/test_result.py`: `zones` is empty with its columns and types on a profile and on both pipe checks; both new check columns are on every checks table (AC 16, first and fourth bullets); `to_dict` with a non-empty `zones` goes through `json.dumps`;
+  - `tests/test_sweep.py`: a pipe-check sweep has no `_category` columns.
+
+### 3. `M4 (a): find a trough's extent along a segment` (Opus)
+Spec decision 6's source method, and the rest of SPEC §3's change.
+- `src/garisenda/sources/_movement.py`: `Source` gains `trough_extent(*, start, end, multiple) -> tuple[float, float] | None`. It returns the distances along the segment where the offset from each transverse trough's axis is within multiple × i, or `None` if there are none.
+- `_transverse.py`: offset is linear along the segment, so the range is the interval where |o(s)| ≤ m·i, clipped to [0, L]. A segment parallel to the tunnel gives all of it or none.
+- `_transverse_trough.py`: the same, with i from `width_at` at the segment's depth. A segment whose depth changes raises `ValueError`: a wall is level, and on a sloping segment i would vary along it 🟡.
+- `_superposition.py`: the hull of the sources' ranges, or `None` if every source gives none.
+- `multiple` must be positive and finite, or `ValueError`.
+- `SPEC.md` §3: the source's trough extent.
+- Tests in `tests/sources/`:
+  - the surface trough, perpendicular (±m·i about the axis) and at 45° (√2·m·i on each side of the crossing);
+  - the trough at depth: i at 2 m on case A's tunnel, so 2.5i = 22.5 m;
+  - a segment wholly beyond the extent gives `None`, and a sloping segment raises;
+  - the superposition is case C's hull, offsets −25 to 40;
+  - parallel segments both inside and outside the extent.
+
+### 4. `M4 (a): add the beam methods, damage categories and presets` (Opus)
+Mechanics 1–3 as pure functions, and spec decisions 4, 6 (the objects), 8 and 9.
+- New `src/garisenda/buildings/_beam.py`:
+  - `BeamMethod(name, shear_deflection_coefficient)`, frozen, with `burland_wroth_beam()` (3/2) and `timoshenko_beam()` (6/5);
+  - `section(mode, height) -> (t, I)`;
+  - `bending_strain(deflection_ratio, *, length, height, mode, youngs_to_shear_modulus_ratio, beam)` (Mechanics 1);
+  - `diagonal_strain(...)` (Mechanics 2);
+  - `total_bending_strain(ε_b, ε_h)` and `total_diagonal_strain(ε_d, ε_h, poisson_ratio=POISSON_RATIO)` (Mechanics 3);
+  - `POISSON_RATIO = 0.3`.
+
+  The docstrings give each equation in both forms, cite Mair, Taylor & Burland (1996), p. 716–717 for Eqs. 7–10, and state that the derivation of the Timoshenko form and the general Eq. 10 is garisenda's own.
+- New `src/garisenda/buildings/_categories.py`: `Band(number, label, severity, upper_limit)` and `DamageCategories(bands)`. The limits must increase and the last band is unbounded, or `ValueError`. `category(strain)` puts a boundary strain in the lower band. `band(number)` raises `ValueError` listing the numbers.
+- New `src/garisenda/buildings/_cutoff.py`: `NoCutoff` / `no_cutoff()` and `TroughWidthCutoff(multiple)` / `trough_width_cutoff(*, multiple)`, each with a `name` for `record_method`. `multiple` is positive, or `ValueError`.
+- `src/garisenda/presets.py`:
+  - `youngs_to_shear_modulus_ratio(*, structure)`, with rows `masonry` (2.6) and `framed` (12.5);
+  - `damage_categories()`;
+  - `preliminary_assessment_limits()`, returning a frozen `PreliminaryLimits(settlement, slope)`. The settlement is `10 mm`. The slope is `2 mm/m` 🟡, which is 1/500 as a quantity, since a slope refuses a plain number.
+  - Each has the sources and caveats of decision 4. The docstrings are the reference entries.
+- `gs.buildings` exports the beam methods, `DamageCategories`, `Band` and the cut-offs. `docs/site/reference/buildings.md` lists them.
+- `SPEC.md`:
+  - §2.1: buildings cite Mair, Taylor & Burland (1996) after the originals, 🔬; the beam and Eq. 10 are garisenda's own mechanics;
+  - §4: the building presets.
+- Tests:
+  - new `tests/buildings/test_beam.py`:
+    - AC 6, second bullet: Jones's printed ε_b, ε_d, ε_bt and ε_dt from his Δ/L and ε_h with the Timoshenko beam, to half a unit in his last digit, and 0.0004396 with Burland & Wroth's;
+    - AC 15: the Timoshenko beam gives the larger strains, and with α_s = 3/2 the functions reproduce Eqs. 7–8 as printed, written out separately in the test;
+    - Mechanics 3's ε_dt ≥ 0 over a grid of ε_h;
+  - new `tests/buildings/test_categories.py` covers AC 8, first two bullets;
+  - `tests/test_presets.py`: each row's value, source and caveats, plus a missing or unknown row.
+
+### 5. `M4 (a): add gs.check_building` (Opus)
+The check on the whole wall (`no_cutoff`). New session.
+- New `src/garisenda/buildings/_check.py`, `check_building(profile, *, beam_method, youngs_to_shear_modulus_ratio, category_limits, cutoff, settlement_limit, slope_limit, acceptable_category, interaction)`, with `@judgments` for all eight. It is exported at the top level, and `docs/site/reference/garisenda.md` gains it. The docstring is the reference entry: Mechanics 1–7, inputs and outputs with units, assumptions, sources.
+  - **Reading:**
+    - `_read_profile` is generalized with an `asset_type` argument and raises `TypeError` for anything but a building's profile (AC 12). `_read_interaction` is reused;
+    - E/G goes through `record` (dimensionless, `"read as SI"`) and must be > 0;
+    - `settlement_limit` goes through `_read_limit` in m, and `slope_limit` through `_read_limit` (dimensionless, `plain_number="refuse"`);
+    - `category_limits` goes through `record_method`-style unwrapping of a `Sourced`, and is recorded by name with its bands' limits 🟡;
+    - `acceptable_category` is a band number or `None`, recorded as a design judgment;
+    - `beam_method` and `cutoff` go through `record_method`.
+  - **Zones** (decision 5), in `_zones(asset, source, low, high)`:
+    - `along_line` gives w″ along the wall, and `find_zeros` runs on it over [low, high], with the step, tolerance and scale rule of `_peaks`;
+    - ends within `MERGE_TOLERANCE` are merged;
+    - for each zone, the zero of w′ − chord slope is found by `find_zeros` on the zone, to 1e-9 m. With no sign change, or Δ below 1e-10 of the zone's largest |w|, the zone is `"flat"`;
+    - the mode comes from the sign of d at Δ;
+    - ε_h = (u_a(s₂) − u_a(s₁))/L, from the exact displacements at the ends.
+  - **Values:** the profile's rows plus rows at the zone ends and each Δ, through `_add_stations` and `profile_rows`, marked `critical`. Then the `zone`, `chord` and `deflection` columns (decision 11).
+  - **Zones table** from step 4's functions, with the category from `category_limits`.
+  - **Checks** through `checks_frame`:
+    - `settlement` is the largest positive `vertical`, by `extreme`;
+    - `slope` is the largest |`vertical_slope`|;
+    - each `zone_<n>` is its tensile strain against the acceptable band's upper limit;
+    - `damage_category` is the governing zone (the largest tensile strain, first by distance on a tie at `TIE`).
+    - The zone rows have NaN `governing_distance`. Utilizations come from `_utilization`, and ∞ for the last band passes.
+  - **Method, assumptions, inputs** as decisions 11–12, with each preset's caveats through `preset_caveats`, and ν as a `"constant or setting"`.
+- Tests in new `tests/buildings/test_check_building.py`, with cases A–E and J built as fixtures from the spec's inputs (`twins_below_the_surface` for C and D):
+  - AC 1: case A, both beams, every table value, the ends, the Δ distances, the governing zone and Stage 1, to 1e-6 relative;
+  - AC 3: case B;
+  - AC 4: cases C and D, with D governed by zone 3;
+  - AC 5: case E, and the sin θ / sin²θ relations against case A;
+  - AC 6, first and third bullets: case J, categories 2 and 0, and the Stage 1 contour walls;
+  - AC 7: Δ against a 1 mm then 1 µm independent search, for A, C and E;
+  - AC 8, third bullet: `acceptable_category` 2 at 0.15 % and just above (on a case scaled by volume loss to land there 🟡), and `None`;
+  - AC 11: the eight missing judgments; plain-number slope refused and E/G accepted; bad `interaction`, a negative limit, an unknown category; the inputs and caveats;
+  - AC 12;
+  - AC 14: reversal, on cases A and D, in a hypothesis property test (`tests/buildings/test_check_building_properties.py`) over offsets and angle, as M3 (a)'s.
+
+### 6. `M4 (a): add the cut-off, flat walls and the depth limit` (Opus)
+Spec decisions 5 (flat, no zone), 6, 12's flags and 14.
+- `src/garisenda/buildings/_check.py`:
+  - with `trough_width_cutoff`, the assessed range is `source.trough_extent(..., multiple=...)`, and rows are added at its ends. Stations outside it have `zone` NA. Stage 1 still runs over the whole wall;
+  - `None` from the extent means no zone: the zones table is empty, the zone checks are absent 🟡 (no zones, so no rows), `damage_category` is NaN and NA, and the result carries a `within` flag naming the cut-off and the range;
+  - the depth flag: for each tunnel (via `tunnels()`, or the lone source's `tunnel`), z_f/z₀ ≥ 0.2 gives an `outside` flag naming the ratio, the tunnel, the limit and the source as decision 14 states it. Otherwise a `within` flag says the method states no range of validity. Both cover every row;
+  - the summary in `Result.__repr__`: for a `building_check`, Stage 1's two lines, a line per zone (mode, L, Δ/L, ε_h, governing strain and kind, category label), then `damage_category`.
+- `SPEC.md`:
+  - §1.3: the building idealization (greenfield at foundation level, beam of height H and unit width);
+  - §2.5: the building method's validity;
+  - §13 Q4: answered.
+- Tests in `tests/buildings/test_check_building.py`:
+  - AC 2: cases A and C with 2.5i, their ranges and zone 1 values; NA zones outside; Stage 1 unchanged;
+  - AC 9: the wall 500 m away (one flat zone, category 0) and the wall beyond the cut-off (no zone, flag, NaN/NA), neither raising;
+  - AC 10: depths 2, 4 and 5 m on z₀ = 20 m, and a superposition where the shallower tunnel governs;
+  - AC 16, third bullet: the summary lines.
+
+### 7. `M4 (a): sweep a building check and close out` (Opus)
+New session.
+- Tests:
+  - AC 17 in `tests/test_sweep.py`: a sweep over volume loss equals direct calls, including `damage_category_category`;
+  - AC 16, second bullet: `to_dict()` of cases A and J goes through `json.dumps`, with ∞ as `None`;
+  - AC 18: `tests/test_published_text.py` passes over the new strings.
+- Run every check:
+  - the CI line;
+  - Python 3.13 and 3.14;
+  - `lowest-direct`, then `git checkout uv.lock`;
+  - the docs build, `--strict`, with no `griffe:` warnings.
+- Look at the interim building cross-section and profile figures once. Their design is M4 (b), so this only checks that they draw sensibly.
+- Close-out:
+  - `SPEC.md` §12.4: M4 split into (a), done with the date, and (b) next;
+  - `docs/reference/sources.md`: `mair1996` and `jones2022` as the spec's Sources say;
+  - `docs/TODO.md` #7: the sources read, the primaries still to find, and Burland (1997) in hand and unread;
+  - `CHANGELOG.md` Unreleased: `gs.buildings`, `gs.check_building`, the new presets, `movement_profile`'s first argument renamed to `asset`, and the new `zones` and check columns;
+  - `CLAUDE.md`: the status sentence and "Next" (M4 (b): the building figures and guide), plus any recurring mistake as a convention;
+  - report each of the 18 ACs as met or not, with evidence.
