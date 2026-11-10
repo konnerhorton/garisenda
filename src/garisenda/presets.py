@@ -1,4 +1,4 @@
-"""Named, cited presets of published limits.
+"""Named, cited presets of published limits and parameters.
 
 A preset is a choice someone made: garisenda never applies one unless it is
 passed by name. Each value is a `Preset`, a `Sourced` whose source names the
@@ -10,6 +10,7 @@ There is no pipe length preset: no citable source for nominal laying lengths
 has been found.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,14 +18,19 @@ import pint
 
 from garisenda._inputs import Preset, judgments
 from garisenda._units import units
+from garisenda.buildings._categories import Band, DamageCategories
 
 __all__ = [
     "JointLimits",
+    "PreliminaryLimits",
     "Preset",
     "StrainLimits",
     "cast_iron_joint_limits",
+    "damage_categories",
     "grey_iron_tensile_strain_limit",
     "iron_strain_limits",
+    "preliminary_assessment_limits",
+    "youngs_to_shear_modulus_ratio",
 ]
 
 BRACEGIRDLE = "Bracegirdle et al. (1996)"
@@ -341,4 +347,213 @@ def grey_iron_tensile_strain_limit(*, diameter: str, situation: str) -> Preset:
         _quantity(GREY_IRON_TENSILE[(diameter, situation)], "µε"),
         source,
         (HERBERT_LEACH_CAVEAT,),
+    )
+
+
+MAIR_TAYLOR_BURLAND = "Mair, Taylor & Burland (1996)"
+
+BURLAND_WROTH_CAVEAT = (
+    "Burland & Wroth (1974), whom Mair, Taylor & Burland (1996, p. 717) cite "
+    "for E/G, hasn't been read."
+)
+
+FRAMED_CAVEAT = (
+    "Mair, Taylor & Burland (1996, p. 717) give E/G = 12.5 for reinforced "
+    "concrete framed buildings on shallow foundations, used in Eqs. 7 and 8; "
+    "Eq. 10 still takes Poisson's ratio as 0.3, which E/G = 12.5 doesn't imply "
+    "for an isotropic material."
+)
+
+TABLE_2_DAMAGE_CAVEAT = (
+    "Table 2 of Mair, Taylor & Burland (1996, p. 715) is after Boscardin & "
+    "Cording (1989), which hasn't been read. Boscardin & Cording describe "
+    "0.15-0.3 % as 'Moderate to Severe'; Mair, Taylor & Burland note that none "
+    "of their cases showed severe damage in that range. Table 1's note on "
+    "slopes (1/100 clearly visible, 1/150 undesirable) isn't checked."
+)
+
+PRELIMINARY_CAVEAT = (
+    "Mair, Taylor & Burland (1996, p. 717) set 10 mm and 1/500 against "
+    "contours of ground surface settlement; Jones (2022, Soft Ground Tunnel "
+    "Design, p. 469) attributes the stage to Rankin (1988), which hasn't been "
+    "read. garisenda checks them at the wall's foundation level, where a trough "
+    "below the surface is narrower and deeper, so they are more onerous there "
+    "than at the surface; a foundation depth of 0 gives the published check. "
+    "The slope check 'is rarely critical' (p. 717)."
+)
+
+# p. 716 (masonry, "often taken as 2.6") and §4.5, p. 717 (framed).
+STRUCTURES: dict[str, tuple[float, str]] = {
+    "masonry": (2.6, "p. 716, 'often taken as 2.6' for masonry"),
+    "framed": (
+        12.5,
+        "§4.5, p. 717, reinforced concrete framed buildings on shallow "
+        "foundations, after Burland & Wroth (1974)",
+    ),
+}
+
+# Table 2 (p. 715): number, label, normal degree of severity, upper limit in %.
+DAMAGE_BANDS: tuple[tuple[int, str, str, float], ...] = (
+    (0, "0", "negligible", 0.05),
+    (1, "1", "very slight", 0.075),
+    (2, "2", "slight", 0.15),
+    (3, "3", "moderate", 0.3),
+    (4, "4 to 5", "severe to very severe", math.inf),
+)
+
+
+@dataclass(frozen=True)
+class PreliminaryLimits:
+    """The preliminary assessment's limits, from `preliminary_assessment_limits`.
+
+    Attributes
+    ----------
+    settlement : Preset
+        The settlement below which a building's risk is negligible, a length
+        in mm.
+    slope : Preset
+        The slope no such building may exceed, in mm/m.
+    """
+
+    settlement: Preset
+    slope: Preset
+
+
+@judgments(
+    structure="it depends on how the building is built. Pass one of "
+    + ", ".join(repr(row) for row in STRUCTURES)
+    + "."
+)
+def youngs_to_shear_modulus_ratio(*, structure: str) -> Preset:
+    """Return E/G for a building's wall as Mair, Taylor & Burland give it.
+
+    Mair, Taylor & Burland (1996), Prediction of ground movements and
+    assessment of risk of building damage due to bored tunnelling:
+
+    | `structure` | E/G | where |
+    |---|---|---|
+    | `"masonry"` | 2.6 | p. 716 |
+    | `"framed"` | 12.5 | §4.5, p. 717, after Burland & Wroth (1974) |
+
+    On p. 716: "Although masonry is not an isotropic material, the ratio E/G
+    is often taken as 2.6, which is consistent with an isotropic Poisson's
+    ratio of 0.3." On p. 717, for reinforced concrete framed buildings on
+    shallow foundations: "It is more appropriate to adopt an E/G ratio of
+    12.5, rather than 2.6 used for masonry buildings (Burland and Wroth,
+    1974)".
+
+    Pass the value as ``youngs_to_shear_modulus_ratio`` to
+    `garisenda.check_building`.
+
+    Caveats, added to the result's assumptions:
+
+    - Burland & Wroth (1974) hasn't been read.
+    - For `"framed"`, Eq. 10 still takes Poisson's ratio as 0.3.
+
+    Parameters
+    ----------
+    structure : {"masonry", "framed"}
+        The row. A required judgment with no default.
+
+    Returns
+    -------
+    Preset
+        E/G, dimensionless.
+
+    Raises
+    ------
+    TypeError
+        If `structure` is missing.
+    ValueError
+        If `structure` isn't a row, listing the rows.
+    """
+    _row("structure", structure, STRUCTURES)
+    ratio, where = STRUCTURES[structure]
+    source = (
+        f"gs.presets.youngs_to_shear_modulus_ratio(structure={structure!r}): "
+        f"{MAIR_TAYLOR_BURLAND}, {where}"
+    )
+    caveats: tuple[str, ...] = (BURLAND_WROTH_CAVEAT,)
+    if structure == "framed":
+        caveats += (FRAMED_CAVEAT,)
+    return Preset(_quantity(ratio, "dimensionless"), source, caveats)
+
+
+def damage_categories() -> Preset:
+    """Return the damage categories by limiting tensile strain (Table 2).
+
+    Mair, Taylor & Burland (1996), Prediction of ground movements and
+    assessment of risk of building damage due to bored tunnelling, Table 2,
+    p. 715, "Relationship between category of damage and limiting tensile
+    strain", after Boscardin & Cording (1989):
+
+    | number | label | normal degree of severity | limiting tensile strain |
+    |---|---|---|---|
+    | 0 | `"0"` | negligible | 0-0.05 % |
+    | 1 | `"1"` | very slight | 0.05-0.075 % |
+    | 2 | `"2"` | slight | 0.075-0.15 % |
+    | 3 | `"3"` | moderate | 0.15-0.3 % |
+    | 4 | `"4 to 5"` | severe to very severe | > 0.3 % |
+
+    The table's ranges share their ends; a strain exactly on a boundary falls
+    in the lower category. Categories 4 and 5 are one band, as Table 2 gives
+    them. Pass the value as ``category_limits`` to
+    `garisenda.check_building`.
+
+    Caveat, added to the result's assumptions: Boscardin & Cording (1989)
+    hasn't been read; they describe 0.15-0.3 % as "Moderate to Severe", and
+    Mair, Taylor & Burland note none of their cases showed severe damage in
+    that range. Table 1's note on slopes isn't checked.
+
+    Returns
+    -------
+    Preset
+        A `garisenda.buildings.DamageCategories` named
+        ``"Mair, Taylor & Burland (1996), Table 2"``.
+    """
+    categories = DamageCategories(
+        name=f"{MAIR_TAYLOR_BURLAND}, Table 2",
+        bands=[
+            Band(number, label, severity, limit / 100)
+            for number, label, severity, limit in DAMAGE_BANDS
+        ],
+    )
+    source = (
+        f"gs.presets.damage_categories(): {MAIR_TAYLOR_BURLAND}, Table 2, p. 715, "
+        "after Boscardin & Cording (1989)"
+    )
+    return Preset(categories, source, (TABLE_2_DAMAGE_CAVEAT,))
+
+
+def preliminary_assessment_limits() -> PreliminaryLimits:
+    """Return the preliminary assessment's settlement and slope limits.
+
+    Mair, Taylor & Burland (1996), Prediction of ground movements and
+    assessment of risk of building damage due to bored tunnelling, §5.2,
+    p. 717: "a building has a negligible risk of damage when subjected to
+    settlements of less than 10mm", with "an additional check ... that no
+    eliminated building experiences a slope exceeding 1/500".
+
+    The slope is given as 2 mm/m, which is 1/500, because a slope must be
+    a quantity. Pass them as ``settlement_limit`` and ``slope_limit`` to
+    `garisenda.check_building`.
+
+    Caveat, added to the result's assumptions: they are set against the
+    ground surface, and Jones (2022, p. 469) attributes them to Rankin (1988),
+    which hasn't been read; garisenda checks them at the wall's foundation
+    level, which is more onerous for a foundation below the surface.
+
+    Returns
+    -------
+    PreliminaryLimits
+        ``.settlement`` (10 mm) and ``.slope`` (2 mm/m), each a `Preset`.
+    """
+    source = (
+        f"gs.presets.preliminary_assessment_limits(): {MAIR_TAYLOR_BURLAND}, "
+        "§5.2, p. 717"
+    )
+    caveats = (PRELIMINARY_CAVEAT,)
+    return PreliminaryLimits(
+        settlement=Preset(_quantity(10, "mm"), source, caveats),
+        slope=Preset(_quantity(2, "mm/m"), source, caveats),
     )
