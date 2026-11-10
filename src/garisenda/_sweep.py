@@ -99,12 +99,14 @@ def sweep(
           run's input record (1 % appears as 0.01);
         - for each row of `Result.governing`, ``<name>`` (signed, as in the
           result's values) and ``<name>_distance`` (m);
-        - for each row of `Result.checks` (a utility check's result),
-          ``<check>`` (its governing value, in the check's unit),
+        - for each row of `Result.checks` (a utility or building check's
+          result), ``<check>`` (its governing value, in the check's unit),
           ``<check>_distance`` (m), ``<check>_utilization`` (NaN where the
           check has no limit) and ``<check>_passes`` (pandas ``boolean``,
-          ``NA`` where the check has no limit); a result with no checks adds
-          none;
+          ``NA`` where the check has no limit), and, for a check with a
+          damage category in any run (a building check's zones and
+          ``damage_category``), ``<check>_category`` (pandas ``Int64``); a
+          result with no checks adds none;
         - ``validity``: the result's verdict;
         - ``warnings``: how many flags it has;
         - ``error``: None, or ``"<ExceptionType>: <message>"`` for a run that
@@ -378,6 +380,7 @@ def _table(
                     units[f"{item.name}_distance"] = "m"
 
     check_names: list[str] = []
+    categorized: set[str] = set()
     for outcome in runs:
         if outcome.result is not None:
             for check in outcome.result.checks.itertuples(index=False):
@@ -386,6 +389,8 @@ def _table(
                     units[str(check.check)] = str(check.unit)
                     units[f"{check.check}_distance"] = "m"
                     units[f"{check.check}_utilization"] = "dimensionless"
+                if check.category is not pd.NA:
+                    categorized.add(str(check.check))
 
     rows = []
     for number, outcome in enumerate(runs):
@@ -415,11 +420,15 @@ def _table(
                 row[f"{name}_distance"] = float(checks.loc[name, "governing_distance"])
                 row[f"{name}_utilization"] = float(checks.loc[name, "utilization"])
                 row[f"{name}_passes"] = checks.loc[name, "passes"]
+                if name in categorized:
+                    row[f"{name}_category"] = checks.loc[name, "category"]
             else:
                 row[name] = math.nan
                 row[f"{name}_distance"] = math.nan
                 row[f"{name}_utilization"] = math.nan
                 row[f"{name}_passes"] = pd.NA
+                if name in categorized:
+                    row[f"{name}_category"] = pd.NA
         if outcome.result is not None:
             row["validity"] = outcome.result.validity
             row["warnings"] = len(outcome.result.warnings)
@@ -441,10 +450,14 @@ def _table(
             f"{name}_utilization",
             f"{name}_passes",
         ]
+        if name in categorized:
+            columns.append(f"{name}_category")
     columns += ["validity", "warnings", "error"]
     table = pd.DataFrame(rows, columns=columns)
     for name in check_names:
         table[f"{name}_passes"] = table[f"{name}_passes"].astype("boolean")
+        if name in categorized:
+            table[f"{name}_category"] = table[f"{name}_category"].astype("Int64")
     table.attrs = {
         "units": units,
         "run": getattr(run, "__qualname__", repr(run)),

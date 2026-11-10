@@ -1,6 +1,6 @@
 # garisenda
 
-Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1, M2 and M3 are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M4, buildings from station and offset (facade lines, deflection ratio and horizontal strain, damage category); its open questions are TODO #7 and SPEC §13 Q4.
+Open-source Python library for ground movements from tunneling and their effect on utilities and structures: greenfield closed-form and empirical methods, traceable, with figures for every result, flagging where numerical analysis is needed (SPEC §1). Published and imported as `garisenda` (`import garisenda as gs`). Status: `SPEC.md` is in draft; M0, M1, M2, M3 and M4 (a) are done (SPEC §12.4). Phase 1 is a greenfield assessment with one analysis, always in 3D; spreadsheet-style input (station and offset) builds perpendicular 3D assets, and real polylines come after (SPEC §1.3, §3). Next: M4 (b), the building figures (the profile with zones, chords and Δ; the cross-section with the wall) and the buildings guide; its sources are still TODO #7.
 
 ## Where things are
 - `SPEC.md`: product spec and cross-cutting decisions. Read the relevant section before designing anything.
@@ -26,6 +26,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Sources produce a movement field; assessments consume it** as a profile along the asset, keyed by distance along it (SPEC §3).
 - **Every result has the same shape** and a validity verdict; outside a method's range it is flagged, not raised (SPEC §2.5, §5).
 - **Every assessment has a figure** (SPEC §9).
+- **Hand values printed to n figures are compared to their stated tolerance plus half a unit in the last digit**, never to the tolerance alone (M4 (a)'s `golden()` in `tests/buildings/test_check_building.py`). Match distances with `np.isclose(..., rtol=0, atol=...)`: the default `rtol=1e-5` matches a neighboring station on a long asset.
 - **Test a source on segments at any angle, not only perpendicular to the tunnel**: an oblique segment has a lateral component, and its peaks (M1's lateral-curvature peaks) are missed by perpendicular-only hand calculations.
 - **Never fill missing data**, never drop it silently (SPEC §10).
 - **Names are written out in full**, no units in names, American spelling (SPEC §8.5).

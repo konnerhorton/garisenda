@@ -152,3 +152,68 @@ def test_preset_caveats_are_each_listed_once_in_order():
         *strains.tensile.caveats,
     )
     assert preset_caveats(1.0, gs.Sourced(2.0, source="x"), None) == ()
+
+
+# M4 (a): building presets (spec decision 4)
+
+
+@pytest.mark.parametrize(
+    ("structure", "ratio", "where"),
+    [
+        ("masonry", 2.6, "p. 716, 'often taken as 2.6' for masonry"),
+        ("framed", 12.5, "§4.5, p. 717, reinforced concrete framed buildings"),
+    ],
+)
+def test_youngs_to_shear_modulus_ratio(structure, ratio, where):
+    value = gs.presets.youngs_to_shear_modulus_ratio(structure=structure)
+    assert isinstance(value, gs.presets.Preset)
+    assert value.value.to("dimensionless").magnitude == ratio
+    assert value.source.startswith(
+        f"gs.presets.youngs_to_shear_modulus_ratio(structure={structure!r}): "
+        f"Mair, Taylor & Burland (1996), {where}"
+    )
+    assert "Burland & Wroth (1974)" in value.caveats[0]
+    assert "hasn't been read" in value.caveats[0]
+    framed = structure == "framed"
+    assert any("Poisson's ratio as 0.3" in c for c in value.caveats) is framed
+
+
+def test_damage_categories_preset():
+    value = gs.presets.damage_categories()
+    assert isinstance(value.value, gs.buildings.DamageCategories)
+    assert value.source == (
+        "gs.presets.damage_categories(): Mair, Taylor & Burland (1996), Table 2, "
+        "p. 715, after Boscardin & Cording (1989)"
+    )
+    (caveat,) = value.caveats
+    assert "Boscardin & Cording (1989), which hasn't been read" in caveat
+    assert "'Moderate to Severe'" in caveat
+
+
+def test_preliminary_assessment_limits():
+    limits = gs.presets.preliminary_assessment_limits()
+    assert limits.settlement.value == 10 * u.mm
+    assert limits.slope.value.to("dimensionless").magnitude == pytest.approx(1 / 500)
+    for value in (limits.settlement, limits.slope):
+        assert value.source == (
+            "gs.presets.preliminary_assessment_limits(): Mair, Taylor & Burland "
+            "(1996), §5.2, p. 717"
+        )
+        (caveat,) = value.caveats
+        assert "Rankin (1988), which hasn't been read" in caveat
+        assert "foundation level" in caveat
+    _, entry = record(
+        "slope_limit",
+        limits.slope,
+        kind="design judgment",
+        unit="dimensionless",
+        plain_number="refuse",
+    )
+    assert entry.value.magnitude == pytest.approx(0.002)
+
+
+def test_building_preset_missing_or_unknown_row():
+    with pytest.raises(TypeError, match="is missing structure"):
+        gs.presets.youngs_to_shear_modulus_ratio()
+    with pytest.raises(ValueError, match="'masonry', 'framed'"):
+        gs.presets.youngs_to_shear_modulus_ratio(structure="steel")

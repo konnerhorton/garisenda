@@ -11,6 +11,8 @@ from garisenda.sources._movement import Flag, MethodRecord, Movement
 from garisenda.sources._segment import (
     check_outside_bore,
     directions,
+    offset_extent,
+    read_multiple,
     read_points,
     read_segment,
 )
@@ -309,6 +311,38 @@ class TransverseSurfaceTrough:
         zeros are at 0, +-i and +-sqrt(3) i in offset.
         """
         return self.trough_width
+
+    def trough_extent(
+        self, *, start: object, end: object, multiple: float
+    ) -> tuple[float, float] | None:
+        """Return where a segment is within m i of the tunnel's axis in plan.
+
+        The offset o is linear in distance along a straight segment, so the
+        extent is the one interval where |o| <= m i, clipped to [0, L]. A
+        segment parallel to the tunnel is all within or all beyond.
+
+        Parameters
+        ----------
+        start, end : array of three lengths
+            The segment's ends as (x, y, depth), in m if plain numbers.
+        multiple : float
+            m, the half-width of the extent in trough widths. Positive.
+
+        Returns
+        -------
+        tuple of two floats, or None
+            The distances from `start` in m where the extent begins and ends,
+            within [0, L], or None if no length of the segment is within it.
+
+        Raises
+        ------
+        ValueError
+            If an end isn't three finite values, the segment has zero length,
+            or `multiple` isn't positive and finite.
+        """
+        half_width = read_multiple(multiple) * self.trough_width
+        start_m, end_m, length = read_segment(start, end)
+        return offset_extent(self.tunnel, start_m, end_m, length, half_width)
 
     def _movement(self, o: FloatArray, depth: FloatArray) -> Movement:
         i, z0 = self.trough_width, self.tunnel.axis_depth

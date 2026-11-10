@@ -11,8 +11,8 @@ from garisenda._inputs import InputRecord
 from garisenda.sources._movement import Flag, MethodRecord, Verdict
 
 if TYPE_CHECKING:
+    from garisenda._asset import Asset
     from garisenda.sources._movement import Source
-    from garisenda.utilities._utility import Utility
 
 CHECK_COLUMNS = (
     "check",
@@ -23,6 +23,8 @@ CHECK_COLUMNS = (
     "governing_distance",
     "passes",
     "governed_by",
+    "zone",
+    "category",
     "analytical",
     "analytical_distance",
     "discrete",
@@ -40,13 +42,79 @@ CHECK_TYPES = {
     "governing_distance": "float64",
     "passes": "boolean",
     "governed_by": "object",
+    "zone": "Int64",
+    "category": "Int64",
     "analytical": "float64",
     "analytical_distance": "float64",
     "discrete": "float64",
     "discrete_distance": "float64",
     "difference": "float64",
 }
-"""Each column's dtype: ``passes`` is pandas' nullable boolean, NA with no limit."""
+"""Each column's dtype: ``passes`` is pandas' nullable boolean, NA with no limit.
+
+``zone`` and ``category`` are nullable integers, NA except on a building check's
+zone and damage-category rows.
+"""
+
+ZONE_COLUMNS = (
+    "zone",
+    "mode",
+    "start",
+    "end",
+    "length",
+    "deflection",
+    "deflection_distance",
+    "deflection_ratio",
+    "horizontal_strain",
+    "bending_strain",
+    "diagonal_strain",
+    "total_bending_strain",
+    "total_diagonal_strain",
+    "tensile_strain",
+    "governed_by",
+    "category",
+    "label",
+    "severity",
+)
+"""The columns of `Result.zones`, empty for an analysis with no zones."""
+
+ZONE_TYPES = {
+    "zone": "Int64",
+    "mode": "object",
+    "start": "float64",
+    "end": "float64",
+    "length": "float64",
+    "deflection": "float64",
+    "deflection_distance": "float64",
+    "deflection_ratio": "float64",
+    "horizontal_strain": "float64",
+    "bending_strain": "float64",
+    "diagonal_strain": "float64",
+    "total_bending_strain": "float64",
+    "total_diagonal_strain": "float64",
+    "tensile_strain": "float64",
+    "governed_by": "object",
+    "category": "Int64",
+    "label": "object",
+    "severity": "object",
+}
+"""Each zone column's dtype."""
+
+ZONE_UNITS = {
+    "start": "m",
+    "end": "m",
+    "length": "m",
+    "deflection": "m",
+    "deflection_distance": "m",
+    "deflection_ratio": "dimensionless",
+    "horizontal_strain": "dimensionless",
+    "bending_strain": "dimensionless",
+    "diagonal_strain": "dimensionless",
+    "total_bending_strain": "dimensionless",
+    "total_diagonal_strain": "dimensionless",
+    "tensile_strain": "dimensionless",
+}
+"""The units of the zones' numeric columns, kept in ``zones.attrs["units"]``."""
 
 GOVERNING_COLUMNS = ("name", "column", "value", "unit", "distance", "verdict")
 """The columns of `Result.governing()`."""
@@ -79,9 +147,28 @@ SUMMARY: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 
 def empty_checks() -> pd.DataFrame:
     """Return an empty checks table with its columns and their dtypes."""
-    return pd.DataFrame(
-        {name: pd.Series([], dtype=CHECK_TYPES[name]) for name in CHECK_COLUMNS}
-    )
+    return checks_frame([])
+
+
+def checks_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Return a checks table from rows, with every column and its dtype.
+
+    A column a row leaves out is NaN, or NA for a nullable one.
+    """
+    table = pd.DataFrame(rows, columns=list(CHECK_COLUMNS))
+    return table.astype(CHECK_TYPES)
+
+
+def zones_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Return a zones table from rows, with every column, its dtype and units."""
+    table = pd.DataFrame(rows, columns=list(ZONE_COLUMNS)).astype(ZONE_TYPES)
+    table.attrs["units"] = dict(ZONE_UNITS)
+    return table
+
+
+def empty_zones() -> pd.DataFrame:
+    """Return an empty zones table with its columns, dtypes and units."""
+    return zones_frame([])
 
 
 @dataclass(frozen=True)
@@ -96,7 +183,7 @@ class Result:
     analysis : str
         The analysis that made it, for example ``"movement_profile"``.
     subject : str
-        What it was run on: the utility's id.
+        What it was run on: the utility's or building's id.
     values : pandas.DataFrame
         The computed quantities, one row per station, keyed by the
         ``distance`` column (m along the asset), with units in
@@ -106,7 +193,9 @@ class Result:
         name), ``value`` (the governing value, in ``unit``), ``limit`` (NaN
         if none was given), ``utilization``, ``governing_distance`` (m),
         ``passes`` (pandas NA with no limit), ``governed_by``
-        (``"analytical"`` or ``"discrete"``), ``analytical`` and
+        (``"analytical"`` or ``"discrete"``), ``zone`` and ``category``
+        (nullable integers: a building check's zone and damage category, NA
+        otherwise), ``analytical`` and
         ``analytical_distance``, ``discrete`` and ``discrete_distance``, and
         ``difference`` (discrete - analytical). Empty for an analysis with no
         checks, such as a movement profile.
@@ -120,10 +209,14 @@ class Result:
         The worst verdict over the stations and the flags.
     warnings : tuple of Flag
         Everything flagged, with ``points`` as row positions in `values`.
+    zones : pandas.DataFrame
+        A building check's zones of hogging and sagging, one row per zone, with
+        units in ``zones.attrs["units"]``; empty with its columns for every
+        other analysis. See `garisenda.check_building`.
     source : Source or None
         The source the analysis evaluated, kept so a figure can draw the field
         beyond the asset. Not part of the views or of equality.
-    asset : Utility or None
+    asset : Utility, Building or None
         The asset it was run on, kept for the same reason.
     """
 
@@ -136,8 +229,9 @@ class Result:
     inputs: tuple[InputRecord, ...]
     validity: Verdict
     warnings: tuple[Flag, ...]
+    zones: pd.DataFrame = field(default_factory=empty_zones)
     source: "Source | None" = field(default=None, repr=False, compare=False)
-    asset: "Utility | None" = field(default=None, repr=False, compare=False)
+    asset: "Asset | None" = field(default=None, repr=False, compare=False)
 
     def __eq__(self, other: object) -> bool:
         """Compare every part but `source` and `asset`, tables by content.
@@ -149,7 +243,7 @@ class Result:
         """
         if not isinstance(other, Result):
             return NotImplemented
-        for table in ("values", "checks"):
+        for table in ("values", "checks", "zones"):
             mine, theirs = getattr(self, table), getattr(other, table)
             if not (mine.equals(theirs) and mine.attrs == theirs.attrs):
                 return False
@@ -236,7 +330,8 @@ class Result:
         -------
         dict
             ``analysis``, ``subject``, ``values`` (a list per column),
-            ``units``, ``checks`` (a list of rows), ``method``, ``assumptions``,
+            ``units``, ``checks`` (a list of rows), ``zones`` (a list of rows,
+            empty with no zones), ``method``, ``assumptions``,
             ``inputs`` (each with ``name``, ``magnitude``, ``unit``, ``kind``,
             ``given_as`` and ``source``), ``validity`` and ``warnings`` (each
             with ``verdict``, ``reason``, ``limit``, ``points`` and
@@ -252,6 +347,7 @@ class Result:
             },
             "units": dict(self.values.attrs.get("units", {})),
             "checks": _plain(self.checks.to_dict(orient="records")),
+            "zones": _plain(self.zones.to_dict(orient="records")),
             "method": [
                 {
                     "name": record.name,
@@ -283,37 +379,44 @@ class Result:
             f"{len(values)} stations"
         ]
         distance = values.get("distance")
-        governing = self.governing().set_index("name")
-        for column, label, names in SUMMARY:
-            if column not in values:
-                continue
-            parts = []
-            for name, short in names:
-                row = governing.loc[name]
-                if not math.isfinite(row["value"]):
-                    parts.append(f"{short} none")
-                    continue
-                where = (
-                    ""
-                    if not math.isfinite(row["distance"])
-                    else f" at {row['distance']:.4g} m"
-                )
-                parts.append(f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}")
-            lines.append(f"  {label}: {'; '.join(parts)}")
-        checks = list(self.checks.itertuples(index=False))
-        joints = [check for check in checks if check.check.startswith("joint_")]
-        if joints:
-            groups = [
-                ("joints", joints),
-                ("barrel", [check for check in checks if check not in joints]),
-            ]
-            for heading, group in groups:
-                lines.append(f"  {heading}:")
-                lines.extend(
-                    f"    {check.check}: {_check_text(check)}" for check in group
-                )
+        if self.analysis == "building_check":
+            lines.extend(_building_lines(self))
         else:
-            lines.extend(f"  {check.check}: {_check_text(check)}" for check in checks)
+            governing = self.governing().set_index("name")
+            for column, label, names in SUMMARY:
+                if column not in values:
+                    continue
+                parts = []
+                for name, short in names:
+                    row = governing.loc[name]
+                    if not math.isfinite(row["value"]):
+                        parts.append(f"{short} none")
+                        continue
+                    where = (
+                        ""
+                        if not math.isfinite(row["distance"])
+                        else f" at {row['distance']:.4g} m"
+                    )
+                    parts.append(
+                        f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}"
+                    )
+                lines.append(f"  {label}: {'; '.join(parts)}")
+            checks = list(self.checks.itertuples(index=False))
+            joints = [check for check in checks if check.check.startswith("joint_")]
+            if joints:
+                groups = [
+                    ("joints", joints),
+                    ("barrel", [check for check in checks if check not in joints]),
+                ]
+                for heading, group in groups:
+                    lines.append(f"  {heading}:")
+                    lines.extend(
+                        f"    {check.check}: {_check_text(check)}" for check in group
+                    )
+            else:
+                lines.extend(
+                    f"  {check.check}: {_check_text(check)}" for check in checks
+                )
         for flag in self.warnings:
             lines.append(f"  {flag.verdict}: {flag_text(flag)}")
             if distance is not None and flag.points:
@@ -371,6 +474,38 @@ def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
         return int(positions[0])
     distance = values["distance"].to_numpy(dtype=np.float64)[positions]
     return int(positions[int(np.argmin(distance))])
+
+
+def _building_lines(result: "Result") -> list[str]:
+    """Return a building check's summary: Stage 1, each zone and the governing zone."""
+    checks = {row.check: row for row in result.checks.itertuples(index=False)}
+    lines = ["  stage 1:"]
+    lines.extend(
+        f"    {name}: {_check_text(checks[name])}"
+        for name in ("settlement", "slope")
+        if name in checks
+    )
+    lines.append("  stage 2:")
+    zones = {zone.zone: zone for zone in result.zones.itertuples(index=False)}
+    for zone in zones.values():
+        kind = "eps_bt" if zone.governed_by == "bending" else "eps_dt"
+        lines.append(
+            f"    zone {zone.zone}: {zone.mode}, L {zone.length:.4g} m, "
+            f"Delta/L {zone.deflection_ratio:.4g}, eps_h {zone.horizontal_strain:.4g}, "
+            f"{kind} {zone.tensile_strain:.4g}, category {zone.label} "
+            f"({zone.severity})"
+        )
+    row = checks.get("damage_category")
+    if row is not None:
+        if row.zone is pd.NA:
+            lines.append("    damage_category: not determined, no zone assessed")
+        else:
+            governing = zones[row.zone]
+            lines.append(
+                f"    damage_category: zone {row.zone}, category {governing.label} "
+                f"({governing.severity}): {_check_text(row)}"
+            )
+    return lines
 
 
 def _check_text(check: Any) -> str:

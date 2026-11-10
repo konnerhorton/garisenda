@@ -1,4 +1,4 @@
-"""The ground's movement resolved along a utility."""
+"""The ground's movement resolved along a utility or a building's wall."""
 
 import math
 from dataclasses import replace
@@ -7,12 +7,12 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
+from garisenda._asset import Asset, asset_name
 from garisenda._inputs import judgments, record
 from garisenda._result import Result, empty_checks
 from garisenda.sources._critical import _with_distances
 from garisenda.sources._movement import Flag, MethodRecord, Source, Verdict, worst
 from garisenda.sources._segment import InsideBoreError, directions
-from garisenda.utilities._utility import Utility
 
 MERGE_TOLERANCE = 1e-6
 """Distance in m within which two stations are merged into one."""
@@ -23,7 +23,7 @@ MAXIMUM_STATIONS = 1_000_000
 GREENFIELD = "Assets follow the ground: greenfield, no soil-structure interaction."
 
 METHOD = MethodRecord(
-    "Movement profile along a straight utility",
+    "Movement profile along a straight line",
     (
         "stations: 0, L, every k spacing < L, and the source's critical distances",
         "a = (end - start) / L, l = (a_y, -a_x, 0) / |(a_x, a_y)|, v = l x a",
@@ -61,32 +61,36 @@ FloatArray = npt.NDArray[np.float64]
     "are always included), and so how finely the profile is resolved and drawn. "
     "Pass a length, e.g. spacing=1 * gs.units.m."
 )
-def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Result:
-    """Return the ground's movement along a utility, with its exact derivatives.
+def movement_profile(asset: Asset, source: Source, *, spacing: object) -> Result:
+    """Return the ground's movement along an asset, with its exact derivatives.
 
-    The source is evaluated at stations along the utility (never on a grid),
+    The asset is a utility, along its axis, or a building's wall, along its
+    foundation level. The source is evaluated at stations along the asset
+    (never on a grid),
     and its displacement u is resolved into three directions, with components
     in the order (x, y, depth):
 
     - along: a = (end - start) / L, positive toward increasing distance;
     - lateral: l = (a_y, -a_x, 0) / |(a_x, a_y)|, horizontal and positive to
       the right looking along a, as offset is;
-    - vertical: v = l x a, which is (0, 0, 1) for a level utility, so vertical
+    - vertical: v = l x a, which is (0, 0, 1) for a level asset, so vertical
       is settlement, positive downward.
 
     Each component u.e has exact derivatives with respect to distance s along
-    the utility, from the source's gradient G and Hessian H:
+    the asset, from the source's gradient G and Hessian H:
     d(u.e)/ds = e_i G_ij a_j and d2(u.e)/ds2 = e_i H_ijk a_j a_k.
 
     Parameters
     ----------
-    utility : Utility
-        A straight utility (two vertices).
+    asset : Utility or Building
+        A straight utility (two vertices), or a building's wall
+        (`garisenda.buildings.Building`), whose profile is at its foundation
+        level.
     source : Source
         The source of ground movement, such as a transverse surface trough.
     spacing : length
         The largest distance between stations, in m if a plain number. A
-        design judgment with no default. Stations are the utility's ends,
+        design judgment with no default. Stations are the asset's ends,
         every multiple of `spacing` below its length L, and the source's
         critical distances (where its quantities peak or change sign), so a
         peak is never missed whatever the spacing. Stations closer than 1 um
@@ -95,18 +99,18 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     Returns
     -------
     Result
-        ``analysis`` is ``"movement_profile"`` and ``subject`` the utility's id.
+        ``analysis`` is ``"movement_profile"`` and ``subject`` the asset's id.
         ``values`` has one row per station, with units in
         ``attrs["units"]``:
 
-        - ``distance`` (m) from the utility's first vertex;
+        - ``distance`` (m) from the asset's first vertex;
         - ``x``, ``y``, ``depth`` (m) of the station;
         - ``station``, ``offset`` (m) relative to the reference tunnel, only
-          for a utility built from station and offset;
+          for an asset built from station and offset;
         - ``along``, ``vertical``, ``lateral`` (m), the displacement;
         - ``along_strain`` (dimensionless, tension positive) and
           ``along_strain_gradient`` (1/m), the ground's strain along the
-          utility and its derivative;
+          asset and its derivative;
         - ``vertical_slope`` (dimensionless), ``vertical_curvature`` (1/m;
           negative is sagging, as settlement is positive downward);
         - ``lateral_slope`` (dimensionless), ``lateral_curvature`` (1/m);
@@ -115,10 +119,11 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
 
         ``checks`` is empty: `garisenda.check_continuous_pipe` and
         `garisenda.check_jointed_pipe` add them. The method,
-        assumptions and inputs are the source's, the utility's and this
-        profile's. The utility's inputs are named for it, such as
-        ``utility.diameter``; the source's keep their names (``diameter``
-        for one tunnel, ``north.diameter`` in a superposition).
+        assumptions and inputs are the source's, the asset's and this
+        profile's. The asset's inputs are named for it, such as
+        ``utility.diameter`` or ``building.height``; the source's keep their
+        names (``diameter`` for one tunnel, ``north.diameter`` in a
+        superposition).
         ``validity`` is the worst verdict over the stations and flags, and
         ``warnings`` the source's flags, with points as row positions.
 
@@ -129,15 +134,16 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     ValueError
         If `spacing` isn't positive or gives more than 1,000,000 stations, the
         utility is vertical (it has no lateral direction), or the source can't
-        evaluate a station (inside the bore, say), naming the utility and the
+        evaluate a station (inside the bore, say), naming the asset and the
         stations' distances; inside a bore, also the bore's depths, the
-        utility's depth and what to check.
+        asset's depth and what to check.
 
     Notes
     -----
     The profile is the ground's movement (greenfield): the assets follow the
     ground, which is recorded as an assumption. How much of `along_strain` a
-    pipe takes is decided by the utility checks.
+    pipe takes is decided by the utility checks, and what a wall takes by
+    `garisenda.check_building`.
     """
     spacing_m, spacing_record = record(
         "spacing", spacing, kind="design judgment", unit="m", plain_number="read as SI"
@@ -153,8 +159,9 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         plain_number="read as SI",
     )
 
-    where = f"Utility {utility.utility_id!r}"
-    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
+    label, asset_id, prefix = asset_name(asset)
+    where = f"{label} {asset_id!r}"
+    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in asset.vertices)
     length = float(np.linalg.norm(end - start))
     try:
         directions(start, end)
@@ -174,52 +181,53 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
             source.critical_distances(start=start, end=end), dtype=np.float64
         )
     except ValueError as error:
-        raise ValueError(f"{where}: {error}{_bore_remedy(utility, error)}") from error
+        raise ValueError(f"{where}: {error}{_bore_remedy(asset, error)}") from error
     distance, is_critical = _stations(length, spacing_m, critical)
-    values, flags, validity = profile_rows(utility, source, distance, is_critical)
+    values, flags, validity = profile_rows(asset, source, distance, is_critical)
     return Result(
         analysis="movement_profile",
-        subject=utility.utility_id,
+        subject=asset_id,
         values=values,
         checks=empty_checks(),
         method=(*source.method, METHOD),
-        assumptions=(*source.assumptions, *utility.assumptions, GREENFIELD),
+        assumptions=(*source.assumptions, *asset.assumptions, GREENFIELD),
         inputs=(
             *source.inputs,
-            *(replace(entry, name=f"utility.{entry.name}") for entry in utility.inputs),
+            *(replace(entry, name=f"{prefix}.{entry.name}") for entry in asset.inputs),
             spacing_record,
             merge_record,
         ),
         validity=validity,
         warnings=flags,
         source=source,
-        asset=utility,
+        asset=asset,
     )
 
 
 def profile_rows(
-    utility: Utility,
+    asset: Asset,
     source: Source,
     distance: FloatArray,
     is_critical: npt.NDArray[np.bool_],
 ) -> tuple[pd.DataFrame, tuple[Flag, ...], Verdict]:
-    """Return a profile's rows at the given distances along a utility.
+    """Return a profile's rows at the given distances along an asset.
 
     The columns are `movement_profile`'s, with units in ``attrs["units"]``;
     the flags are the source's, with points as row positions, and the
-    validity is the worst verdict over the rows and flags. The utility must
+    validity is the worst verdict over the rows and flags. The asset must
     not be vertical. If the source can't evaluate a point, its `ValueError`
-    is raised again naming the utility and the points' distances.
+    is raised again naming the asset and the points' distances.
     """
-    where = f"Utility {utility.utility_id!r}"
-    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
+    label, asset_id, _ = asset_name(asset)
+    where = f"{label} {asset_id!r}"
+    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in asset.vertices)
     a, v, lat = directions(start, end)
     points = start + distance[:, None] * a
     try:
         movement = source.evaluate(x=points[:, 0], y=points[:, 1], depth=points[:, 2])
     except ValueError as error:
         message = _with_distances(str(error), distance)
-        raise ValueError(f"{where}: {message}{_bore_remedy(utility, error)}") from error
+        raise ValueError(f"{where}: {message}{_bore_remedy(asset, error)}") from error
 
     gradient, hessian = movement.gradient, movement.hessian
 
@@ -237,8 +245,8 @@ def profile_rows(
         "y": points[:, 1],
         "depth": points[:, 2],
     }
-    if utility.built is not None:
-        station, offset = utility.built.tunnel.station_offset(
+    if asset.built is not None:
+        station, offset = asset.built.tunnel.station_offset(
             x=points[:, 0], y=points[:, 1]
         )
         columns["station"] = np.atleast_1d(station)
@@ -301,17 +309,23 @@ def _stations(
     )
 
 
-def _bore_remedy(utility: Utility, error: ValueError) -> str:
-    """For a point inside a bore, the utility's depth and what to check."""
+def _bore_remedy(asset: Asset, error: ValueError) -> str:
+    """For a point inside a bore, the asset's depth and what to check."""
     if not isinstance(error, InsideBoreError):
         return ""
-    depths = np.asarray(utility.vertices, dtype=np.float64)[:, 2]
+    depths = np.asarray(asset.vertices, dtype=np.float64)[:, 2]
     low, high = float(np.min(depths)), float(np.max(depths))
     if high - low < 1e-9:
         at = f"at depth {low:.6g} m"
     else:
         at = f"at depths {low:.6g} to {high:.6g} m"
-    built = utility.built
+    label, _, _ = asset_name(asset)
+    if label == "Building":
+        return (
+            f" The building's foundation is {at}. Check its foundation depth "
+            "or elevation."
+        )
+    built = asset.built
     if built is None:
         check = "Check its vertices' depths."
     else:

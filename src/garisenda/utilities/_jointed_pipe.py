@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
-from garisenda._result import CHECK_COLUMNS, CHECK_TYPES, Result
+from garisenda._result import CHECK_TYPES, Result, checks_frame
 from garisenda._units import units
 from garisenda.profile._movement_profile import MERGE_TOLERANCE
 from garisenda.sources._critical import find_zeros
@@ -250,7 +250,7 @@ def check_jointed_pipe(
     as Bracegirdle et al. (1996), p. 661 allow; rigid joints for the
     barrel's strain, p. 663.
     """
-    utility, source = _read_profile(profile, "check_jointed_pipe")
+    utility, source = _read_profile(profile, "check_jointed_pipe", Utility)
     type_name, type_record = _read_pipe_type(pipe_type)
     length, length_record = _pipe_length(pipe_lengths, type_name, utility)
     interaction_record = _read_interaction(interaction)
@@ -596,4 +596,4 @@ def _joint_checks(
                 "difference": math.nan,
             }
         )
-    return pd.DataFrame(rows, columns=list(CHECK_COLUMNS)).astype(CHECK_TYPES)
+    return checks_frame(rows)

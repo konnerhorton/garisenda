@@ -1,10 +1,6 @@
 """Utility lines and their builders."""
 
-from garisenda.utilities._utility import (
-    BuildRecord,
-    ElevationReference,
-    Utility,
-    perpendicular_utility,
-)
+from garisenda._asset import BuildRecord, ElevationReference
+from garisenda.utilities._utility import Utility, perpendicular_utility
 
 __all__ = ["BuildRecord", "ElevationReference", "Utility", "perpendicular_utility"]

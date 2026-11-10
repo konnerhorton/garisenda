@@ -551,6 +551,8 @@ def test_a_check_sweep_row_equals_a_direct_call():
     assert units["radius_of_curvature_distance"] == "m"
     assert units["bending_utilization"] == "dimensionless"
     assert str(table["bending_passes"].dtype) == "boolean"
+    # M4 (a): only a building check's categorized rows add a category column.
+    assert not [name for name in table.columns if name.endswith("_category")]
 
 
 def test_a_check_with_no_limit_and_a_failed_run_in_a_sweep():
@@ -635,3 +637,73 @@ def test_a_jointed_check_sweep_row_equals_a_direct_call():
                 assert row[f"{check.check}_passes"] == check.passes
     assert table.attrs["units"]["joint_rotation"] == "rad"
     assert table.attrs["units"]["joint_pullout"] == "m"
+    assert not [name for name in table.columns if name.endswith("_category")]
+
+
+def building_check(volume_loss=1 * u.percent):
+    # M4 (a): case A's trough and wall.
+    reference = gs.sources.IdealizedTunnel(
+        reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
+    )
+    trough = gs.sources.transverse_trough(
+        reference,
+        volume_loss=volume_loss,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    building = gs.buildings.perpendicular_building(
+        reference,
+        building_id="B-1",
+        station=50,
+        start_offset=-30,
+        end_offset=30,
+        height=8,
+        foundation_depth=2,
+    )
+    limits = gs.presets.preliminary_assessment_limits()
+    return gs.check_building(
+        gs.movement_profile(building, trough, spacing=1.0),
+        beam_method=gs.buildings.timoshenko_beam(),
+        youngs_to_shear_modulus_ratio=2.6,
+        category_limits=gs.presets.damage_categories(),
+        cutoff=gs.buildings.no_cutoff(),
+        settlement_limit=limits.settlement,
+        slope_limit=limits.slope,
+        acceptable_category=2,
+        interaction="greenfield",
+    )
+
+
+def test_a_building_check_sweep_row_equals_a_direct_call():
+    # M4 (a) AC 17: the zones and damage_category, with their categories.
+    volume_losses = [1.0, 3.0, 5.0] * u.percent
+    table = gs.sweep(building_check, vary={"volume_loss": volume_losses})
+    for (_, row), volume_loss in zip(table.iterrows(), volume_losses, strict=True):
+        direct = building_check(volume_loss=volume_loss)
+        assert direct.checks["check"].tolist() == [
+            "settlement",
+            "slope",
+            "zone_1",
+            "zone_2",
+            "zone_3",
+            "damage_category",
+        ]
+        for check in direct.checks.itertuples():
+            assert row[check.check] == check.value
+            assert row[f"{check.check}_utilization"] == check.utilization
+            assert row[f"{check.check}_passes"] == check.passes
+            if math.isnan(check.governing_distance):
+                assert math.isnan(row[f"{check.check}_distance"])
+            else:
+                assert row[f"{check.check}_distance"] == check.governing_distance
+            if check.category is pd.NA:
+                assert f"{check.check}_category" not in table.columns
+            else:
+                assert row[f"{check.check}_category"] == check.category
+        assert row["validity"] == direct.validity
+        assert row["warnings"] == len(direct.warnings)
+    # The governing strain is linear in volume loss: 3.83968e-4 at 1 %
+    # (spec, case A), so category 0, then 2 at 3 % and 3 at 5 %.
+    assert table["damage_category_category"].tolist() == [0, 2, 3]
+    assert str(table["damage_category_category"].dtype) == "Int64"
+    assert table["damage_category_passes"].tolist() == [True, True, False]
+    assert table.attrs["units"]["damage_category"] == "dimensionless"

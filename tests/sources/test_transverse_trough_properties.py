@@ -170,7 +170,9 @@ OBLIQUE_ROOTS = (math.sqrt(3 - math.sqrt(6)), math.sqrt(3 + math.sqrt(6)))
 def level_segments(draw):
     source = draw(troughs())
     tunnel = source.tunnel
-    depth = draw(st.floats(0.0, 1.0)) * source.crown_depth
+    # Not at the crown itself: a point there at offset 0 is on the bore's
+    # boundary, and rounding can put it inside.
+    depth = draw(st.floats(0.0, 0.999)) * source.crown_depth
     i = source.width_at(depth)
     station = draw(st.floats(-1e3, 1e3))
     offset = draw(st.floats(-4.0, 4.0)) * i

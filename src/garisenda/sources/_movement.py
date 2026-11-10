@@ -164,3 +164,15 @@ class Source(Protocol):
         trough's width i.
         """
         ...
+
+    def trough_extent(
+        self, *, start: object, end: object, multiple: float
+    ) -> tuple[float, float] | None:
+        """Return where a segment is within some trough widths of the axes.
+
+        For the straight segment from `start` to `end`, each (x, y, depth) in m,
+        the distances from `start` in m of the first and last points within
+        `multiple` trough widths i of any transverse trough's axis in plan, or
+        None if there are none.
+        """
+        ...

@@ -3,6 +3,7 @@ import json
 import math
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import garisenda as gs
@@ -316,7 +317,7 @@ def test_result_parts():
     names = [record.name for record in result.method]
     assert names == [
         "Transverse Gaussian surface trough",
-        "Movement profile along a straight utility",
+        "Movement profile along a straight line",
     ]
     assert any("greenfield" in text for text in result.assumptions)
     assert any("perpendicular" in text for text in result.assumptions)
@@ -496,3 +497,68 @@ def test_twin_tunnel_inputs_have_unique_names(twins_below_the_surface):
     for name in ("north.diameter", "south.diameter", "utility.diameter"):
         assert name in names
     assert "diameter" not in names
+
+
+# M4 (a): a building's profile
+
+
+def building_and_utility(depth=2.0):
+    source = gs.sources.transverse_trough(
+        tunnel(),
+        volume_loss=1 * u.percent,
+        trough_width=gs.sources.linear_trough_width(trough_width_parameter=0.5),
+    )
+    wall = gs.buildings.perpendicular_building(
+        source.tunnel,
+        building_id="B-1",
+        station=50,
+        start_offset=-30,
+        end_offset=30,
+        height=8,
+        foundation_depth=depth,
+    )
+    pipe = built(source, start_offset=-30, end_offset=30, depth=depth)
+    return (
+        gs.movement_profile(wall, source, spacing=2.5),
+        gs.movement_profile(pipe, source, spacing=2.5),
+    )
+
+
+def test_a_building_profile_equals_a_utility_profile_on_the_same_line():
+    wall, pipe = building_and_utility()
+    assert wall.subject == "B-1"
+    assert wall.asset.building_id == "B-1"
+    pd.testing.assert_frame_equal(wall.values, pipe.values)
+    assert wall.values.attrs == pipe.values.attrs
+    assert wall.validity == pipe.validity
+
+
+def test_the_building_inputs_are_named_for_it():
+    wall, _ = building_and_utility()
+    names = [entry.name for entry in wall.inputs]
+    assert len(names) == len(set(names))
+    for name in ("building.height", "building.foundation_depth", "building.station"):
+        assert name in names
+    assert not any(name.startswith("utility.") for name in names)
+    inputs = {entry.name: entry for entry in wall.inputs}
+    assert inputs["building.height"].value.m_as("m") == 8.0
+
+
+def test_bore_error_for_a_building_names_its_foundation():
+    wall = gs.buildings.perpendicular_building(
+        tunnel(),
+        building_id="B-9",
+        station=50,
+        start_offset=-20,
+        end_offset=20,
+        height=8,
+        foundation_depth=19.0,
+    )
+    with pytest.raises(ValueError) as caught:
+        gs.movement_profile(wall, trough(), spacing=5.0)
+    message = str(caught.value)
+    assert message.startswith("Building 'B-9': Points inside the bore")
+    assert message.endswith(
+        "The building's foundation is at depth 19 m. Check its foundation depth "
+        "or elevation."
+    )
