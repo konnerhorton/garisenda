@@ -87,14 +87,6 @@ From a whole-package review at M3 (`dc59a48`) for whether an AI agent can use ga
 - **What happens:** `IdealizedTunnel(diameter=20, axis_depth=60)` from a project in feet is silently 3.28× off. The input record says `given_as="plain number, read as m"`, but the summary doesn't show it.
 - **Decided (2026-11-10):** always show units: the summary shows each input with its unit, and how it was given, so a plain number read as m is visible. Plain lengths are still accepted (SPEC §6 unchanged).
 
-### 19. Internal references in published text and results · Claude · SPEC §2.2, §8.5
-- **What happens:** result assumptions read "(SPEC §1.3)" and "(TODO #2)"; the pullout preset's caveat cites "the M3 (b) spec's case J-A"; errors cite "(SPEC §7)", "(SPEC §1.3)"; 25 public docstrings cite SPEC or TODO (52 string literals in `src/`). The engineer signing off can't follow them.
-- **Fix:** replace with the docs page or the source citation, and a test that no published string (docstrings, assumptions, error messages) contains `SPEC §`, `TODO #` or a milestone id. Planned in `docs/work/published-text-and-input-names.md`.
-
-### 22. Input records with the same name · Claude · SPEC §5.1
-- A single-tunnel result has two inputs named `diameter` (the tunnel's and the utility's) with no owner; superposition prefixes source inputs (`north.diameter`) but the utility's stay bare. An audit table or memo built from `inputs` can mix them up.
-- **Fix:** prefix the utility's inputs (`utility.diameter`), as superposition prefixes its sources'. Planned in `docs/work/published-text-and-input-names.md`.
-
 ### 23. A governing utilization for a check and a sweep · You · SPEC §5.1, §5.3
 - `checks` and `gs.sweep` give no overall governing utilization or pass, so trial B took the maximum itself and bisected for the volume loss at which the pipe stops passing. A symmetric peak reports one location only (trial A).
 - **Open:** whether to add a governing row or column (with `None` limits and NA passes handled explicitly), and whether to report both locations of a symmetric peak.

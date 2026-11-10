@@ -58,7 +58,7 @@ HAND = {
 }
 
 
-def crossing(volume_loss=1 * u.percent, trough_width_parameter=0.5, depth=0.0):
+def crossing(volume_loss=1 * u.percent, trough_width_parameter=0.5, utility_depth=0.0):
     tunnel = gs.sources.IdealizedTunnel(
         reference_point=(0, 0), azimuth=0 * u.degree, diameter=6.0, axis_depth=20.0
     )
@@ -73,7 +73,7 @@ def crossing(volume_loss=1 * u.percent, trough_width_parameter=0.5, depth=0.0):
         station=50,
         start_offset=-20,
         end_offset=20,
-        depth=depth,
+        depth=utility_depth,
         elevation_reference="axis",
         diameter=0.3,
     )
@@ -122,9 +122,16 @@ def test_grid_against_the_hand_table():
     assert attrs["mode"] == "grid"
     assert attrs["vary"] == ["volume_loss", "trough_width_parameter"]
     fixed = [entry["name"] for entry in attrs["fixed_inputs"]]
-    for name in ("axis_depth", "diameter", "station", "depth", "spacing"):
+    for name in (
+        "axis_depth",
+        "diameter",
+        "utility.diameter",
+        "utility.station",
+        "utility.depth",
+        "spacing",
+    ):
         assert name in fixed
-    assert fixed.count("diameter") == 2
+    assert len(fixed) == len(set(fixed))
     assert "volume_loss" not in fixed
     assert "trough_width_parameter" not in fixed
     assert list(table.columns[-3:]) == ["validity", "warnings", "error"]
@@ -181,12 +188,12 @@ def test_each_row_equals_a_direct_call():
 
 
 def test_a_run_through_the_bore_is_recorded():
-    table = gs.sweep(crossing, vary={"depth": [0.0, 20.0, 2.7]})
+    table = gs.sweep(crossing, vary={"utility.depth": [0.0, 20.0, 2.7]})
     assert table["error"].iloc[0] is None
     assert table["error"].iloc[1].startswith("ValueError: Utility 'W-1'")
     assert table["validity"].iloc[1] is None
     assert np.isnan(table["largest_settlement"].iloc[1])
-    assert table["depth"].tolist() == [0.0, 20.0, 2.7]
+    assert table["utility.depth"].tolist() == [0.0, 20.0, 2.7]
     assert table["validity"].iloc[2] == "outside"
     assert table["warnings"].iloc[2] == 1
 
@@ -547,10 +554,10 @@ def test_a_check_sweep_row_equals_a_direct_call():
 
 
 def test_a_check_with_no_limit_and_a_failed_run_in_a_sweep():
-    def run(depth):
-        return pipe_check(depth=depth, radius_limit=None)
+    def run(utility_depth):
+        return pipe_check(depth=utility_depth, radius_limit=None)
 
-    table = gs.sweep(run, vary={"depth": [2.0, 20.0]})
+    table = gs.sweep(run, vary={"utility.depth": [2.0, 20.0]})
     first, failed = table.iloc[0], table.iloc[1]
     assert first["radius_of_curvature"] > 0
     assert np.isnan(first["radius_of_curvature_utilization"])

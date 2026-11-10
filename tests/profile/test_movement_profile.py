@@ -325,7 +325,7 @@ def test_result_parts():
     assert inputs["spacing"].kind == "design judgment"
     assert inputs["spacing"].value.m_as("m") == 5.0
     assert inputs["volume_loss"].kind == "design judgment"
-    assert inputs["station"].kind == "geometry"
+    assert inputs["utility.station"].kind == "geometry"
     assert inputs["station_merge_tolerance"].kind == "constant or setting"
     assert result.validity == "within"
     assert result.warnings == ()
@@ -474,3 +474,25 @@ def test_trough_at_depth_through_the_profile(method):
     assert result.validity == "within"
     records = {entry.name: entry for entry in result.inputs}
     assert records["trough_width"].value == width().name
+
+
+# TODO #22: input records are named for their owner, and no two share a name.
+
+
+def test_the_utility_inputs_are_named_for_it():
+    result = case_a()
+    names = [entry.name for entry in result.inputs]
+    assert len(names) == len(set(names))
+    assert "diameter" in names
+    assert "utility.diameter" in names
+    inputs = {entry.name: entry for entry in result.inputs}
+    assert inputs["diameter"].value.m_as("m") == 6.0
+    assert inputs["utility.diameter"].value.m_as("m") == 0.3
+
+
+def test_twin_tunnel_inputs_have_unique_names(twins_below_the_surface):
+    names = [entry.name for entry in twins_below_the_surface.inputs]
+    assert len(names) == len(set(names))
+    for name in ("north.diameter", "south.diameter", "utility.diameter"):
+        assert name in names
+    assert "diameter" not in names

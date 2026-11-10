@@ -94,7 +94,8 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
         If a source is given by position, fewer than two are given, a name
         isn't an identifier, or a value isn't a source.
     ValueError
-        If the inputs are inconsistent: two
+        If a source is named ``utility``, whose inputs would share names with
+        a movement profile's utility inputs. If the inputs are inconsistent: two
         ``ground_elevation`` records, at any depth of nesting, differ by more
         than 1 um; or two tunnels' bores overlap, the shortest distance between
         their axes being less than (D1 + D2) / 2. Both axes are horizontal
@@ -149,6 +150,12 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
                 f"Source name {name!r} isn't a Python identifier: names are "
                 "joined by dots in input names (north.volume_loss), so they "
                 "can't hold dots or spaces."
+            )
+        if name == "utility":
+            raise ValueError(
+                "A source can't be named 'utility': a movement profile names "
+                "the utility's inputs utility.<name>, and this source's inputs "
+                "would share those names. Name it for the tunnel, such as north."
             )
         missing = [
             attribute

@@ -324,6 +324,12 @@ def test_dotted_name_raises():
         gs.superpose(**{"north": sources["north"], "a.b": sources["south"]})
 
 
+def test_a_source_named_utility_raises():
+    sources = case_a().sources
+    with pytest.raises(ValueError, match="A source can't be named 'utility'"):
+        gs.superpose(north=sources["north"], utility=sources["south"])
+
+
 def test_nested_names():
     east = gs.sources.IdealizedTunnel(
         reference_point=(0, 50), azimuth=90 * u.degree, diameter=6, axis_depth=40

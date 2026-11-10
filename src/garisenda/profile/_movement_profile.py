@@ -1,6 +1,7 @@
 """The ground's movement resolved along a utility."""
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import numpy.typing as npt
@@ -115,9 +116,11 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         ``checks`` is empty: `garisenda.check_continuous_pipe` and
         `garisenda.check_jointed_pipe` add them. The method,
         assumptions and inputs are the source's, the utility's and this
-        profile's; ``validity`` is the worst verdict over the stations and
-        flags, and ``warnings`` the source's flags, with points as row
-        positions.
+        profile's. The utility's inputs are named for it, such as
+        ``utility.diameter``; the source's keep their names (``diameter``
+        for one tunnel, ``north.diameter`` in a superposition).
+        ``validity`` is the worst verdict over the stations and flags, and
+        ``warnings`` the source's flags, with points as row positions.
 
     Raises
     ------
@@ -181,7 +184,12 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         checks=empty_checks(),
         method=(*source.method, METHOD),
         assumptions=(*source.assumptions, *utility.assumptions, GREENFIELD),
-        inputs=(*source.inputs, *utility.inputs, spacing_record, merge_record),
+        inputs=(
+            *source.inputs,
+            *(replace(entry, name=f"utility.{entry.name}") for entry in utility.inputs),
+            spacing_record,
+            merge_record,
+        ),
         validity=validity,
         warnings=flags,
         source=source,

@@ -2,6 +2,14 @@
 
 garisenda is pre-alpha: the API can change between releases, and the transverse trough's sources aren't verified yet, so results are for trying the library, not for design.
 
+## Unreleased
+
+### Changed
+- The utility's inputs are named for it in a result: `utility.diameter`, `utility.depth`, `utility.station`. A single tunnel's keep their names (`diameter`, `volume_loss`), so no two inputs share a name. A sweep over a utility input names it so: `vary={"utility.depth": ...}`, with your function taking `utility_depth`.
+- A source in `gs.superpose` can't be named `utility`.
+- Assumptions, messages and docstrings no longer refer to garisenda's internal planning documents. Where a result's method was derived by garisenda, its source says so and points to the docstring that states it.
+- The cross-section's messages and notes no longer mention a plan figure, which doesn't exist yet.
+
 ## 0.1.0 (2026-11-05)
 
 The first usable release: greenfield movements from tunneling along a utility, with their figures and sweeps. It covers milestones M1 and M2 (`SPEC.md` §12.4).
