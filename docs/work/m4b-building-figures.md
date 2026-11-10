@@ -261,7 +261,7 @@ The rest of spec decision 2.
   - AC 5: each `horizontal_strain:zone_<n>`'s x and y;
   - AC 6: both level lines per zone at their columns over [`start`, `end`], the governing one thicker; the `band:` artists are those of `result.categories` whose span meets the y range, at their limits; `damage_category_limit` at 1500 µε; `check:damage_category` on the governing line with its label and utilization; the y range contains the largest strain, 1500 µε and the governing band's upper limit;
   - AC 7: two `zone_end` and two `cutoff` lines per panel at the right distances, `beyond_cutoff` on both sides; with `no_cutoff()`, none of the three;
-  - AC 10: twin tunnels (the `twins_below_the_surface` geometry, a wall wide enough for five zones 🟡, checked first that it gives five): five `zone_<n>` fills, four `zone_end` lines on each panel, five `delta:` marks.
+  - AC 10: twin tunnels: five `zone_<n>` fills, four `zone_end` lines on each panel, five `delta:` marks. Built: `twins_below_the_surface`'s tunnels, 15 m apart, make one trough and three zones however wide the wall, so the fixture puts them 25 m apart (surface troughs, 1 %, k = 0.5; wall −30 to +55 m, no cut-off), which gives five.
 
 ### 6. `M4 (b): draw the wall on the cross-section` (Sonnet)
 Spec decision 7.

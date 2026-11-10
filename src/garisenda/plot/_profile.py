@@ -296,6 +296,23 @@ def profile(
     4. horizontal strain, ``along_strain``, tension positive;
     5. tensile strain by zone.
 
+    Its zones of hogging and sagging (`Result.zones`) are drawn on every
+    panel, hogging and sagging each in one color and a flat zone gray: a thin
+    line at each inner zone end, and where the cut-off ends the assessed
+    range inside the wall, a dotted line and the wall beyond it hatched, not
+    assessed. On the settlement panel each zone's ``chord`` is dashed and the
+    deflection between it and the settlement is filled; on the deflection
+    panel each zone's Delta is marked where it occurs, with Delta/L as 1/n; on
+    the horizontal strain panel each zone's average, ``horizontal_strain``,
+    is a level line across it. On the tensile strain panel each zone's
+    ``total_bending_strain`` and ``total_diagonal_strain`` are level lines
+    across it, a beam's strain over the whole zone, the one that governs
+    thick; the damage categories' bands are shaded behind them, the
+    acceptable category's upper limit is the limit line, and the governing
+    zone is marked with its category and utilization. The scale covers the
+    strains, the limit and the band holding the largest strain, so bands
+    beyond it are clipped.
+
     On every figure, critical stations are ticked along the bottom of every panel.
     Stations that aren't ``"within"`` are shaded on every panel by verdict, and
     each flag's reason is printed under the figure with its distance range, so

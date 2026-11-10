@@ -202,3 +202,43 @@ def building_check():
 @pytest.fixture
 def make_building_check():
     return building_check_with
+
+
+@pytest.fixture(scope="module")
+def twin_building_check():
+    """A wall over twin tunnels 25 m apart, with no cut-off: five zones.
+
+    Twins 15 m apart (``twins_below_the_surface``) make one trough with three
+    zones; 25 m apart, each tunnel's trough has its own sagging zone.
+    """
+    north = tunnel()
+    south = north.parallel(offset=25.0, diameter=6.0, axis_depth=20.0)
+    source = gs.superpose(
+        **{
+            name: gs.sources.transverse_surface_trough(
+                reference, volume_loss=1 * u.percent, trough_width_parameter=0.5
+            )
+            for name, reference in (("north", north), ("south", south))
+        }
+    )
+    building = gs.buildings.perpendicular_building(
+        north,
+        building_id="W-2",
+        station=50,
+        start_offset=-30,
+        end_offset=55,
+        height=9.0,
+        foundation_depth=1.5,
+    )
+    limits = gs.presets.preliminary_assessment_limits()
+    return gs.check_building(
+        gs.movement_profile(building, source, spacing=1.0),
+        beam_method=gs.buildings.burland_wroth_beam(),
+        youngs_to_shear_modulus_ratio=2.6,
+        category_limits=gs.presets.damage_categories(),
+        cutoff=gs.buildings.no_cutoff(),
+        settlement_limit=limits.settlement,
+        slope_limit=limits.slope,
+        acceptable_category=2,
+        interaction="greenfield",
+    )
