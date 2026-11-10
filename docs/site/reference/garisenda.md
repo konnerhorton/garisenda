@@ -14,6 +14,8 @@ import garisenda as gs
 
 ::: garisenda.check_jointed_pipe
 
+::: garisenda.check_building
+
 ::: garisenda.superpose
 
 ::: garisenda.Result

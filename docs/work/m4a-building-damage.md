@@ -547,7 +547,7 @@ Mechanics 1–3 as pure functions, and spec decisions 4, 6 (the objects), 8 and 
   - §4: the building presets.
 - Tests:
   - new `tests/buildings/test_beam.py`:
-    - AC 6, second bullet: Jones's printed ε_b, ε_d, ε_bt and ε_dt from his Δ/L and ε_h with the Timoshenko beam, to half a unit in his last digit, and 0.0004396 with Burland & Wroth's;
+    - AC 6, second bullet: Jones's printed ε_b and ε_d from his Δ/L and ε_h with the Timoshenko beam, to half a unit in his last digit, and 0.0004396 with Burland & Wroth's. His ε_bt and ε_dt are checked from his printed (rounded) ε_b and ε_d, as he chains them: from the unrounded ε_d, hogging ε_dt is 0.00061306, outside half a unit of his 0.0006130;
     - AC 15: the Timoshenko beam gives the larger strains, and with α_s = 3/2 the functions reproduce Eqs. 7–8 as printed, written out separately in the test;
     - Mechanics 3's ε_dt ≥ 0 over a grid of ε_h;
   - new `tests/buildings/test_categories.py` covers AC 8, first two bullets;
@@ -557,12 +557,12 @@ Mechanics 1–3 as pure functions, and spec decisions 4, 6 (the objects), 8 and 
 The check on the whole wall (`no_cutoff`). New session.
 - New `src/garisenda/buildings/_check.py`, `check_building(profile, *, beam_method, youngs_to_shear_modulus_ratio, category_limits, cutoff, settlement_limit, slope_limit, acceptable_category, interaction)`, with `@judgments` for all eight. It is exported at the top level, and `docs/site/reference/garisenda.md` gains it. The docstring is the reference entry: Mechanics 1–7, inputs and outputs with units, assumptions, sources.
   - **Reading:**
-    - `_read_profile` is generalized with an `asset_type` argument and raises `TypeError` for anything but a building's profile (AC 12). `_read_interaction` is reused;
+    - `_read_profile` is generalized with a required `asset_type` argument (the pipe checks pass `Utility`) and raises `TypeError` for anything but a profile along that asset (AC 12). `_read_interaction` is reused, naming the asset in its message, and `along_line` takes any asset;
     - E/G goes through `record` (dimensionless, `"read as SI"`) and must be > 0;
     - `settlement_limit` goes through `_read_limit` in m, and `slope_limit` through `_read_limit` (dimensionless, `plain_number="refuse"`);
     - `category_limits` goes through `record_method`-style unwrapping of a `Sourced`, and is recorded by name with its bands' limits 🟡;
     - `acceptable_category` is a band number or `None`, recorded as a design judgment;
-    - `beam_method` and `cutoff` go through `record_method`.
+    - `beam_method` and `cutoff` go through `record_method`. Until step 6, `trough_width_cutoff` raises `NotImplementedError`.
   - **Zones** (decision 5), in `_zones(asset, source, low, high)`:
     - `along_line` gives w″ along the wall, and `find_zeros` runs on it over [low, high], with the step, tolerance and scale rule of `_peaks`;
     - ends within `MERGE_TOLERANCE` are merged;
@@ -577,8 +577,9 @@ The check on the whole wall (`no_cutoff`). New session.
     - each `zone_<n>` is its tensile strain against the acceptable band's upper limit;
     - `damage_category` is the governing zone (the largest tensile strain, first by distance on a tie at `TIE`).
     - The zone rows have NaN `governing_distance`. Utilizations come from `_utilization`, and ∞ for the last band passes.
+    - `governed_by` is `"analytical"` for Stage 1 (the exact extreme, as the pipe checks say) and the zone's `"bending"` or `"diagonal"` on the zone and `damage_category` rows.
   - **Method, assumptions, inputs** as decisions 11–12, with each preset's caveats through `preset_caveats`, and ν as a `"constant or setting"`.
-- Tests in new `tests/buildings/test_check_building.py`, with cases A–E and J built as fixtures from the spec's inputs (`twins_below_the_surface` for C and D):
+- Tests in new `tests/buildings/test_check_building.py`, with cases A–E and J built as fixtures from the spec's inputs (C and D from a helper with `twins_below_the_surface`'s tunnels, checked against it). The hand values are good to 1e-6 relative and printed to six figures, so each is compared to 1e-6 relative plus half a unit in its last digit; closed forms (case A's zone 2, case E's sin θ relations) to 1e-9:
   - AC 1: case A, both beams, every table value, the ends, the Δ distances, the governing zone and Stage 1, to 1e-6 relative;
   - AC 3: case B;
   - AC 4: cases C and D, with D governed by zone 3;

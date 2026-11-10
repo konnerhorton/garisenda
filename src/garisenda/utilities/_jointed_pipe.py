@@ -250,7 +250,7 @@ def check_jointed_pipe(
     as Bracegirdle et al. (1996), p. 661 allow; rigid joints for the
     barrel's strain, p. 663.
     """
-    utility, source = _read_profile(profile, "check_jointed_pipe")
+    utility, source = _read_profile(profile, "check_jointed_pipe", Utility)
     type_name, type_record = _read_pipe_type(pipe_type)
     length, length_record = _pipe_length(pipe_lengths, type_name, utility)
     interaction_record = _read_interaction(interaction)

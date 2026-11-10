@@ -9,9 +9,11 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
+from garisenda._asset import Asset, asset_name
 from garisenda._inputs import InputRecord, Sourced, judgments, preset_caveats, record
 from garisenda._result import Result, checks_frame
 from garisenda._units import PlainNumber
+from garisenda.buildings._building import Building
 from garisenda.profile._movement_profile import (
     MERGE_TOLERANCE,
     merge_stations,
@@ -304,7 +306,7 @@ def check_continuous_pipe(
     outermost fiber, displacements and slopes are small, and axial strain
     never helps the combined strains.
     """
-    utility, source = _read_profile(profile)
+    utility, source = _read_profile(profile, "check_continuous_pipe", Utility)
     interval_m, interval_record = record(
         "interval",
         interval,
@@ -359,29 +361,36 @@ def check_continuous_pipe(
     )
 
 
-def _read_profile(
-    profile: object, check: str = "check_continuous_pipe"
-) -> tuple[Utility, Source]:
-    """Return a movement profile's utility and source, or raise `TypeError`."""
-    if not (
+def _read_profile[A: (Utility, Building)](
+    profile: object, check: str, asset_type: type[A]
+) -> tuple[A, Source]:
+    """Return a movement profile's asset and source, or raise `TypeError`.
+
+    The profile must run along an `asset_type`: a utility for the pipe
+    checks, a building for `check_building`.
+    """
+    if (
         isinstance(profile, Result)
         and profile.analysis == "movement_profile"
-        and isinstance(profile.asset, Utility)
+        and isinstance(profile.asset, asset_type)
         and profile.source is not None
     ):
-        what = (
-            f"a Result of {profile.analysis!r}"
-            if isinstance(profile, Result)
-            else type(profile).__name__
-        )
-        raise TypeError(
-            f"{check} needs a movement profile, the Result of "
-            f"gs.movement_profile(utility, source, spacing=...), not {what}."
-        )
-    return profile.asset, profile.source
+        return profile.asset, profile.source
+    if isinstance(profile, Result):
+        what = f"a Result of {profile.analysis!r}"
+        if profile.asset is not None:
+            label, asset_id, _ = asset_name(profile.asset)
+            what += f" along {label.lower()} {asset_id!r}"
+    else:
+        what = type(profile).__name__
+    noun = asset_type.__name__.lower()
+    raise TypeError(
+        f"{check} needs a movement profile along a {noun}, the Result of "
+        f"gs.movement_profile({noun}, source, spacing=...), not {what}."
+    )
 
 
-def _read_interaction(interaction: object) -> InputRecord:
+def _read_interaction(interaction: object, asset: str = "pipe") -> InputRecord:
     source = None
     if isinstance(interaction, Sourced):
         source = interaction.source
@@ -389,7 +398,7 @@ def _read_interaction(interaction: object) -> InputRecord:
     if interaction not in INTERACTIONS:
         raise ValueError(
             f'interaction must be "greenfield", not {interaction!r}: Phase 1 '
-            "assesses the pipe as following the ground."
+            f"assesses the {asset} as following the ground."
         )
     return InputRecord("interaction", "greenfield", "design judgment", "name", source)
 
@@ -509,13 +518,14 @@ class Along:
     directions: tuple[FloatArray, FloatArray, FloatArray]
 
 
-def along_line(utility: Utility, source: Source) -> Along:
-    """Return the utility's line and the source's derivatives along it."""
-    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in utility.vertices)
+def along_line(asset: Asset, source: Source) -> Along:
+    """Return the asset's line and the source's derivatives along it."""
+    start, end = (np.asarray(vertex, dtype=np.float64) for vertex in asset.vertices)
     length = float(np.linalg.norm(end - start))
     a, v, lat = directions(start, end)
     feature = float(source.feature_length(start=start, end=end))
-    where = f"Utility {utility.utility_id!r}"
+    label, asset_id, _ = asset_name(asset)
+    where = f"{label} {asset_id!r}"
 
     def derivatives(distance: FloatArray) -> tuple[FloatArray, FloatArray]:
         points = start + distance[:, None] * a
