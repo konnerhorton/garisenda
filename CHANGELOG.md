@@ -1,6 +1,6 @@
 # Changelog
 
-garisenda is pre-alpha: the API can change between releases, and the transverse trough's sources aren't verified yet (TODO #2), so results are for trying the library, not for design.
+garisenda is pre-alpha: the API can change between releases, and the transverse trough's sources aren't verified yet, so results are for trying the library, not for design.
 
 ## 0.1.0 (2026-11-05)
 

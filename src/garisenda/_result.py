@@ -1,4 +1,4 @@
-"""The one result shape every analysis returns (SPEC §5.1)."""
+"""The one result shape every analysis returns."""
 
 import math
 from dataclasses import dataclass, field
@@ -86,7 +86,7 @@ def empty_checks() -> pd.DataFrame:
 
 @dataclass(frozen=True)
 class Result:
-    """The result of an analysis: one shape for every analysis (SPEC §5.1).
+    """The result of an analysis: one shape for every analysis.
 
     Views (`to_frame`, `to_dict`, the text summary of `repr`) read these parts
     and never recalculate, so two views can't disagree.
@@ -100,7 +100,7 @@ class Result:
     values : pandas.DataFrame
         The computed quantities, one row per station, keyed by the
         ``distance`` column (m along the asset), with units in
-        ``values.attrs["units"]`` (SPEC §6).
+        ``values.attrs["units"]``.
     checks : pandas.DataFrame
         Each check against its limit, one row per check: ``check`` (its
         name), ``value`` (the governing value, in ``unit``), ``limit`` (NaN
@@ -115,14 +115,14 @@ class Result:
     assumptions : tuple of str
         What the methods assume and garisenda can't check.
     inputs : tuple of InputRecord
-        Every input used, with its kind and source (SPEC §4).
+        Every input used, with its kind and source.
     validity : {"within", "marginal", "outside"}
-        The worst verdict over the stations and the flags (SPEC §5.2).
+        The worst verdict over the stations and the flags.
     warnings : tuple of Flag
         Everything flagged, with ``points`` as row positions in `values`.
     source : Source or None
         The source the analysis evaluated, kept so a figure can draw the field
-        beyond the asset (SPEC §9). Not part of the views or of equality.
+        beyond the asset. Not part of the views or of equality.
     asset : Utility or None
         The asset it was run on, kept for the same reason.
     """
@@ -192,7 +192,7 @@ class Result:
             station's, or None if `values` has no verdicts). If no station has
             a value of the extreme's sign, ``value`` and ``distance`` are NaN
             and ``verdict`` None: nothing is there to report, and nothing is
-            filled in (SPEC §10). Equal extremes, within 1e-9 of the
+            filled in. Equal extremes, within 1e-9 of the
             extreme's size, go to the smallest distance.
         """
         values = self.values

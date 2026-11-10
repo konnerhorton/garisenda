@@ -244,7 +244,7 @@ def test_a_crossing_tunnel_isnt_drawn_and_is_noted(crossing):
     assert "axis:east" not in gids(top)
     (note,) = [text for text in bottom.texts if text.get_gid() == "note"]
     assert note.get_text().startswith("east isn't parallel to the reference tunnel")
-    assert "plan figure (M5)" in note.get_text()
+    assert note.get_text().endswith("the troughs include it.")
     for ax, key in ((top, "vertical"), (middle, "horizontal")):
         line(ax, f"trough:east:{key}")
 

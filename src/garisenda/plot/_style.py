@@ -1,4 +1,4 @@
-"""The house style, applied only inside a context (SPEC §9)."""
+"""The house style, applied only inside a context."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager

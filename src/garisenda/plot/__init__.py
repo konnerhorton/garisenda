@@ -1,4 +1,4 @@
-"""Figures drawn from results (SPEC §9).
+"""Figures drawn from results.
 
 Every figure takes a result and returns ``(fig, ax)`` for one axes or
 ``(fig, axs)`` for several panels, as `matplotlib.pyplot.subplots` does. It

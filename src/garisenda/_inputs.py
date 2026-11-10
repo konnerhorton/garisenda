@@ -1,4 +1,4 @@
-"""Input kinds, provenance and the required-judgment rule (SPEC §4)."""
+"""Input kinds, provenance and the required-judgment rule."""
 
 import functools
 import inspect
@@ -11,7 +11,7 @@ import pint
 from garisenda._units import Magnitude, PlainNumber, to_si, units
 
 Kind = Literal["ground parameter", "design judgment", "constant or setting", "geometry"]
-"""The kinds of input, each treated differently (SPEC §4)."""
+"""The kinds of input, each treated differently."""
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class Sourced:
 
 @dataclass(frozen=True)
 class Preset(Sourced):
-    """A preset value: a `Sourced` that also carries caveats (SPEC §4).
+    """A preset value: a `Sourced` that also carries caveats.
 
     Every argument that takes a `Sourced` takes a `Preset`. Its source names
     the preset call, the row, the paper, the table or page and whom the paper
@@ -83,7 +83,7 @@ class InputRecord:
         trough width method), the method's name as a string, recorded by
         `record_method`.
     kind : {"ground parameter", "design judgment", "constant or setting", "geometry"}
-        Its kind (SPEC §4).
+        Its kind.
     given_as : str
         How it was given, for example ``"quantity in %"`` or
         ``"plain number, read as m"``.
@@ -144,7 +144,7 @@ def record_method[M: Named](
     """Unwrap a `Sourced`, check a named method and record it by its name.
 
     The counterpart of `record` for an input that is a method object rather
-    than a quantity (SPEC §5.1). The record's value is the method's ``name``
+    than a quantity. The record's value is the method's ``name``
     and its given-as is ``"method"``.
 
     Parameters
@@ -188,7 +188,7 @@ R = TypeVar("R")
 
 
 def judgments(**explanations: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Explain each required judgment when it is missing (SPEC §4).
+    """Explain each required judgment when it is missing.
 
     Judgments stay required keyword-only arguments in the decorated function's
     signature. The decorator replaces Python's bare "missing 1 required

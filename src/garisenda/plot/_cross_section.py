@@ -1,4 +1,4 @@
-"""The cross-section figure: tunnel, trough and utility at its station (SPEC §9)."""
+"""The cross-section figure: tunnel, trough and utility at its station."""
 
 import math
 from collections.abc import Iterator, Mapping, Sequence
@@ -66,13 +66,13 @@ def cross_section(
     """Draw the transverse section at a utility's station: three panels.
 
     The panels share the x axis, offset from the tunnel axis (positive to the
-    right looking up-station, SPEC §8.1); with several tunnels, from the axis
+    right looking up-station); with several tunnels, from the axis
     of the utility's reference tunnel, the one it was built from:
 
     1. settlement at the utility's depth, its axis pointing down;
     2. horizontal movement at the utility's depth, perpendicular to the
        tunnel, positive to the right (toward increasing offset, as in every
-       view, SPEC §8.1), on its own panel because settlement's axis points
+       view), on its own panel because settlement's axis points
        down;
     3. the section to scale, depth pointing down from the ground surface at
        0: the tunnel's bore and axis, the utility as a band of its diameter at
@@ -96,10 +96,10 @@ def cross_section(
     The trough runs past the utility's ends and its curve between stations
     isn't in the result, so the figure evaluates ``result.source`` at that
     depth on 401 points over the wider of the utility's offsets and ±3i, for
-    drawing only (SPEC §3). The utility's own values come from the result,
+    drawing only. The utility's own values come from the result,
     never recalculated. Stations that aren't ``"within"`` are ringed by
     verdict, and each flag's reason is printed under the figure with its
-    distance range (SPEC §10).
+    distance range.
 
     **Several tunnels** (a source from `garisenda.superpose`, nested ones
     included): the solid line is the combined trough, and each source's own
@@ -112,7 +112,7 @@ def cross_section(
     marks are left out. A tunnel that isn't parallel to the reference tunnel
     isn't drawn, since its section here would mislead; a note under the
     figure names it, its dashed trough is still drawn (it is the field along
-    the section), and the plan figure (M5) shows it.
+    the section).
 
     Parameters
     ----------
@@ -139,7 +139,7 @@ def cross_section(
     ValueError
         If the utility wasn't built from station and offset, or the source has
         no tunnel: the cross-section needs a section through a tunnel, and
-        utilities in plan are drawn by the plan figure (M5). Also if `axs`
+        a plan figure isn't available yet. Also if `axs`
         isn't three Axes or `display_units` names an unknown kind.
     pint.DimensionalityError
         If a display unit doesn't fit its kind.
@@ -151,7 +151,8 @@ def cross_section(
         raise ValueError(
             "The cross-section is drawn at the station of a utility built from "
             "station and offset (gs.utilities.perpendicular_utility); a utility "
-            "given by its vertices is drawn in plan by the plan figure (M5)."
+            "given by its vertices has no section, and a plan figure isn't "
+            "available yet."
         )
     several = isinstance(source, Superposition)
     if several:
@@ -166,8 +167,7 @@ def cross_section(
     if not found:
         raise ValueError(
             "The cross-section needs a source with a tunnel to draw the section "
-            "through; this result's source has none. The plan figure (M5) draws "
-            "the rest."
+            "through; this result's source has none."
         )
 
     length = display.factor("length")
@@ -374,7 +374,7 @@ def _width(source: Source, depth: float) -> float | None:
     """Return a source's trough width i in m at a depth, if it has one.
 
     i at the depth capped at the crown for a trough at depth, so the marks
-    match the values drawn below it; M1's surface width otherwise.
+    match the values drawn below it; the surface trough's width otherwise.
     """
     if isinstance(source, TransverseTrough):
         return float(source.width_at(depth))
@@ -404,14 +404,12 @@ def _note(ax: Axes, skipped: list[str]) -> float:
     if len(skipped) == 1:
         text = (
             f"{names} isn't parallel to the reference tunnel, so the section "
-            "doesn't draw it; the troughs include it, and the plan figure (M5) "
-            "shows it."
+            "doesn't draw it; the troughs include it."
         )
     else:
         text = (
             f"{names} aren't parallel to the reference tunnel, so the section "
-            "doesn't draw them; the troughs include them, and the plan figure "
-            "(M5) shows them."
+            "doesn't draw them; the troughs include them."
         )
     ax.annotate(
         text,
@@ -462,7 +460,7 @@ def _section(
 ) -> None:
     """Draw the section to scale: ground, bores, axes, utility and dimensions.
 
-    A lone source's bore keeps M1's gids (``tunnel``, ``axis``,
+    A lone source's bore keeps the plain gids (``tunnel``, ``axis``,
     ``axis_depth``, ``cover``); a named bore's carry its name
     (``tunnel:<name>``, ...), and its axis line is drawn by the caller on
     every panel.
