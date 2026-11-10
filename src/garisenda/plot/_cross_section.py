@@ -1,4 +1,4 @@
-"""The cross-section figure: tunnel, trough and utility at its station."""
+"""The cross-section figure: tunnel, trough and asset at its station."""
 
 import math
 from collections.abc import Iterator, Mapping, Sequence
@@ -13,6 +13,7 @@ from matplotlib.patches import Circle, Rectangle
 
 from garisenda._result import Result
 from garisenda.buildings._building import Building
+from garisenda.plot._building import MODE_COLOR, row_at
 from garisenda.plot._display import resolve
 from garisenda.plot._profile import SHADE, flag_notes, offset_label
 from garisenda.plot._style import style
@@ -65,7 +66,7 @@ def cross_section(
     axs: Sequence[Axes] | None = None,
     display_units: Mapping[str, object] | None = None,
 ) -> tuple[Figure, list[Axes]]:
-    """Draw the transverse section at a utility's station: three panels.
+    """Draw the transverse section at an asset's station: three panels.
 
     The panels share the x axis, offset from the tunnel axis (positive to the
     right looking up-station); with several tunnels, from the axis
@@ -79,7 +80,14 @@ def cross_section(
     3. the section to scale, depth pointing down from the ground surface at
        0: the tunnel's bore and axis, the utility as a band of its diameter at
        its axis depth between its offsets, and the axis depth and cover
-       dimensioned.
+       dimensioned. A building is drawn as its wall, from its foundation
+       depth up to its height H above it, between its offsets.
+
+    For a building check (from `garisenda.check_building`), each inner zone
+    end is ticked on the wall's base and each zone named above it, at the
+    offsets of the result's rows there; where the cut-off ends the assessed
+    range inside the wall, a dotted line marks it on every panel. The trough
+    panels draw a building's movement at its foundation level, and say so.
 
     On the first two, the utility's stations are marked on the trough from the
     result's values, and the inflection points at ±i are marked, with i at the
@@ -120,9 +128,9 @@ def cross_section(
     ----------
     result : Result
         A movement profile of a utility or building built from station and
-        offset (a building is drawn as its wall at foundation level), over a
-        source with a tunnel or a superposition of sources with tunnels, from
-        `garisenda.movement_profile`.
+        offset, over a source with a tunnel or a superposition of sources
+        with tunnels, from `garisenda.movement_profile`, or a building check
+        of one, from `garisenda.check_building`.
     axs : sequence of three matplotlib Axes, optional
         Panels to draw into, top to bottom, sharing x; no figure is created.
         Otherwise a new figure is made.
@@ -240,11 +248,13 @@ def cross_section(
         trough_panels = dict(zip(("vertical", "horizontal"), panels, strict=False))
         x = grid * length
         verdict = values["verdict"].astype(str).to_numpy()
-        where = (
-            f"at depth {depth * length:.4g} {display.symbol('length')}"
-            if depth
-            else "at the surface"
-        )
+        drawn_at = f"depth {depth * length:.4g} {display.symbol('length')}"
+        if not depth:
+            where = "at the surface"
+        elif isinstance(asset, Building):
+            where = f"at foundation level ({drawn_at})"
+        else:
+            where = f"at {drawn_at}"
         for (key, label, convention, color), ax in zip(
             TROUGH_PANELS, panels, strict=False
         ):
@@ -321,6 +331,7 @@ def cross_section(
 
         section = panels[2]
         _section(section, result, bores, length, display.symbol("length"), (low, high))
+        _cutoff(panels, result, length)
         if several:
             for bore in bores:
                 _axis(section, bore, length)
@@ -478,24 +489,7 @@ def _section(
 
     low, high = sorted((built.start_offset, built.end_offset))
     if isinstance(asset, Building):
-        # An interim drawing: the wall as a line at its foundation level.
-        foundation = asset.foundation_depth * length
-        ax.plot(
-            [low * length, high * length],
-            [foundation, foundation],
-            color="C2",
-            linewidth=2.0,
-            solid_capstyle="butt",
-            gid="building",
-        )
-        ax.annotate(
-            f"{result.subject}, height {asset.height * length:.3g} {unit}",
-            (high * length, foundation),
-            xytext=(4, 0),
-            textcoords="offset points",
-            va="center",
-            fontsize=7,
-        )
+        _wall(ax, result, asset, low, high, length, unit)
     else:
         _utility_band(ax, result, asset, low, high, length, unit)
     ax.set_aspect("equal", adjustable="datalim")
@@ -506,6 +500,98 @@ def _section(
     ax.update_datalim([(0.0, -largest), (0.0, deepest + largest)])
     ax.autoscale_view()
     ax.invert_yaxis()
+
+
+def _wall(
+    ax: Axes,
+    result: Result,
+    asset: Building,
+    low: float,
+    high: float,
+    length: float,
+    unit: str,
+) -> None:
+    """Draw a wall: H high on its foundation level, with its zones on its base.
+
+    Depth points down, so the wall rises from its foundation depth to H above
+    it, above the ground when H is more than the foundation depth.
+    """
+    foundation = asset.foundation_depth * length
+    height = asset.height * length
+    ax.add_patch(
+        Rectangle(
+            (low * length, foundation - height),
+            (high - low) * length,
+            height,
+            facecolor="#e8efe4",
+            edgecolor="C2",
+            linewidth=1.0,
+            gid="building",
+        )
+    )
+    ax.annotate(
+        f"{result.subject}, H = {height:.3g} {unit}",
+        (high * length, foundation - height),
+        xytext=(4, 0),
+        textcoords="offset points",
+        va="top",
+        fontsize=7,
+    )
+    offsets = result.values["offset"].to_numpy(dtype=np.float64)
+    for zone in result.zones.itertuples():
+        start, end = (row_at(result, float(where)) for where in (zone.start, zone.end))
+        if start is None or end is None:
+            continue
+        if zone.Index < len(result.zones) - 1:
+            ax.plot(
+                [offsets[end] * length],
+                [foundation],
+                marker="|",
+                markersize=9,
+                markeredgewidth=1.2,
+                color="0.25",
+                linestyle="none",
+                gid="zone_end",
+            )
+        ax.annotate(
+            f"{zone.zone} {zone.mode}",
+            (0.5 * (offsets[start] + offsets[end]) * length, foundation),
+            xytext=(0, 4),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=6.5,
+            color=MODE_COLOR[str(zone.mode)],
+            gid=f"zone_label:{zone.zone}",
+        )
+
+
+def _cutoff(panels: Sequence[Axes], result: Result, length: float) -> None:
+    """Draw where the cut-off ends the assessed range inside the wall, dotted."""
+    zones = result.zones
+    if zones.empty:
+        return
+    values = result.values
+    distance = values["distance"].to_numpy(dtype=np.float64)
+    offsets = values["offset"].to_numpy(dtype=np.float64)
+    ends = []
+    first, last = float(zones["start"].iloc[0]), float(zones["end"].iloc[-1])
+    if first > distance[0] + 1e-9:
+        ends.append(first)
+    if last < distance[-1] - 1e-9:
+        ends.append(last)
+    for where in ends:
+        position = row_at(result, where)
+        if position is None:
+            continue
+        for ax in panels:
+            ax.axvline(
+                offsets[position] * length,
+                color="0.3",
+                linewidth=0.8,
+                linestyle=":",
+                gid="cutoff",
+            )
 
 
 def _utility_band(

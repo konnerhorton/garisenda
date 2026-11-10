@@ -372,16 +372,91 @@ def building_profile():
     return gs.movement_profile(wall, source, spacing=2.5)
 
 
-def test_a_building_is_drawn_as_its_wall_at_foundation_depth():
+def drawn_with(ax, gid):
+    return [
+        item
+        for item in [*ax.get_lines(), *ax.patches, *ax.texts]
+        if item.get_gid() == gid
+    ]
+
+
+def test_a_buildings_movement_profile_draws_the_wall_with_no_zones():
     before = dict(mpl.rcParams)
     _, (top, _, bottom) = gs.plot.cross_section(building_profile())
-    wall = line(bottom, "building")
-    np.testing.assert_allclose(wall.get_xdata(), [-30, 30])
-    np.testing.assert_allclose(wall.get_ydata(), [2.0, 2.0])
+    wall = patch(bottom, "building", Rectangle)
+    assert wall.get_x() == pytest.approx(-30.0)
+    assert wall.get_width() == pytest.approx(60.0)
+    assert wall.get_y() == pytest.approx(2.0 - 8.0)
+    assert wall.get_height() == pytest.approx(8.0)
     assert not [item for item in bottom.patches if item.get_gid() == "utility"]
-    assert any("height 8 m" in text.get_text() for text in bottom.texts)
-    assert top.get_ylabel() == "Settlement at depth 2 m (mm)"
+    assert any("B-1, H = 8 m" in text.get_text() for text in bottom.texts)
+    assert top.get_ylabel() == "Settlement at foundation level (depth 2 m) (mm)"
+    for gid in ("zone_end", "zone_label:1", "cutoff"):
+        assert not drawn_with(bottom, gid)
     assert dict(mpl.rcParams) == before
+
+
+# M4 (b), AC 8: a building check's wall, zones and cut-off
+
+
+@pytest.fixture(scope="module")
+def building_section(building_check):
+    fig, axs = gs.plot.cross_section(building_check)
+    yield axs
+    plt.close(fig)
+
+
+def offset_at(result, where):
+    values = result.values
+    found = np.flatnonzero(np.isclose(values["distance"], where, rtol=0, atol=1e-9))
+    return float(values["offset"].iloc[found[0]])
+
+
+def test_the_wall_spans_its_offsets_from_foundation_to_its_top(building_section):
+    section = building_section[2]
+    wall = patch(section, "building", Rectangle)
+    assert wall.get_x() == pytest.approx(-30.0)
+    assert wall.get_x() + wall.get_width() == pytest.approx(30.0)
+    # Depth points down: the wall runs from 1.5 m down to 7.5 m above ground.
+    assert wall.get_y() == pytest.approx(-7.5)
+    assert wall.get_y() + wall.get_height() == pytest.approx(1.5)
+    assert min(section.get_ylim()) <= -7.5
+
+
+def test_zone_ends_ticked_at_their_rows_offsets(building_check, building_section):
+    section = building_section[2]
+    ends = building_check.zones["end"].iloc[:-1]
+    found = drawn_with(section, "zone_end")
+    ticks = sorted(float(item.get_xdata()[0]) for item in found)
+    np.testing.assert_allclose(
+        ticks, sorted(offset_at(building_check, end) for end in ends), atol=1e-9
+    )
+    for zone in building_check.zones.itertuples():
+        (label,) = drawn_with(section, f"zone_label:{zone.zone}")
+        assert label.get_text() == f"{zone.zone} {zone.mode}"
+
+
+def test_the_cutoff_on_all_three_panels(building_check, building_section):
+    zones = building_check.zones
+    expected = sorted(
+        offset_at(building_check, where)
+        for where in (zones["start"].iloc[0], zones["end"].iloc[-1])
+    )
+    for ax in building_section:
+        drawn = sorted(float(item.get_xdata()[0]) for item in drawn_with(ax, "cutoff"))
+        np.testing.assert_allclose(drawn, expected, atol=1e-9)
+
+
+def test_the_trough_is_at_foundation_level(building_section):
+    for ax in building_section[:2]:
+        assert "at foundation level (depth 1.5 m)" in ax.get_ylabel()
+
+
+def test_a_building_check_leaves_rcparams(building_check):
+    before = dict(mpl.rcParams)
+    fig, _ = gs.plot.cross_section(building_check)
+    assert dict(mpl.rcParams) == before
+    plt.close(fig)
 
 
 def test_a_building_profile_draws_the_ground_panels():

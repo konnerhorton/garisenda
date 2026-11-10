@@ -228,7 +228,7 @@ def _horizontal_strain(ax: Axes, zones: pd.DataFrame, display: DisplayUnits) -> 
         )
 
 
-def _row_at(result: Result, where: float) -> int | None:
+def row_at(result: Result, where: float) -> int | None:
     """Return the position of the row of `values` at a distance (m), or None."""
     found = np.flatnonzero(
         np.isclose(
@@ -251,7 +251,7 @@ def _mark_slope(ax: Axes, result: Result, display: DisplayUnits) -> None:
     if row is None:
         return
     where = float(row["governing_distance"])
-    position = None if math.isnan(where) else _row_at(result, where)
+    position = None if math.isnan(where) else row_at(result, where)
     if position is None:
         return
     slope = float(result.values["vertical_slope"].iloc[position])
