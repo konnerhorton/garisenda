@@ -1,4 +1,4 @@
-"""Sources of ground movement: each produces a movement field (SPEC §3)."""
+"""Sources of ground movement: each produces a movement field."""
 
 from garisenda.sources._movement import Flag, MethodRecord, Movement, Source, Verdict
 from garisenda.sources._superposition import Superposition

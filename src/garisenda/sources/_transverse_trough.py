@@ -1,4 +1,4 @@
-"""The steady-state transverse Gaussian trough at depth (M2 (b))."""
+"""The steady-state transverse Gaussian trough at depth."""
 
 import itertools
 import math
@@ -47,12 +47,13 @@ SOURCES = (
 
 ASSUMPTIONS = (
     "Steady state: the face has long passed.",
-    "Transverse trough only: the longitudinal trough is not considered (SPEC §1.3).",
+    "Transverse trough only: the longitudinal trough is not considered.",
     "The settlement trough is Gaussian at every depth, with the same volume "
     "V_L A per unit length.",
     "Constant volume (undrained), which sets the horizontal movement.",
     "Points below the tunnel crown get the trough at the crown, flagged.",
-    "No validity range is checked for k or volume loss (TODO #2).",
+    "No validity range is checked for k or volume loss: the sources aren't "
+    "verified yet.",
 )
 
 BELOW_CROWN = (
@@ -62,7 +63,7 @@ BELOW_CROWN = (
     "numerical analysis."
 )
 
-# Decision 6's tables: the polynomials P_ab (settlement) and R_ab (horizontal)
+# The derivative tables: the polynomials P_ab (settlement) and R_ab (horizontal)
 # in r, as coefficients from r^0 up, with a the order in offset and b in depth.
 SETTLEMENT_POLYNOMIALS: dict[tuple[int, int], tuple[float, ...]] = {
     (0, 0): (1,),
@@ -138,7 +139,7 @@ def transverse_trough(
     trough_width : TroughWidth
         How the width changes with depth: ``gs.sources.mair_trough_width()``
         or ``gs.sources.linear_trough_width(trough_width_parameter=k)``. A
-        design judgment with no default (SPEC §2.3), recorded by the method's
+        design judgment with no default, recorded by the method's
         name.
 
     Returns
@@ -291,8 +292,9 @@ class TransverseTrough:
         - d^(a+b) S / do^a dz^b = (Q c1^b / i^(1+a+b)) P_ab(r) exp(-r^2/2)
         - d^(a+b) u_n / do^a dz^b = (Q c1^(b+1) / i^(1+a+b)) R_ab(r) exp(-r^2/2)
 
-        with r = o / i and the polynomials P_ab and R_ab of the M2 (b) spec
-        (decision 6), up to a + b = 3: a component whose indices include b
+        with r = o / i and polynomials P_ab and R_ab in r, derived here by
+        differentiating S(o, z) and u_n(o, z) (not from a published source),
+        up to a + b = 3: a component whose indices include b
         depth indices is the (a, b) derivative times g over its other
         indices, so the Hessian and third derivative are symmetric by
         construction. Every derivative with respect to station is zero.

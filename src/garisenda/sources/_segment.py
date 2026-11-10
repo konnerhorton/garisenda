@@ -1,4 +1,4 @@
-"""Straight segments: reading their ends and their directions (SPEC §3)."""
+"""Straight segments: reading their ends and their directions."""
 
 import math
 from typing import TYPE_CHECKING

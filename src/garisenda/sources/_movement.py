@@ -1,4 +1,4 @@
-"""The source interface: what every source returns (SPEC §3)."""
+"""The source interface: what every source returns."""
 
 from dataclasses import dataclass
 from typing import Literal, Protocol
@@ -9,7 +9,7 @@ import numpy.typing as npt
 from garisenda._inputs import InputRecord
 
 Verdict = Literal["within", "marginal", "outside"]
-"""A validity verdict (SPEC §5.2), from best to worst."""
+"""A validity verdict, from best to worst."""
 
 VERDICTS: tuple[Verdict, ...] = ("within", "marginal", "outside")
 
@@ -61,7 +61,8 @@ class MethodRecord:
     equations : tuple of str
         The equations, as written in the docstring.
     source : str
-        Its source, as SPEC §2.2 cites it; 🔬 while unverified.
+        Its source: document, year and the equation, table or page; 🔬 while
+        unverified.
     """
 
     name: str
@@ -71,7 +72,7 @@ class MethodRecord:
 
 @dataclass(frozen=True)
 class Movement:
-    """Ground movement at N points, with its exact derivatives (SPEC §3).
+    """Ground movement at N points, with its exact derivatives.
 
     Components are in the order (x, y, depth), with depth positive downward, so
     the third displacement component is settlement, positive downward. Arrays
@@ -88,7 +89,7 @@ class Movement:
     third_derivative : numpy.ndarray, shape (N, 3, 3, 3, 3)
         ``third_derivative[n, i, j, k, l]`` is d3u_i/dx_j dx_k dx_l, in 1/m^2;
         symmetric in j, k, l. A superposition needs it to find where curvature
-        peaks (SPEC §3).
+        peaks.
     verdict : numpy.ndarray of str, shape (N,)
         ``"within"``, ``"marginal"`` or ``"outside"`` for each point.
     flags : tuple of Flag
@@ -119,7 +120,7 @@ class Movement:
 
 
 class Source(Protocol):
-    """Anything that causes ground movement (SPEC §3).
+    """Anything that causes ground movement.
 
     A source is a function of points: `evaluate` returns the movement at them,
     and the attributes carry what a result needs to be checked.
