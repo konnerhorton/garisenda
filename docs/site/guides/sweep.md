@@ -14,9 +14,9 @@
 
 `gs.sweep` takes a function that builds the whole calculation from the inputs being varied and returns its result. The inputs worth varying sit at different steps (volume loss on the trough, depth on the utility), and one change can reach more than one step, so a function with four lines of Python says it plainly.
 
-**Name the function's arguments as the inputs they set**: `volume_loss`, not `vl`. After each run, `gs.sweep` checks that every varied value is among the result's recorded inputs, and raises if one isn't. A function that ignored an argument, or passed it to the wrong place, would otherwise give a table that varies nothing.
+**Name the function's arguments as the inputs they set**: `volume_loss`, not `vl`. `vary` uses the names in the result's input records. The utility's inputs are named for it, so its depth is `utility.depth`, and the function takes it as `utility_depth`, with the dot as an underscore; a tunnel's in a superposition are named for the tunnel, such as `south.volume_loss`. After each run, `gs.sweep` checks that every varied value is among the result's recorded inputs, and raises if one isn't. A function that ignored an argument, or passed it to the wrong place, would otherwise give a table that varies nothing.
 
-Likewise, **every input that isn't varied must stay the same** between runs, or `gs.sweep` raises: the table's fixed inputs would be wrong. Where two inputs share a name (the tunnel's `diameter` and the utility's), vary one through its own builder only.
+Likewise, **every input that isn't varied must stay the same** between runs, or `gs.sweep` raises: the table's fixed inputs would be wrong.
 
 ## Grid or paired
 
@@ -36,4 +36,4 @@ The values can be a list, a numpy array or a pint array, and each element is pas
 
 `table.attrs` holds each column's unit (`units`), the function's name (`run`), the `mode`, the varied names (`vary`) and every input that wasn't varied (`fixed_inputs`), with its value, unit and source.
 
-A sweep row is exactly the direct call: `crossing(volume_loss=1 * u.percent, depth=0 * u.m).governing()` gives the same values. See [`gs.sweep`](../reference/garisenda.md#garisenda.sweep).
+A sweep row is exactly the direct call: `crossing(volume_loss=1 * u.percent, utility_depth=0 * u.m).governing()` gives the same values. See [`gs.sweep`](../reference/garisenda.md#garisenda.sweep).

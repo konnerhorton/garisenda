@@ -1,4 +1,4 @@
-"""Named, cited presets of published limits (SPEC §4).
+"""Named, cited presets of published limits.
 
 A preset is a choice someone made: garisenda never applies one unless it is
 passed by name. Each value is a `Preset`, a `Sourced` whose source names the
@@ -7,7 +7,7 @@ quotes; its caveats join the result's assumptions. Every row is a required
 keyword argument, so the preset's row is a judgment too.
 
 There is no pipe length preset: no citable source for nominal laying lengths
-has been found (M3 (b), intent decision 2).
+has been found.
 """
 
 from dataclasses import dataclass
@@ -40,9 +40,11 @@ PULLOUT_CAVEAT = (
     "method and, 'again conservatively', the maximum horizontal ground movement "
     "as the pull-out. garisenda's opening is computed at individual joints and "
     "is smaller than that shortcut (for one trough, at most the maximum "
-    "horizontal movement, and about a third of it for 4 m pipes in the M3 (b) "
-    "spec's case J-A). Whether Table 2's pull-out limits, from Attewell et al. "
-    "(1986), were calibrated with the shortcut can't be checked: Attewell et al. "
+    "horizontal movement, and about a third of it for 4 m pipes 2 m deep "
+    "over one tunnel with axis depth 20 m, diameter 6 m, volume loss 1 % and "
+    "a linear width with k = 0.5, so i = 9 m). Whether Table 2's pull-out "
+    "limits, from Attewell et al. (1986), were calibrated with the shortcut "
+    "can't be checked: Attewell et al. "
     "hasn't been read, and Bracegirdle et al.'s horizontal movement (Eq. 3) "
     "can't be read with certainty."
 )
@@ -172,14 +174,15 @@ def cast_iron_joint_limits(*, joint: str) -> JointLimits:
 
     - Table 2 is Attewell et al. (1986)'s guidance, as quoted by Bracegirdle
       et al.; Attewell et al. hasn't been read.
-    - The pullout (M3 (b) spec, decision 12): Bracegirdle et al. (1996,
+    - The pullout: Bracegirdle et al. (1996,
       p. 661) give individual joints as the primary method and, "again
       conservatively", the maximum horizontal ground movement as the
       pull-out. garisenda's opening is computed at individual joints and is
       smaller than that shortcut (for one trough, at most the maximum
-      horizontal movement, and about a third of it for 4 m pipes in the
-      M3 (b) spec's case J-A). Whether Table 2's pull-out limits were
-      calibrated with the shortcut can't be checked.
+      horizontal movement, and about a third of it for 4 m pipes 2 m
+      deep over one tunnel with axis depth 20 m, diameter 6 m, volume loss
+      1 % and a linear width with k = 0.5, so i = 9 m). Whether Table 2's
+      pull-out limits were calibrated with the shortcut can't be checked.
     - The first row's "none" is read as zero: any rotation or opening fails.
 
     Parameters

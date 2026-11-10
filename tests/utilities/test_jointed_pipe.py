@@ -797,3 +797,12 @@ def test_the_assumptions_name_the_idealizations(case_ja):
         "Strain checks for a continuous pipe",
         "Joint rotation and opening for a jointed pipe",
     ]
+
+
+# TODO #22: a check's inputs keep the profile's names, and no two share one.
+
+
+def test_input_names_are_unique(case_ja):
+    names = [entry.name for entry in case_ja.inputs]
+    assert len(names) == len(set(names))
+    assert "utility.diameter" in names

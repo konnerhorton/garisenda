@@ -1,4 +1,4 @@
-"""The unit registry and the one conversion every input goes through (SPEC §6)."""
+"""The unit registry and the one conversion every input goes through."""
 
 from typing import Any, Literal
 
@@ -14,7 +14,7 @@ units.define("microstrain = 1e-6 = µε")
 PlainNumber = Literal["read as SI", "refuse"]
 """What a plain number means for an input.
 
-``"read as SI"`` reads it in the input's SI unit, as SPEC §6 allows. ``"refuse"``
+``"read as SI"`` reads it in the input's SI unit. ``"refuse"``
 is for inputs where a plain number is ambiguous: ratios practice writes as a
 percentage (``0.5`` could be 0.5 % or 50 %) and angles (``30`` could be degrees
 or radians).

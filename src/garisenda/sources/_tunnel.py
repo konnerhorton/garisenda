@@ -1,4 +1,4 @@
-"""The idealized straight tunnel (SPEC §8.3)."""
+"""The idealized straight tunnel."""
 
 import math
 from dataclasses import dataclass, replace
@@ -10,7 +10,7 @@ from garisenda._units import Magnitude, units
 
 IDEALIZED_ASSUMPTION = (
     "Idealized straight tunnel: no ends, shafts, curves or junctions, and the "
-    "face long passed (SPEC §1.3)."
+    "face long passed."
 )
 
 
@@ -24,7 +24,7 @@ class IdealizedTunnel:
         A point (x, y) on the tunnel axis in plan, in m if given as plain numbers.
     azimuth : pint angle
         The plan direction of increasing station, clockwise from the +y axis (a
-        bearing when +y is north; SPEC §8.1). A plain number is refused, because
+        bearing when +y is north). A plain number is refused, because
         it could be degrees or radians.
     diameter : length
         The excavated diameter D, in m if a plain number. Must be positive.
@@ -49,7 +49,7 @@ class IdealizedTunnel:
     inputs : tuple of InputRecord
         Every input as used.
     assumptions : tuple of str
-        That the tunnel is idealized (SPEC §1.3).
+        That the tunnel is idealized.
 
     Raises
     ------
@@ -127,7 +127,7 @@ class IdealizedTunnel:
         else:
             raise TypeError(
                 "Give the tunnel axis either as axis_depth, or as axis_elevation "
-                "with ground_elevation (SPEC §8.2); got "
+                "with ground_elevation; got "
                 f"{', '.join(given) if given else 'none of them'}."
             )
         if depth_m <= diameter_m / 2:
@@ -177,13 +177,13 @@ class IdealizedTunnel:
 
         The new tunnel has the same azimuth and reference station, and its
         reference point is p0 + offset n, so a point's station is the same from
-        either tunnel and its offset from the new one is o - offset (SPEC §8.3).
+        either tunnel and its offset from the new one is o - offset.
 
         Parameters
         ----------
         offset : length
             The plan offset of the new axis from this one, positive to the
-            right looking up-station (SPEC §8.1), in m if a plain number. Zero
+            right looking up-station, in m if a plain number. Zero
             is allowed: stacked bores.
         diameter : length
             The new tunnel's excavated diameter, in m if a plain number. Not
@@ -242,8 +242,7 @@ class IdealizedTunnel:
         """Return the station and offset of points in plan.
 
         s = s₀ + (p - p₀)·t and o = (p - p₀)·n, with p₀ the reference point and
-        s₀ its station, t the unit tangent and n the unit normal to the right
-        (SPEC §8.1).
+        s₀ its station, t the unit tangent and n the unit normal to the right.
 
         Parameters
         ----------

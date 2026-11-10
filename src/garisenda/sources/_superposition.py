@@ -1,4 +1,4 @@
-"""Several sources combined by superposition (SPEC §3)."""
+"""Several sources combined by superposition."""
 
 import itertools
 import math
@@ -57,8 +57,8 @@ ASSUMPTION = (
     "Superposition: each tunnel's movement is calculated as if the others "
     "weren't there, and the movements add. Interaction between tunnels (a later "
     "bore's larger volume loss, an eccentric trough over twin bores, the order "
-    "of construction) isn't modeled; set each tunnel's volume loss for it "
-    "(SPEC §3)."
+    "of construction) isn't modeled; set each tunnel's volume loss to allow "
+    "for it."
 )
 
 
@@ -69,7 +69,7 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
     add: with u_s the displacement of source s,
 
     - u = sum over sources of u_s, and the same for its gradient, Hessian and
-      third derivative, which are global components (SPEC §8.1), so the sum is
+      third derivative, which are global components, so the sum is
       exact;
     - the verdict at a point is the worst over the sources.
 
@@ -94,7 +94,8 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
         If a source is given by position, fewer than two are given, a name
         isn't an identifier, or a value isn't a source.
     ValueError
-        If the inputs are inconsistent (SPEC §2.5, §10): two
+        If a source is named ``utility``, whose inputs would share names with
+        a movement profile's utility inputs. If the inputs are inconsistent: two
         ``ground_elevation`` records, at any depth of nesting, differ by more
         than 1 um; or two tunnels' bores overlap, the shortest distance between
         their axes being less than (D1 + D2) / 2. Both axes are horizontal
@@ -150,6 +151,12 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
                 "joined by dots in input names (north.volume_loss), so they "
                 "can't hold dots or spaces."
             )
+        if name == "utility":
+            raise ValueError(
+                "A source can't be named 'utility': a movement profile names "
+                "the utility's inputs utility.<name>, and this source's inputs "
+                "would share those names. Name it for the tunnel, such as north."
+            )
         missing = [
             attribute
             for attribute in SOURCE_ATTRIBUTES
@@ -199,7 +206,7 @@ def superpose(*arguments: object, **sources: object) -> "Superposition":
 
 @dataclass(frozen=True)
 class Superposition:
-    """Several sources whose movements add, as one source (SPEC §3).
+    """Several sources whose movements add, as one source.
 
     Made by `garisenda.superpose`, which documents the method.
 
@@ -359,7 +366,7 @@ def _check_ground(inputs: list[InputRecord]) -> None:
             "The sources don't share a ground surface: "
             f"{low[0]} is {low[1]:.6g} m and {high[0]} is {high[1]:.6g} m. "
             "Give every tunnel's ground_elevation as the same surface, or its "
-            "axis_depth (SPEC §8.2)."
+            "axis_depth."
         )
 
 

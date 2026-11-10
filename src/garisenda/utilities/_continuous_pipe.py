@@ -1,4 +1,4 @@
-"""Strain checks for a continuous pipe (M3 (a) spec)."""
+"""Strain checks for a continuous pipe."""
 
 import math
 from collections.abc import Callable
@@ -32,7 +32,7 @@ TIE = 1e-9
 """Relative difference within which two extremes are equal (as `Result.governing`)."""
 
 INTERACTIONS = ("greenfield",)
-"""The soil-structure interactions Phase 1 takes (SPEC §1.3)."""
+"""The soil-structure interactions Phase 1 takes."""
 
 METHOD = MethodRecord(
     "Strain checks for a continuous pipe",
@@ -53,15 +53,16 @@ METHOD = MethodRecord(
         "from eps_a,d and kappa_d",
         "governing: the worse of the analytical and discrete extremes, per check",
     ),
-    "Mechanics, derived in the M3 (a) spec; the approach after Bracegirdle et "
-    "al. (1996), pp. 660, 663.",
+    "Mechanics, derived by garisenda, not cited (gs.check_continuous_pipe's "
+    "docstring states it); the approach after Bracegirdle et al. (1996), pp. "
+    "660, 663.",
 )
 
 ASSUMPTIONS = (
     "The pipe follows the ground, with no reduction for its stiffness or for "
     "slip: its axial strain is the ground's strain along it and its curvature "
-    "the ground's. Soil-structure interaction would reduce them (SPEC §1.3, "
-    "§13 Q1).",
+    "the ground's. Soil-structure interaction would reduce "
+    "them.",
     "The pipe's section is circular and strain is taken at its outermost "
     "fiber, from the given outside diameter.",
     "Displacements and slopes are small: strain is du_a/ds, without the half "
@@ -135,7 +136,7 @@ DISCRETE_UNITS = {
     "movements: a short one exaggerates small differences, a long one smooths "
     "the peaks. Pass a length, e.g. interval=1 * gs.units.m.",
     interaction="it says how the pipe interacts with the ground. Phase 1 takes "
-    'only interaction="greenfield": the pipe follows the ground (SPEC §1.3).',
+    'only interaction="greenfield": the pipe follows the ground.',
     tensile_strain_limit="it depends on the pipe's material and its condition. "
     'Pass a strain, e.g. gs.units.Quantity(1000, "µε"), or None for no limit.',
     compressive_strain_limit="it depends on the pipe's material and its "
@@ -177,7 +178,7 @@ def check_continuous_pipe(
     - compressive strain: eps_c = min(eps_a, 0) - r |kappa| (negative);
     - radius of curvature: R = 1 / |kappa|, infinite where |kappa| = 0.
 
-    These are derived in the M3 (a) spec from the definition of strain, plane
+    These are derived here, not cited, from the definition of strain, plane
     sections and the geometry of a circle: strain is the change in length over
     the original length, and a fiber y from the neutral axis of a beam bent to
     radius R has strain y / R. The approach, that the pipe follows the ground
@@ -388,7 +389,7 @@ def _read_interaction(interaction: object) -> InputRecord:
     if interaction not in INTERACTIONS:
         raise ValueError(
             f'interaction must be "greenfield", not {interaction!r}: Phase 1 '
-            "assesses the pipe as following the ground (SPEC §1.3)."
+            "assesses the pipe as following the ground."
         )
     return InputRecord("interaction", "greenfield", "design judgment", "name", source)
 
@@ -437,7 +438,7 @@ def _barrel(
 ) -> tuple[pd.DataFrame, tuple[Flag, ...], Verdict, pd.DataFrame]:
     """Return the barrel's values, flags, validity and six checks at `interval`.
 
-    The rows are the profile's stations, the peaks of decision 7 and
+    The rows are the profile's stations, the peaks `_peaks` finds and
     `extra_peaks`, all marked critical. `ends_reason` is added to the ends
     flag's reason.
     """
@@ -532,7 +533,7 @@ def along_line(utility: Utility, source: Source) -> Along:
 
 
 def _peaks(utility: Utility, source: Source, radius: float) -> FloatArray:
-    """Return where |kappa|, eps_t and eps_c peak along the utility (decision 7)."""
+    """Return where |kappa|, eps_t and eps_c peak along the utility."""
     line = along_line(utility, source)
     length, feature, derivatives = line.length, line.feature, line.derivatives
 
@@ -609,7 +610,7 @@ def _add_stations(
 
 
 def _with_strains(values: pd.DataFrame, radius: float) -> pd.DataFrame:
-    """Add the analytical strains of Mechanics 1-5 to the profile's columns."""
+    """Add the analytical strains to the profile's columns."""
     strain = values["along_strain"].to_numpy(dtype=np.float64)
     vertical = values["vertical_curvature"].to_numpy(dtype=np.float64)
     lateral = values["lateral_curvature"].to_numpy(dtype=np.float64)
@@ -640,7 +641,7 @@ def _with_discrete(
     interval: float,
     radius: float,
 ) -> pd.DataFrame:
-    """Add the discrete strains of Mechanics 6 (decisions 5 and 6).
+    """Add the discrete strains the check's docstring defines.
 
     The source is evaluated on the pipe's line at s +- h/2 and s +- h for
     every row s, in one call. Samples beyond an end by more than 1 um give
@@ -700,7 +701,7 @@ def _with_discrete(
 
 
 def _ends_flag(values: pd.DataFrame, interval: float, extra: str = "") -> Flag:
-    """Flag the stations with no discrete axial strain or curvature (decision 6)."""
+    """Flag the stations with no discrete axial strain or curvature."""
     missing = (
         values["discrete_axial_strain"].isna()
         | values["discrete_resultant_curvature"].isna()
@@ -728,7 +729,7 @@ def _ends_flag(values: pd.DataFrame, interval: float, extra: str = "") -> Flag:
 
 
 def _checks(values: pd.DataFrame, limits: dict[str, float]) -> pd.DataFrame:
-    """Return the checks table (decisions 4 and 9)."""
+    """Return the checks table."""
     distance = values["distance"].to_numpy(dtype=np.float64)
     rows: list[dict[str, Any]] = []
     for name, column, sign, limit_name, unit in CHECKS:
@@ -776,7 +777,7 @@ def governing_value(
     *,
     smallest: bool,
 ) -> tuple[float, float, str, float]:
-    """Return the worse of a check's two values (decision 9).
+    """Return the worse of a check's two values.
 
     The worse is the larger in size, or the smaller for a radius
     (`smallest`). On a tie, within 1e-9, and where the discrete value is NaN
@@ -833,13 +834,13 @@ def extreme(values: FloatArray, distance: FloatArray, sign: int) -> tuple[float,
 def _utilization(
     value: float, limit: float, *, smallest: bool, determined: bool = True
 ) -> tuple[float, Any]:
-    """Return a check's utilization and whether it passes (decision 4).
+    """Return a check's utilization and whether it passes.
 
     Utilization is |value| / limit, or limit / value for a radius
-    (`smallest`). A zero limit allows nothing (M3 (b), decision 11): a nonzero
+    (`smallest`). A zero limit allows nothing: a nonzero
     value has utilization infinity and fails, a zero value has 0 and passes,
     and a zero radius limit gives 0 and passes. A check that couldn't be
-    determined (no position along the pipe has a value; M3 (b), decision 10)
+    determined (no position along the pipe has a value)
     has NaN and NA even with a limit: not determined is never a pass.
     """
     if math.isnan(limit) or not determined:

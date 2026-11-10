@@ -1,4 +1,4 @@
-"""Run one calculation over arrays of one to three inputs (SPEC §5.3)."""
+"""Run one calculation over arrays of one to three inputs."""
 
 import itertools
 import math
@@ -108,8 +108,7 @@ def sweep(
         - ``validity``: the result's verdict;
         - ``warnings``: how many flags it has;
         - ``error``: None, or ``"<ExceptionType>: <message>"`` for a run that
-          raised, whose values are NaN, ``passes`` ``NA`` and validity None
-          (SPEC §10).
+          raised, whose values are NaN, ``passes`` ``NA`` and validity None.
 
         ``attrs`` holds ``units`` (per column), ``run`` (the function's
         qualified name), ``mode``, ``vary`` (the names) and ``fixed_inputs``:

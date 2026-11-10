@@ -32,6 +32,7 @@ Open-source Python library for ground movements from tunneling and their effect 
 - **Every input goes through `garisenda._inputs.record()`**, which unwraps `Sourced`, converts with `to_si()` and returns the input record, **or, for a named method object, `record_method()`**, which records its name. Percent-style ratios and angles use `plain_number="refuse"` (SPEC §6).
 - **Code and tests run on the dependency floors** (numpy 1.26): no numpy 2-only functions such as `numpy.trapezoid`. The `lowest` job catches it, the default run doesn't.
 - **Docstrings use ASCII `-` for minus** (ruff RUF002); the specs keep `−`.
+- **Published text has no internal references**: no `SPEC §`, `TODO #`, milestone ids or "decision n" in string literals in `src/` (docstrings, assumptions, messages), `docs/site/` or `README.md`; say the thing itself, or point to a docs page or a published source. Comments may keep them. `tests/test_published_text.py` checks it.
 - **Figures draw with `garisenda.plot._style.style()`** (an `rc_context`), never by setting `rcParams`; tests check `rcParams` are unchanged. Panels are found in tests by artist `gid`.
 - **On the pint floor (0.24.4), write units with non-ASCII symbols as strings** (`u.Quantity(1, "µε")`): Python normalizes `µ` in an identifier to Greek mu, which old pint doesn't know.
 

@@ -227,7 +227,7 @@ def test_assumptions_are_recorded():
 def test_method_cites_its_unverified_sources():
     (method,) = trough().method
     assert "🔬" in method.source
-    assert "TODO #2" in method.source
+    assert "Not verified against the sources yet." in method.source
     assert "S(o) = S_max exp(-o^2 / (2 i^2))" in method.equations
 
 

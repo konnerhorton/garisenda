@@ -791,3 +791,12 @@ def test_a_call_with_no_preset_adds_no_caveat(case_a):
     ).assumptions
     added = case_a.assumptions[len(profile_assumptions) :]
     assert not any("Bracegirdle" in text for text in added)
+
+
+# TODO #22: a check's inputs keep the profile's names, and no two share one.
+
+
+def test_input_names_are_unique(case_a):
+    names = [entry.name for entry in case_a.inputs]
+    assert len(names) == len(set(names))
+    assert "utility.diameter" in names

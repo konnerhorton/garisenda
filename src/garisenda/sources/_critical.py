@@ -1,4 +1,4 @@
-"""Critical distances of any source, found by root-finding (SPEC §3)."""
+"""Critical distances of any source, found by root-finding."""
 
 import math
 import re

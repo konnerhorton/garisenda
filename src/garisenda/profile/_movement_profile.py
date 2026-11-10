@@ -1,6 +1,7 @@
-"""The ground's movement resolved along a utility (SPEC §3)."""
+"""The ground's movement resolved along a utility."""
 
 import math
+from dataclasses import replace
 
 import numpy as np
 import numpy.typing as npt
@@ -19,9 +20,7 @@ MERGE_TOLERANCE = 1e-6
 MAXIMUM_STATIONS = 1_000_000
 """The most stations a profile may have."""
 
-GREENFIELD = (
-    "Assets follow the ground: greenfield, no soil-structure interaction (SPEC §1.3)."
-)
+GREENFIELD = "Assets follow the ground: greenfield, no soil-structure interaction."
 
 METHOD = MethodRecord(
     "Movement profile along a straight utility",
@@ -32,7 +31,7 @@ METHOD = MethodRecord(
         "d(u.e)/ds = e_i (du_i/dx_j) a_j",
         "d2(u.e)/ds2 = e_i (d2u_i/dx_j dx_k) a_j a_k",
     ),
-    "Exact derivatives of the source's field along a straight line (SPEC §3); "
+    "Exact derivatives of the source's field along a straight line; "
     "no external source.",
 )
 
@@ -71,7 +70,7 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
 
     - along: a = (end - start) / L, positive toward increasing distance;
     - lateral: l = (a_y, -a_x, 0) / |(a_x, a_y)|, horizontal and positive to
-      the right looking along a, as offset is (SPEC §8.1);
+      the right looking along a, as offset is;
     - vertical: v = l x a, which is (0, 0, 1) for a level utility, so vertical
       is settlement, positive downward.
 
@@ -114,11 +113,14 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         - ``critical`` (bool), the station is a critical distance;
         - ``verdict`` (str), the source's verdict at the station.
 
-        ``checks`` is empty (the utility checks are M3). The method,
+        ``checks`` is empty: `garisenda.check_continuous_pipe` and
+        `garisenda.check_jointed_pipe` add them. The method,
         assumptions and inputs are the source's, the utility's and this
-        profile's; ``validity`` is the worst verdict over the stations and
-        flags, and ``warnings`` the source's flags, with points as row
-        positions.
+        profile's. The utility's inputs are named for it, such as
+        ``utility.diameter``; the source's keep their names (``diameter``
+        for one tunnel, ``north.diameter`` in a superposition).
+        ``validity`` is the worst verdict over the stations and flags, and
+        ``warnings`` the source's flags, with points as row positions.
 
     Raises
     ------
@@ -135,7 +137,7 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
     -----
     The profile is the ground's movement (greenfield): the assets follow the
     ground, which is recorded as an assumption. How much of `along_strain` a
-    pipe takes is decided by the utility checks (M3).
+    pipe takes is decided by the utility checks.
     """
     spacing_m, spacing_record = record(
         "spacing", spacing, kind="design judgment", unit="m", plain_number="read as SI"
@@ -182,7 +184,12 @@ def movement_profile(utility: Utility, source: Source, *, spacing: object) -> Re
         checks=empty_checks(),
         method=(*source.method, METHOD),
         assumptions=(*source.assumptions, *utility.assumptions, GREENFIELD),
-        inputs=(*source.inputs, *utility.inputs, spacing_record, merge_record),
+        inputs=(
+            *source.inputs,
+            *(replace(entry, name=f"utility.{entry.name}") for entry in utility.inputs),
+            spacing_record,
+            merge_record,
+        ),
         validity=validity,
         warnings=flags,
         source=source,

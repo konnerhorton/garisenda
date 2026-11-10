@@ -133,8 +133,8 @@ def mair_trough_width() -> TroughWidth:
     Source: Mair & Taylor (1997), Theme lecture: Bored tunnelling in the urban
     environment, Eqs. 7-8, pp. 2361-2362, after Mair et al. (1993); the same
     equation in other forms in Taylor (1995), Eq. 5, p. 125 and Bracegirdle
-    et al. (1996), Eq. 2, p. 660. Mair et al. (1993) itself is not yet read
-    (TODO #3).
+    et al. (1996), Eq. 2, p. 660. Mair et al. (1993) itself has not been read
+    yet.
     """
     return TroughWidth(
         name=MAIR_NAME,
@@ -182,8 +182,7 @@ def linear_trough_width(*, trough_width_parameter: object) -> TroughWidth:
     -----
     Validity: only above the tunnel crown, the limit Bracegirdle et al.
     (1996), p. 660 give for Mair et al. (1993)'s width, applied to this method
-    by garisenda; the trough flags deeper points. No range is checked for k
-    (TODO #2).
+    by garisenda; the trough flags deeper points. No range is checked for k.
 
     Source: the caller's choice; no source gives this width at depth.
     """

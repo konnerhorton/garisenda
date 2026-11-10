@@ -1,4 +1,4 @@
-"""The units figures are drawn in (SPEC §9, spec decision 14)."""
+"""The units figures are drawn in."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

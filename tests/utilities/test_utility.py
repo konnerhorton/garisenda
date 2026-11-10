@@ -189,8 +189,8 @@ def utility(vertices, diameter=0.3, utility_id="G-2"):
     )
 
 
-def test_three_vertices_raise_naming_m5():
-    with pytest.raises(ValueError, match="M5"):
+def test_three_vertices_raise_saying_what_to_do():
+    with pytest.raises(ValueError, match="Split it into straight lines"):
         utility([(0, 0, 1), (1, 0, 1), (2, 0, 1)])
 
 

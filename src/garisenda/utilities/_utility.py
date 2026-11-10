@@ -1,4 +1,4 @@
-"""A utility line and its station-and-offset builder (SPEC §8.3)."""
+"""A utility line and its station-and-offset builder."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -53,8 +53,8 @@ class Utility:
         Its name, used in results and error messages.
     vertices : array of lengths, shape (N, 3)
         The vertices of its axis as (x, y, depth), in m if plain numbers, with
-        depth positive downward from the ground surface (SPEC §8.1). M1 (b)
-        takes two vertices, a straight line; polylines with bends come in M5.
+        depth positive downward from the ground surface. Two vertices, a
+        straight line; polylines with bends aren't supported yet.
     diameter : length
         Its outside diameter, in m if a plain number. Must be positive.
 
@@ -72,15 +72,15 @@ class Utility:
         Every input as used, each of kind ``"geometry"``.
     assumptions : tuple of str
         What its geometry assumes: for a built utility, that it is
-        perpendicular to the tunnel (SPEC §1.3).
+        perpendicular to the tunnel.
 
     Raises
     ------
     ValueError
         If there are fewer than two vertices, more than two (polylines with
-        bends come in M5), a vertex isn't finite or is above the ground surface,
-        the line has zero length, the diameter isn't positive, or `utility_id`
-        is empty.
+        bends aren't supported yet), a vertex isn't finite or is above the
+        ground surface, the line has zero length, the diameter isn't
+        positive, or `utility_id` is empty.
     """
 
     utility_id: str
@@ -112,8 +112,8 @@ class Utility:
         if len(points) > 2:
             raise ValueError(
                 f"{where} has {len(points)} vertices: only straight lines of two "
-                "vertices are supported until M5, which adds the strain terms of "
-                "a bent polyline (SPEC §3). Split it into straight lines."
+                "vertices are supported: a bent polyline's strain terms aren't "
+                "implemented yet. Split it into straight lines."
             )
         missing = ~np.isfinite(points).all(axis=1)
         if missing.any():
@@ -173,7 +173,7 @@ def perpendicular_utility(
         p = p0 + (station - s0) t + o n,
 
     with p0 the tunnel's reference point, s0 its station, t the unit tangent
-    and n the unit normal to the right looking up-station (SPEC §8.1), both at
+    and n the unit normal to the right looking up-station, both at
     the axis depth of the utility.
 
     Parameters
@@ -193,12 +193,12 @@ def perpendicular_utility(
     elevation_reference : {"invert", "axis", "crown"}
         The point of the pipe's section the depth or elevation is at. Required,
         with no default: survey data comes in all three, and a wrong guess
-        shifts the pipe by its diameter (SPEC §8.3).
+        shifts the pipe by its diameter.
     depth : length, optional
         The depth of that point below the ground surface.
     elevation, ground_elevation : length, optional
         Instead of `depth`: the elevation of that point with the ground
-        elevation, both in the site's one length unit (SPEC §8.2).
+        elevation, both in the site's one length unit.
 
     Returns
     -------
@@ -261,7 +261,7 @@ def perpendicular_utility(
     else:
         raise TypeError(
             "Give the utility's level either as depth, or as elevation with "
-            "ground_elevation (SPEC §8.2); got "
+            "ground_elevation; got "
             f"{', '.join(given) if given else 'none of them'}."
         )
     shift = {"invert": -diameter_m / 2, "axis": 0.0, "crown": diameter_m / 2}
@@ -280,7 +280,7 @@ def perpendicular_utility(
     utility = Utility(utility_id=utility_id, vertices=vertices, diameter=diameter_m)
     assumptions = [
         f"Built perpendicular to the tunnel at station {station_m:g} m, whatever "
-        "its real orientation (SPEC §1.3)."
+        "its real orientation."
     ]
     if elevation_reference != "axis":
         assumptions.append(

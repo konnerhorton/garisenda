@@ -1,4 +1,4 @@
-"""The profile figure: movement, strain and curvature along a utility (SPEC §9)."""
+"""The profile figure: movement, strain and curvature along a utility."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -157,7 +157,7 @@ CHECK_PANELS = (
         checks=("tensile_strain", "compressive_strain"),
     ),
 )
-"""The six panels of a continuous-pipe check (M3 (a) spec, decision 13)."""
+"""The six panels of a continuous-pipe check."""
 
 JOINTED_PANELS = (
     *CHECK_PANELS,
@@ -187,7 +187,7 @@ JOINTED_PANELS = (
         closure="joint_opening",
     ),
 )
-"""The eight panels of a jointed-pipe check (M3 (b) spec, decision 17)."""
+"""The eight panels of a jointed-pipe check."""
 
 PANELS = {CHECK_ANALYSIS: CHECK_PANELS, JOINTED_ANALYSIS: JOINTED_PANELS}
 """The panels of each check's analysis."""
@@ -266,7 +266,7 @@ def profile(
     On every figure, critical stations are ticked along the bottom of every panel.
     Stations that aren't ``"within"`` are shaded on every panel by verdict, and
     each flag's reason is printed under the figure with its distance range, so
-    nothing flagged goes unmarked (SPEC §10). For a utility built from station
+    nothing flagged goes unmarked. For a utility built from station
     and offset, a top axis gives the offset from the tunnel axis.
 
     The figure draws the result's values and never recalculates them.

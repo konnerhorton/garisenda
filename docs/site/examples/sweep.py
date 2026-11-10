@@ -10,7 +10,7 @@ tunnel = gs.sources.IdealizedTunnel(
 )
 
 
-def crossing(volume_loss, depth):
+def crossing(volume_loss, utility_depth):
     trough = gs.sources.transverse_surface_trough(
         tunnel, volume_loss=volume_loss, trough_width_parameter=0.5
     )
@@ -20,7 +20,7 @@ def crossing(volume_loss, depth):
         station=60 * u.m,
         start_offset=-20 * u.m,
         end_offset=20 * u.m,
-        depth=depth,
+        depth=utility_depth,
         elevation_reference="axis",
         diameter=0.6 * u.m,
     )
@@ -31,11 +31,18 @@ table = gs.sweep(
     crossing,
     vary={
         "volume_loss": [0.5, 1.0, 1.5] * u.percent,
-        "depth": [0, 2, 20] * u.m,
+        "utility.depth": [0, 2, 20] * u.m,
     },
     mode="grid",
 )
-columns = ["run", "volume_loss", "depth", "largest_settlement", "validity", "warnings"]
+columns = [
+    "run",
+    "volume_loss",
+    "utility.depth",
+    "largest_settlement",
+    "validity",
+    "warnings",
+]
 print(table[columns].to_string(index=False))
 print()
 print("run 2:", table.loc[2, "error"])

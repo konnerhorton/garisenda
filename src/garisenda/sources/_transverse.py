@@ -22,7 +22,7 @@ SURFACE_TOLERANCE = 1e-3
 SOURCES = (
     "🔬 Peck (1969), the Gaussian form; O'Reilly & New (1982), the trough width, "
     "the volume relation and horizontal movement toward the axis. Not verified "
-    "against the sources (TODO #2)."
+    "against the sources yet."
 )
 
 EQUATIONS = (
@@ -35,13 +35,13 @@ EQUATIONS = (
 
 ASSUMPTIONS = (
     "Steady state: the face has long passed.",
-    "Transverse trough only: the longitudinal trough is not considered (SPEC §1.3).",
+    "Transverse trough only: the longitudinal trough is not considered.",
     "The settlement trough is Gaussian.",
     "Ground moves toward the tunnel axis, which sets horizontal movement.",
     "The surface trough is applied at each point's plan position, whatever its "
     "depth; points below the surface are flagged.",
-    "No validity range is checked for k, volume loss or cover yet: the sources "
-    "are unverified (TODO #2).",
+    "No validity range is checked for k, volume loss or cover: the sources "
+    "aren't verified yet.",
 )
 
 BELOW_SURFACE = (
@@ -109,12 +109,12 @@ def transverse_surface_trough(
     -----
     Validity: points at the ground surface (depth within 1 mm) are ``"within"``;
     points below it are ``"outside"``, because the trough at depth is narrower.
-    No range is checked for k, volume loss or cover yet, because the sources are
-    unverified (TODO #2); the assumptions say so.
+    No range is checked for k, volume loss or cover, because the sources aren't
+    verified yet; the assumptions say so.
 
     Source: 🔬 Peck (1969) for the Gaussian form; O'Reilly & New (1982) for the
     trough width, the volume relation and horizontal movement. Not verified
-    against the sources (TODO #2).
+    against the sources yet.
     """
     ratio, volume_record = record(
         "volume_loss",
