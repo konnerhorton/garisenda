@@ -1,4 +1,4 @@
-"""The building check (docs/work/m4a-building-damage.md, AC 1, 3-8, 11, 12)."""
+"""The building check (docs/work/m4a-building-damage.md, AC 1-12, 16)."""
 
 import math
 from decimal import Decimal
@@ -725,3 +725,188 @@ def test_result_shape(case_a):
     assert str(result.zones["category"].dtype) == "Int64"
     assert result.validity == "within"
     assert result.asset.building_id == "B-1"
+
+
+# The cut-off, flat walls and the depth limit (AC 2, 9, 10, 16).
+
+CUTOFF = gs.buildings.trough_width_cutoff(multiple=2.5)
+
+
+@pytest.mark.parametrize("beam", BEAMS)
+def test_case_a_with_a_cutoff(case_a, beam):
+    result = check(wall(-30, 30), trough_at_depth(), beam, cutoff=CUTOFF)
+    whole = case_a[beam]
+    assert result.zones["start"].iloc[0] - 30 == golden("-22.5")
+    assert result.zones["end"].iloc[-1] - 30 == golden("22.5")
+    one = zone(result, 1)
+    assert one["length"] == golden("13.5")
+    assert one["deflection"] * 1000 == golden("1.36588")
+    assert one["deflection_distance"] - 30 == golden("-15.8187")
+    assert one["deflection_ratio"] == golden("1.01176e-4")
+    assert one["horizontal_strain"] == golden("2.30558e-4")
+    bending, total = {
+        "BW": ("1.11061e-4", "3.41619e-4"),
+        "T": ("1.33668e-4", "3.64226e-4"),
+    }[beam]
+    assert one["bending_strain"] == golden(bending)
+    assert one["total_bending_strain"] == golden(total)
+    # Zone 2 is unchanged by the cut-off, and so is Stage 1.
+    for column in ("start", "end", "deflection", "horizontal_strain", *STRAINS):
+        assert zone(result, 2)[column] == pytest.approx(
+            zone(whole, 2)[column], rel=1e-9
+        )
+    for name in ("settlement", "slope"):
+        assert checks(result).loc[name].equals(checks(whole).loc[name])
+    # Stations outside the range have no zone, and rows mark its ends.
+    values = result.values
+    outside = (values["distance"] < 7.5 - 1e-6) | (values["distance"] > 52.5 + 1e-6)
+    assert outside.any()
+    assert values.loc[outside, "zone"].isna().all()
+    assert values.loc[outside, "chord"].isna().all()
+    assert values.loc[~outside, "zone"].notna().all()
+    for end in (7.5, 52.5):
+        hit = np.isclose(values["distance"], end, atol=1e-6)
+        assert values.loc[hit, "critical"].all()
+    entry = {e.name: e for e in result.inputs}["cutoff"]
+    assert entry.value == "2.5 i from each trough's axis"
+    assert any("within 2.5 i" in text for text in result.assumptions)
+
+
+@pytest.mark.parametrize("beam", BEAMS)
+def test_case_c_with_a_cutoff(beam):
+    north, source = twins(15.0)
+    building = wall(-30, 45, reference=north, depth=0.0)
+    result = check(building, source, beam, cutoff=CUTOFF)
+    assert result.zones["start"].iloc[0] - 30 == golden("-25")
+    assert result.zones["end"].iloc[-1] - 30 == golden("40")
+    one = zone(result, 1)
+    assert one["length"] == golden("17.4304")
+    assert one["deflection"] * 1000 == golden("1.84690")
+    assert one["deflection_ratio"] == golden("1.05959e-4")
+    assert one["horizontal_strain"] == golden("2.05135e-4")
+    assert one["total_bending_strain"] == golden(
+        {"BW": "3.41290e-4", "T": "3.65948e-4"}[beam]
+    )
+
+
+def test_a_far_wall_is_one_flat_zone():
+    result = check(wall(500, 560), trough_at_depth())
+    assert result.zones["mode"].tolist() == ["flat"]
+    row = zone(result, 1)
+    assert row["bending_strain"] == 0
+    assert row["diagonal_strain"] == 0
+    assert row["deflection"] == 0
+    assert math.isnan(row["deflection_distance"])
+    assert row["category"] == 0
+    assert checks(result).loc["damage_category", "category"] == 0
+
+
+def test_a_wall_parallel_to_the_tunnel_is_flat():
+    building = gs.buildings.Building(
+        building_id="P", vertices=[(5, -20), (5, 20)], foundation_depth=2, height=8
+    )
+    result = check(building, trough_at_depth())
+    assert result.zones["mode"].tolist() == ["flat"]
+    row = zone(result, 1)
+    assert (row["bending_strain"], row["diagonal_strain"]) == (0, 0)
+    assert row["horizontal_strain"] == pytest.approx(0, abs=1e-15)
+    settlement = S_MAX_A * math.exp(-(5**2) / (2 * 9.0**2))
+    assert checks(result).loc["settlement", "value"] == pytest.approx(
+        settlement, rel=1e-9
+    )
+
+
+def test_a_wall_beyond_the_cutoff_has_no_zone():
+    result = check(wall(30, 60), trough_at_depth(), cutoff=CUTOFF)
+    assert result.zones.empty
+    assert list(result.zones.columns) == list(ZONE_COLUMNS)
+    table = checks(result)
+    assert list(table.index) == ["settlement", "slope", "damage_category"]
+    row = table.loc["damage_category"]
+    assert math.isnan(row["value"])
+    assert math.isnan(row["utilization"])
+    assert row["passes"] is pd.NA
+    assert row["zone"] is pd.NA
+    assert row["category"] is pd.NA
+    assert math.isfinite(table.loc["settlement", "value"])
+    assert result.values["zone"].isna().all()
+    flag = next(f for f in result.warnings if f.limit.startswith("cut-off"))
+    assert flag.verdict == "within"
+    assert "2.5 i" in flag.reason
+    assert flag.limit == "cut-off: 2.5 i from each trough's axis"
+    assert flag.points == tuple(range(len(result.values)))
+    assert result.validity == "within"
+    assert "damage_category: not determined, no zone assessed" in repr(result)
+
+
+def depth_flags(result):
+    return [f for f in result.warnings if f.limit.startswith("z_f/z0")]
+
+
+def test_depth_within_the_limit():
+    result = check(wall(-30, 30, depth=2.0), trough_at_depth())
+    (flag,) = depth_flags(result)
+    assert flag.verdict == "within"
+    assert "no range of validity" in flag.reason
+    assert "z_f/z0 = 0.1" in flag.reason
+    assert flag.points == tuple(range(len(result.values)))
+    assert result.validity == "within"
+
+
+@pytest.mark.parametrize(("depth", "ratio"), [(4.0, "0.2"), (5.0, "0.25")])
+def test_depth_at_and_beyond_the_limit(depth, ratio):
+    result = check(wall(-30, 30, depth=depth), trough_at_depth())
+    (flag,) = depth_flags(result)
+    assert flag.verdict == "outside"
+    assert f"z_f/z0 = {ratio}" in flag.reason
+    assert f"({depth:g} m of 20 m)" in flag.reason
+    assert "Harris & Franzius (2006)" in flag.reason
+    assert "piled foundations" in flag.reason
+    assert flag.limit.startswith("z_f/z0 < 0.2")
+    assert flag.points == tuple(range(len(result.values)))
+    assert result.validity == "outside"
+
+
+def test_the_shallower_tunnel_governs_the_depth_limit():
+    deep = tunnel(axis_depth=40.0)
+    shallow = deep.parallel(offset=30.0, diameter=6.0, axis_depth=15.0)
+    width = gs.sources.linear_trough_width(trough_width_parameter=0.5)
+    source = gs.superpose(
+        deep=gs.sources.transverse_trough(
+            deep, volume_loss=1 * u.percent, trough_width=width
+        ),
+        shallow=gs.sources.transverse_trough(
+            shallow, volume_loss=1 * u.percent, trough_width=width
+        ),
+    )
+    result = check(wall(-30, 60, reference=deep, depth=3.0), source)
+    (flag,) = depth_flags(result)
+    assert flag.verdict == "outside"
+    assert flag.source == "shallow"
+    assert "z_f/z0 = 0.2 " in flag.reason
+    assert result.validity == "outside"
+    # Deeper on both, the one within the limit gives no flag of its own.
+    within = check(wall(-30, 60, reference=deep, depth=2.0), source)
+    (flag,) = depth_flags(within)
+    assert flag.verdict == "within"
+    assert "z_f/z0 = 0.133" in flag.reason
+
+
+def test_the_summary(case_a):
+    text = repr(case_a["T"])
+    lines = text.splitlines()
+    assert lines[0] == "building_check of 'B-1': within, 65 stations"
+    assert lines[1] == "  stage 1:"
+    assert lines[2].startswith("    settlement: 0.012533 m at 30 m")
+    assert lines[3].startswith("    slope: 0.00084464 at 21 m")
+    assert lines[4] == "  stage 2:"
+    assert lines[5] == (
+        "    zone 1: hogging, L 21 m, Delta/L 0.0001272, eps_h 0.0001771, "
+        "eps_bt 0.000384, category 0 (negligible)"
+    )
+    assert lines[6].startswith("    zone 2: sagging, L 18 m")
+    assert "eps_dt 0.0001562" in lines[6]
+    assert lines[8].startswith(
+        "    damage_category: zone 1, category 0 (negligible): 0.00038397 (bending)"
+    )
+    assert "largest" not in text

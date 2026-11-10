@@ -597,14 +597,14 @@ Spec decisions 5 (flat, no zone), 6, 12's flags and 14.
   - with `trough_width_cutoff`, the assessed range is `source.trough_extent(..., multiple=...)`, and rows are added at its ends. Stations outside it have `zone` NA. Stage 1 still runs over the whole wall;
   - `None` from the extent means no zone: the zones table is empty, the zone checks are absent 🟡 (no zones, so no rows), `damage_category` is NaN and NA, and the result carries a `within` flag naming the cut-off and the range;
   - the depth flag: for each tunnel (via `tunnels()`, or the lone source's `tunnel`), z_f/z₀ ≥ 0.2 gives an `outside` flag naming the ratio, the tunnel, the limit and the source as decision 14 states it. Otherwise a `within` flag says the method states no range of validity. Both cover every row;
-  - the summary in `Result.__repr__`: for a `building_check`, Stage 1's two lines, a line per zone (mode, L, Δ/L, ε_h, governing strain and kind, category label), then `damage_category`.
+  - the summary in `Result.__repr__`: for a `building_check`, Stage 1's two lines, a line per zone (mode, L, Δ/L, ε_h, governing strain and kind, category label), then `damage_category`. It leaves out the profile's extremes block, which Stage 1 repeats.
 - `SPEC.md`:
   - §1.3: the building idealization (greenfield at foundation level, beam of height H and unit width);
   - §2.5: the building method's validity;
   - §13 Q4: answered.
 - Tests in `tests/buildings/test_check_building.py`:
   - AC 2: cases A and C with 2.5i, their ranges and zone 1 values; NA zones outside; Stage 1 unchanged;
-  - AC 9: the wall 500 m away (one flat zone, category 0) and the wall beyond the cut-off (no zone, flag, NaN/NA), neither raising;
+  - AC 9: the wall 500 m away (one flat zone, category 0), a wall parallel to the tunnel (flat, with its settlement), and the wall beyond the cut-off (no zone, flag, NaN/NA), none raising;
   - AC 10: depths 2, 4 and 5 m on z₀ = 20 m, and a superposition where the shallower tunnel governs;
   - AC 16, third bullet: the summary lines.
 

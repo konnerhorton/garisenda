@@ -379,37 +379,44 @@ class Result:
             f"{len(values)} stations"
         ]
         distance = values.get("distance")
-        governing = self.governing().set_index("name")
-        for column, label, names in SUMMARY:
-            if column not in values:
-                continue
-            parts = []
-            for name, short in names:
-                row = governing.loc[name]
-                if not math.isfinite(row["value"]):
-                    parts.append(f"{short} none")
-                    continue
-                where = (
-                    ""
-                    if not math.isfinite(row["distance"])
-                    else f" at {row['distance']:.4g} m"
-                )
-                parts.append(f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}")
-            lines.append(f"  {label}: {'; '.join(parts)}")
-        checks = list(self.checks.itertuples(index=False))
-        joints = [check for check in checks if check.check.startswith("joint_")]
-        if joints:
-            groups = [
-                ("joints", joints),
-                ("barrel", [check for check in checks if check not in joints]),
-            ]
-            for heading, group in groups:
-                lines.append(f"  {heading}:")
-                lines.extend(
-                    f"    {check.check}: {_check_text(check)}" for check in group
-                )
+        if self.analysis == "building_check":
+            lines.extend(_building_lines(self))
         else:
-            lines.extend(f"  {check.check}: {_check_text(check)}" for check in checks)
+            governing = self.governing().set_index("name")
+            for column, label, names in SUMMARY:
+                if column not in values:
+                    continue
+                parts = []
+                for name, short in names:
+                    row = governing.loc[name]
+                    if not math.isfinite(row["value"]):
+                        parts.append(f"{short} none")
+                        continue
+                    where = (
+                        ""
+                        if not math.isfinite(row["distance"])
+                        else f" at {row['distance']:.4g} m"
+                    )
+                    parts.append(
+                        f"{short} {row['value']:.5g}{_unit(row['unit'])}{where}"
+                    )
+                lines.append(f"  {label}: {'; '.join(parts)}")
+            checks = list(self.checks.itertuples(index=False))
+            joints = [check for check in checks if check.check.startswith("joint_")]
+            if joints:
+                groups = [
+                    ("joints", joints),
+                    ("barrel", [check for check in checks if check not in joints]),
+                ]
+                for heading, group in groups:
+                    lines.append(f"  {heading}:")
+                    lines.extend(
+                        f"    {check.check}: {_check_text(check)}" for check in group
+                    )
+            else:
+                lines.extend(
+                    f"  {check.check}: {_check_text(check)}" for check in checks
+                )
         for flag in self.warnings:
             lines.append(f"  {flag.verdict}: {flag_text(flag)}")
             if distance is not None and flag.points:
@@ -467,6 +474,38 @@ def _first_by_distance(values: pd.DataFrame, positions: Any) -> int:
         return int(positions[0])
     distance = values["distance"].to_numpy(dtype=np.float64)[positions]
     return int(positions[int(np.argmin(distance))])
+
+
+def _building_lines(result: "Result") -> list[str]:
+    """Return a building check's summary: Stage 1, each zone and the governing zone."""
+    checks = {row.check: row for row in result.checks.itertuples(index=False)}
+    lines = ["  stage 1:"]
+    lines.extend(
+        f"    {name}: {_check_text(checks[name])}"
+        for name in ("settlement", "slope")
+        if name in checks
+    )
+    lines.append("  stage 2:")
+    zones = {zone.zone: zone for zone in result.zones.itertuples(index=False)}
+    for zone in zones.values():
+        kind = "eps_bt" if zone.governed_by == "bending" else "eps_dt"
+        lines.append(
+            f"    zone {zone.zone}: {zone.mode}, L {zone.length:.4g} m, "
+            f"Delta/L {zone.deflection_ratio:.4g}, eps_h {zone.horizontal_strain:.4g}, "
+            f"{kind} {zone.tensile_strain:.4g}, category {zone.label} "
+            f"({zone.severity})"
+        )
+    row = checks.get("damage_category")
+    if row is not None:
+        if row.zone is pd.NA:
+            lines.append("    damage_category: not determined, no zone assessed")
+        else:
+            governing = zones[row.zone]
+            lines.append(
+                f"    damage_category: zone {row.zone}, category {governing.label} "
+                f"({governing.severity}): {_check_text(row)}"
+            )
+    return lines
 
 
 def _check_text(check: Any) -> str:

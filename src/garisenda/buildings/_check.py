@@ -33,7 +33,8 @@ from garisenda.buildings._categories import Band, DamageCategories
 from garisenda.buildings._cutoff import NoCutoff, TroughWidthCutoff
 from garisenda.profile._movement_profile import MERGE_TOLERANCE, profile_rows
 from garisenda.sources._critical import find_zeros
-from garisenda.sources._movement import MethodRecord
+from garisenda.sources._movement import Flag, MethodRecord, Source, worst
+from garisenda.sources._superposition import Superposition, tunnels
 from garisenda.sources._transverse_trough import (
     CRITICAL_DISTANCE_SAMPLING,
     CRITICAL_DISTANCE_TOLERANCE,
@@ -57,6 +58,19 @@ DEFLECTION_TOLERANCE = 1e-9
 
 FLAT = 1e-10
 """Fraction of a zone's largest settlement below which its Delta is zero."""
+
+DEPTH_RATIO_LIMIT = 0.2
+"""z_f/z0 at or above which the method is outside its stated range."""
+
+HARRIS_FRANZIUS = (
+    "Harris & Franzius (2006), as reported by Jones (2022, Soft Ground Tunnel "
+    "Design, p. 490); the original hasn't been read"
+)
+
+DEPTH_LIMIT = (
+    "z_f/z0 < 0.2, foundation depth over tunnel axis depth (Harris & Franzius "
+    "2006, via Jones 2022, p. 490)"
+)
 
 UNITS = {"chord": "m", "deflection": "m"}
 
@@ -187,6 +201,27 @@ def check_building(
       governing zone has the largest tensile strain, the first by distance on
       a tie within 1e-9.
 
+    **The assessed range:** with `garisenda.buildings.no_cutoff`, the whole
+    wall. With `garisenda.buildings.trough_width_cutoff`, the part of the
+    wall within m i of a trough's axis in plan, with i at the foundation
+    depth; over several troughs, from the first such point to the last, so
+    the ground between two tunnels is kept. The zones split that range, and
+    rows are added at its ends. Stage 1 covers the whole wall either way. A
+    wall wholly beyond the cut-off has no zone: the zones table is empty,
+    there are no zone checks, ``damage_category`` isn't determined, and a
+    ``"within"`` flag says why.
+
+    **Validity:** Harris & Franzius (2006), as reported by Jones (2022, p.
+    490), limit the staged method on the surface trough to z_f/z0 < 0.2, with
+    z_f the foundation depth and z0 a tunnel's axis depth, and say two or more
+    basement levels or piled foundations are to be assessed separately. The
+    trough here is taken at foundation level, which removes their stated
+    reason, but deep basements and piles still change what following the
+    trough means, so the limit is kept: each tunnel with z_f/z0 >= 0.2 gives
+    an ``"outside"`` flag over every row. Otherwise a ``"within"`` flag says
+    the method states no range of its own. Harris & Franzius (2006) hasn't
+    been read.
+
     Sources: Mair, Taylor & Burland (1996), Prediction of ground movements and
     assessment of risk of building damage due to bored tunnelling, Tables 1-2
     (p. 715), Eqs. 7-9 and §§4.1-4.3 (p. 716), Eq. 10, §4.5 and §§5.1-5.3
@@ -240,7 +275,8 @@ def check_building(
     Result
         ``analysis`` is ``"building_check"`` and ``subject`` the building's
         id. ``values`` has every column of the profile, with rows added at
-        each zone's ends and Delta (marked ``critical``), and:
+        each zone's ends (the ends of the assessed range among them) and
+        Delta, marked ``critical``, and:
 
         - ``zone`` (nullable integer): the zone a row is in; a zone's end
           belongs to the zone after it, and the wall's last end to the last
@@ -270,15 +306,18 @@ def check_building(
           zone, so ``governing_distance`` is NaN; Delta's distance is in
           ``zones``;
         - ``damage_category``: the governing zone's tensile strain, against
-          the same limit, with its ``zone`` and ``category``.
+          the same limit, with its ``zone`` and ``category``. With no zone,
+          its value, utilization and ``passes`` are NaN and NA, and so are
+          its ``zone`` and ``category``.
 
         Utilization is value / limit; the last band's limit is infinite, so
         accepting it always passes. With no limit, ``limit`` and
         ``utilization`` are NaN and ``passes`` NA. ``governed_by`` is
         ``"analytical"`` for Stage 1 (the exact extreme) and ``"bending"`` or
         ``"diagonal"`` for a zone. The method, assumptions and inputs are the
-        profile's with this check's added, including the presets' caveats;
-        validity and warnings are the profile's.
+        profile's with this check's added, including the presets' caveats.
+        ``warnings`` are the profile's, the depth flag, and the no-zone flag
+        when there is no zone; ``validity`` is the worst of them.
 
     Raises
     ------
@@ -333,29 +372,29 @@ def check_building(
         unit="dimensionless",
         plain_number="read as SI",
     )
-    if isinstance(cut, TroughWidthCutoff):
-        raise NotImplementedError("trough_width_cutoff isn't supported yet.")
-
     line = along_line(building, source)
-    low, high = 0.0, line.length
-    zones = _zones(line, low, high)
+    assessed = _assessed_range(building, source, cut, line.length)
+    zones = [] if assessed is None else _zones(line, *assessed)
 
+    stations = [zone.start for zone in zones] + [zone.end for zone in zones[-1:]]
+    stations += [
+        zone.deflection_distance
+        for zone in zones
+        if math.isfinite(zone.deflection_distance)
+    ]
     distance, is_critical = _add_stations(
         profile.values["distance"].to_numpy(dtype=np.float64),
         profile.values["critical"].to_numpy(dtype=bool),
-        np.array(
-            [zone.start for zone in zones]
-            + [zones[-1].end]
-            + [
-                zone.deflection_distance
-                for zone in zones
-                if math.isfinite(zone.deflection_distance)
-            ],
-            dtype=np.float64,
-        ),
+        np.array(stations, dtype=np.float64),
     )
     values, flags, validity = profile_rows(building, source, distance, is_critical)
-    values = _with_zones(values, zones, low, high)
+    values = _with_zones(values, zones)
+    added = (
+        *_no_zone_flag(cut, len(values), zones),
+        *_depth_flags(building, source, len(values)),
+    )
+    flags = (*flags, *added)
+    validity = worst([validity, *(flag.verdict for flag in added)])
 
     zone_rows = [
         _zone_row(zone, building.height, ratio, beam, categories) for zone in zones
@@ -551,12 +590,109 @@ def _zone(line: Along, number: int, start: float, end: float) -> Zone:
     return Zone(number, start, end, mode, abs(signed), where, *chord, horizontal)
 
 
-def _with_zones(
-    values: pd.DataFrame, zones: list[Zone], low: float, high: float
-) -> pd.DataFrame:
-    """Add the ``zone``, ``chord`` and ``deflection`` columns."""
+def _assessed_range(
+    building: Building,
+    source: Source,
+    cut: NoCutoff | TroughWidthCutoff,
+    length: float,
+) -> tuple[float, float] | None:
+    """Return the distances along the wall that are assessed, or None for none.
+
+    The whole wall with no cut-off; otherwise the source's trough extent, or
+    None where it is empty or shorter than 1 um.
+    """
+    if isinstance(cut, NoCutoff):
+        return 0.0, length
+    start, end = building.vertices
+    extent = source.trough_extent(start=start, end=end, multiple=cut.multiple)
+    if extent is None:
+        return None
+    low = min(max(float(extent[0]), 0.0), length)
+    high = min(max(float(extent[1]), 0.0), length)
+    if high - low < MERGE_TOLERANCE:
+        return None
+    return low, high
+
+
+def _no_zone_flag(
+    cut: NoCutoff | TroughWidthCutoff, rows: int, zones: list[Zone]
+) -> list[Flag]:
+    """Flag a wall with no zone: wholly beyond the cut-off."""
+    if zones or not isinstance(cut, TroughWidthCutoff):
+        return []
+    return [
+        Flag(
+            "within",
+            f"No part of the wall is within {cut.multiple:g} i of a trough's axis "
+            "in plan, so no zone is assessed: there are no zone checks, and "
+            "damage_category isn't determined. Stage 1 still covers the whole "
+            "wall.",
+            f"cut-off: {cut.name}",
+            tuple(range(rows)),
+        )
+    ]
+
+
+def _depth_flags(building: Building, source: Source, rows: int) -> list[Flag]:
+    """Flag each tunnel with z_f/z0 at or above 0.2, or say the method has no range.
+
+    z_f is the foundation depth and z0 the tunnel's axis depth. Every row is
+    covered.
+    """
+    found = (
+        list(tunnels(source.sources))
+        if isinstance(source, Superposition)
+        else list(tunnels({"": source}))
+    )
+    depth = building.foundation_depth
+    points = tuple(range(rows))
+    flags = []
+    for name, tunnel in found:
+        ratio = depth / tunnel.axis_depth
+        if ratio >= DEPTH_RATIO_LIMIT:
+            flags.append(
+                Flag(
+                    "outside",
+                    f"The foundation is at z_f/z0 = {ratio:.3g} of the tunnel's "
+                    f"axis depth ({depth:g} m of {tunnel.axis_depth:g} m), not "
+                    f"below {DEPTH_RATIO_LIMIT:g}. The staged method on the "
+                    "surface trough is limited to z_f/z0 < 0.2, and two or more "
+                    "basement levels or piled foundations are to be assessed "
+                    f"separately: {HARRIS_FRANZIUS}.",
+                    DEPTH_LIMIT,
+                    points,
+                    name,
+                )
+            )
+    if flags or not found:
+        return flags
+    largest = max(depth / tunnel.axis_depth for _, tunnel in found)
+    return [
+        Flag(
+            "within",
+            "The staged method states no range of validity of its own. The one "
+            f"limit found, z_f/z0 < {DEPTH_RATIO_LIMIT:g} ({HARRIS_FRANZIUS}), "
+            f"is met: z_f/z0 = {largest:.3g} for the shallowest tunnel.",
+            DEPTH_LIMIT,
+            points,
+        )
+    ]
+
+
+def _with_zones(values: pd.DataFrame, zones: list[Zone]) -> pd.DataFrame:
+    """Add the ``zone``, ``chord`` and ``deflection`` columns.
+
+    Rows outside the zones (beyond a cut-off, or every row with no zone) have
+    ``zone`` NA and ``chord`` and ``deflection`` NaN.
+    """
     distance = values["distance"].to_numpy(dtype=np.float64)
-    inside = (distance >= low - MERGE_TOLERANCE) & (distance <= high + MERGE_TOLERANCE)
+    if zones:
+        low, high = zones[0].start, zones[-1].end
+        inside = (distance >= low - MERGE_TOLERANCE) & (
+            distance <= high + MERGE_TOLERANCE
+        )
+    else:
+        inside = np.zeros(distance.shape, dtype=bool)
     inner = np.array([zone.start for zone in zones[1:]], dtype=np.float64)
     index = np.searchsorted(inner - MERGE_TOLERANCE, distance, side="right")
     chord = np.full(distance.shape, np.nan)
@@ -661,7 +797,22 @@ def _zone_checks(zone_rows: list[dict[str, Any]], limit: float) -> list[dict[str
     rows = []
     for zone in zone_rows:
         rows.append(_strain_check(f"zone_{zone['zone']}", zone, limit))
-    if zone_rows:
+    if not zone_rows:
+        utilization, passes = _utilization(
+            math.nan, limit, smallest=False, determined=False
+        )
+        rows.append(
+            {
+                "check": "damage_category",
+                "value": math.nan,
+                "unit": "dimensionless",
+                "limit": limit,
+                "utilization": utilization,
+                "governing_distance": math.nan,
+                "passes": passes,
+            }
+        )
+    else:
         largest = max(zone["tensile_strain"] for zone in zone_rows)
         governing = next(
             zone
