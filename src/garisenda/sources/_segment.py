@@ -58,6 +58,14 @@ def read_points(
     return x_m, y_m, depth_m
 
 
+class InsideBoreError(ValueError):
+    """A point inside a tunnel's bore, where a trough can't be evaluated.
+
+    Private: callers that re-raise keep the type (``type(error)(...)``), so a
+    profile can tell this error from others and say how to fix the utility.
+    """
+
+
 def check_outside_bore(
     tunnel: "IdealizedTunnel", offset: FloatArray, depth: FloatArray
 ) -> None:
@@ -65,14 +73,19 @@ def check_outside_bore(
 
     Raises
     ------
-    ValueError
-        Naming the points inside the bore.
+    InsideBoreError
+        Naming the points inside the bore, as a trailing list of indices, and
+        the bore's extent.
     """
     inside = np.hypot(offset, depth - tunnel.axis_depth) < tunnel.diameter / 2
     if inside.any():
-        raise ValueError(
+        radius = tunnel.diameter / 2
+        raise InsideBoreError(
             f"Points inside the bore can't be evaluated: "
-            f"{np.flatnonzero(inside).tolist()}."
+            f"{np.flatnonzero(inside).tolist()}. The bore has its axis at depth "
+            f"{tunnel.axis_depth:.6g} m and diameter {tunnel.diameter:.6g} m, so "
+            f"it spans depths {tunnel.axis_depth - radius:.6g} to "
+            f"{tunnel.axis_depth + radius:.6g} m."
         )
 
 

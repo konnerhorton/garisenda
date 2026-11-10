@@ -363,6 +363,34 @@ def test_utility_through_the_bore_raises_naming_it():
         case_a(depth=20.0)
 
 
+def test_bore_error_gives_the_bore_the_utility_and_a_remedy():
+    # At 0.5 m spacing, 11 stations lie inside the bore, at |o| < 3 m.
+    with pytest.raises(ValueError) as caught:
+        case_a(spacing=0.5, depth=19.85, elevation_reference="crown")
+    message = str(caught.value)
+    assert "[" not in message
+    assert message == (
+        "Utility 'W-1': Points inside the bore can't be evaluated at 11 points "
+        "from 17.5 to 22.5 m along the segment. The bore has its axis at depth "
+        "20 m and diameter 6 m, so it spans depths 17 to 23 m. The utility's "
+        "axis is at depth 20 m. Check its depth, and its elevation_reference "
+        "('crown'), which is converted to the axis with the given diameter."
+    )
+
+
+def test_bore_error_for_a_utility_given_by_vertices():
+    utility = gs.utilities.Utility(
+        utility_id="G-3", vertices=[(-20, 0, 18), (20, 0, 22)], diameter=0.2
+    )
+    with pytest.raises(ValueError) as caught:
+        gs.movement_profile(utility, trough(), spacing=5.0)
+    message = str(caught.value)
+    assert message.startswith("Utility 'G-3': Points inside the bore")
+    assert message.endswith(
+        "The utility's axis is at depths 18 to 22 m. Check its vertices' depths."
+    )
+
+
 # M1 (c) AC 1, 2: governing values and the result's source and asset
 
 # The spec's hand table, row 1 (V_L 1 %, k 0.5): name -> (value, distance).
