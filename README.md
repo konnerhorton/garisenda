@@ -4,7 +4,7 @@ Ground movements from tunneling and their effect on utilities and buildings: gre
 
 The name is the Garisenda, the leaning tower in Bologna whose lean comes from settlement of its foundations.
 
-> **Status:** pre-alpha. The transverse trough at the surface and below it, several tunnels by superposition, the movement along a utility with its critical distances, the figures and sweeps work; utility and building checks come next. The trough's sources aren't verified yet, so results are for trying the library, not for design. The plan is in [SPEC.md](SPEC.md).
+> **Status:** pre-alpha. The transverse trough at the surface and below it, several tunnels by superposition, the movement along a utility with its critical distances, the figures and sweeps work, and so do the checks of continuous and jointed pipes (`gs.check_continuous_pipe`, `gs.check_jointed_pipe`); building checks come next. The trough's sources aren't verified yet, so results are for trying the library, not for design. The plan is in [SPEC.md](SPEC.md).
 
 **Docs:** [konnerhorton.github.io/garisenda](https://konnerhorton.github.io/garisenda/), with a [getting-started walkthrough](https://konnerhorton.github.io/garisenda/getting-started/).
 

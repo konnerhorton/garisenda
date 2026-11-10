@@ -70,7 +70,7 @@ Each result lists its assumptions in `result.assumptions`. For this one:
 - **No validity range is checked** for k, volume loss or cover, because the sources are unverified (above).
 - **Idealized straight tunnel:** no ends, shafts, curves or junctions.
 - **Perpendicular:** a utility built from station and offset crosses square to the tunnel, whatever its real angle.
-- **Greenfield:** the utility follows the ground. Its stiffness and its interaction with the soil are ignored, which is usually conservative for a flexible pipe. Whether the pipe can take the movement is a separate check, not yet in garisenda.
+- **Greenfield:** the utility follows the ground. Its stiffness and its interaction with the soil are ignored, which is usually conservative for a flexible pipe. Whether the pipe can take the movement is a separate check: `gs.check_continuous_pipe` or `gs.check_jointed_pipe` (see [Continuous pipes](guides/continuous-pipes.md) and [Jointed pipes](guides/jointed-pipes.md)).
 
 ## The figures
 
