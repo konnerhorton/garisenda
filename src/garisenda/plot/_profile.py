@@ -284,7 +284,8 @@ def profile(
     display_units : mapping, optional
         Units per kind of quantity, any of ``length`` (default m),
         ``displacement`` (mm), ``strain`` (microstrain), ``curvature``
-        (1/km) and ``angle`` (degree), such as ``{"displacement": "m"}``.
+        (1/km), ``angle`` (degree) and ``slope`` (mm/m), such as
+        ``{"displacement": "m"}``.
 
     Returns
     -------

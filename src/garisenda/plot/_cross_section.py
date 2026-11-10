@@ -128,8 +128,8 @@ def cross_section(
         Otherwise a new figure is made.
     display_units : mapping, optional
         Units per kind of quantity, any of ``length`` (default m) and
-        ``displacement`` (mm); ``strain`` and ``curvature`` are accepted and
-        unused.
+        ``displacement`` (mm); ``strain``, ``curvature``, ``angle`` and
+        ``slope`` are accepted and unused.
 
     Returns
     -------

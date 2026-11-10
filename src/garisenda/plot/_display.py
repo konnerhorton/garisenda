@@ -1,5 +1,6 @@
 """The units figures are drawn in."""
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -13,6 +14,7 @@ DEFAULTS: dict[str, str] = {
     "strain": "microstrain",
     "curvature": "1/km",
     "angle": "degree",
+    "slope": "mm/m",
 }
 """The display unit of each kind of quantity, unless the caller changes it."""
 
@@ -22,6 +24,7 @@ SI: dict[str, str] = {
     "strain": "dimensionless",
     "curvature": "1/m",
     "angle": "radian",
+    "slope": "dimensionless",
 }
 """The unit each kind is held in, in a result's values."""
 
@@ -34,7 +37,7 @@ class DisplayUnits:
     ----------
     units : dict of str to pint.Unit
         The display unit of each kind: ``length``, ``displacement``,
-        ``strain``, ``curvature`` and ``angle``.
+        ``strain``, ``curvature``, ``angle`` and ``slope``.
     """
 
     units: dict[str, pint.Unit]
@@ -60,12 +63,13 @@ def resolve(display_units: Mapping[str, object] | None) -> DisplayUnits:
     ----------
     display_units : mapping of str to str or pint.Unit, or None
         Units for any of ``length``, ``displacement``, ``strain``,
-        ``curvature`` and ``angle``, such as ``{"displacement": "m"}``.
+        ``curvature``, ``angle`` and ``slope``, such as
+        ``{"displacement": "m"}``.
 
     Raises
     ------
     ValueError
-        For a kind that isn't one of the five.
+        For a kind that isn't one of the six.
     pint.DimensionalityError
         For a unit that doesn't convert to its kind's SI unit.
     """
@@ -88,3 +92,20 @@ def resolve(display_units: Mapping[str, object] | None) -> DisplayUnits:
             )
         chosen[kind] = unit
     return DisplayUnits(chosen)
+
+
+def one_in(ratio: float) -> str:
+    """Write a small positive ratio as practice does, ``"1/n"``.
+
+    n is 1/`ratio` to three significant figures, written in full: 0.002 is
+    ``"1/500"`` and 1/12345 is ``"1/12300"``.
+
+    Raises
+    ------
+    ValueError
+        If `ratio` isn't a positive finite number.
+    """
+    if not (math.isfinite(ratio) and ratio > 0):
+        raise ValueError(f"A ratio written as 1/n must be positive, not {ratio}.")
+    n = float(f"{1.0 / ratio:.3g}")
+    return f"1/{n:.0f}" if n >= 100 else f"1/{n:g}"
